@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "PDF Notes - development library",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/PDF Note Organizer.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PDF_NOTES_DATA_DIR": "${workspaceFolder}/.local-data",
+        "PDF_NOTES_SKIP_LEGACY_IMPORT": "1"
+      }
+    },
+    {
+      "name": "PDF Notes - synthetic example",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "tests.qa_app",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "PDF Notes - regression tests",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "args": ["discover", "-s", "tests", "-v"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}

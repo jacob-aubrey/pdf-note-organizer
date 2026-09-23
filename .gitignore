@@ -1,0 +1,36 @@
+__pycache__/
+*.pyc
+build/
+dist/
+tmp/
+legacy/*.exe
+*.db
+*.db-*
+*.sqlite3
+*.sqlite3-*
+*.sqlite
+*.sqlite-*
+*.log
+app_log.txt
+.local-data/
+.venv/
+
+# Private inputs, generated notebooks, and local review output
+*.pdf
+*.docx
+*.exe
+Notebook backups/
+notes_media/
+/tests/make_audit_samples.py
+
+# Local credentials and editor/OS temporary files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+*.lock
+Thumbs.db
+.DS_Store
