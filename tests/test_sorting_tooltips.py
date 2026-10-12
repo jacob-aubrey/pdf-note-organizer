@@ -8,6 +8,7 @@ from note_organizer.inbox import DEFAULT_CONFIG
 from note_organizer.sorting.core_logic import FILENAME_TEMPLATE_TOKENS
 from note_organizer.widgets import CellTooltip, dismiss_tooltips
 from note_organizer.workflow_ui import InboxView, SortingFields
+from note_organizer.ui import App
 
 
 class SortingTooltipTests(unittest.TestCase):
@@ -85,6 +86,8 @@ class SortingTooltipTests(unittest.TestCase):
         self.app.initial_split = lambda *args: None
         self.app.review_library = lambda: None
         self.app.filing_recovery = lambda: None
+        self.app.setup_inbox = lambda: None
+        self.app.more_button = lambda *args, **kwargs: App.more_button(self.app, *args, **kwargs)
         view = InboxView(self.app, self.parent)
         for control in self.controls(self.parent):
             with self.subTest(control=control.winfo_class()):
