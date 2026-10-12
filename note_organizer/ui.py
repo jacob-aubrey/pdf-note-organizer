@@ -553,7 +553,7 @@ class App(WorkspaceLayouts):
         routing.columnconfigure(1, weight=1)
         routing.columnconfigure(3, weight=2)
         self.cloud_enabled = tk.BooleanVar(value=config["enabled"])
-        self.cloud_auto = auto = ttk.Checkbutton(toolbar, text="Automatic checks (every 5 min)", variable=self.cloud_enabled, command=self.toggle_cloud_sync)
+        self.cloud_auto = auto = ttk.Checkbutton(toolbar, text="Automatic checks", variable=self.cloud_enabled, command=self.toggle_cloud_sync)
         auto.pack(side="left", padx=(12, 0))
         Tooltip(auto, lambda: "Connect reMarkable before enabling automatic checks." if not self.cloud_paired() else
                 "Choose and apply a PC destination for the reMarkable cloud source before enabling automatic checks." if not self.cloud_config()["pc_root"] else
