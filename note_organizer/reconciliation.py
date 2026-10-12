@@ -159,6 +159,18 @@ def scan_reconciliation(store, config, cancelled=None, *, local_root=None, inspe
         raise ValueError("The selected local folder does not exist.")
     _check(cancelled)
     registered = _registered_sources(store)
+    with store.connect() as db:
+        si_paths = {canonical(row[0]) for row in db.execute("SELECT path FROM supplement_files")}
+        si_paths.update(canonical(row[0]) for row in db.execute("SELECT path FROM paper_attachments"))
+        si_digests = {row[0] for row in db.execute("SELECT digest FROM supplement_files") if row[0]}
+    si_identities = {row["paper_id"] for (kind, locator), row in registered.items()
+                     if (kind == "local" and locator in si_paths) or json.loads(row.get("metadata", "{}")).get("is_supplementary_material")}
+
+    def is_si(item):
+        key = item.get("path") or item.get("cloud_id")
+        known = registered.get((item["kind"], key), {})
+        meta = json.loads(known.get("metadata", "{}"))
+        return bool(key in si_paths or item.get("digest") in si_digests or known.get("paper_id") in si_identities or item.get("metadata", {}).get("is_supplementary_material") or meta.get("is_supplementary_material"))
     documents = {}
     for document in store.documents():
         if _within(document["path"], root):
@@ -197,11 +209,11 @@ def scan_reconciliation(store, config, cancelled=None, *, local_root=None, inspe
     for item in local:
         title, doi = _title(item["title"]), _doi(item["metadata"].get("doi"))
         if title:
-            local_candidates[("title", title)][item["path"]] = item
+            local_candidates[("title", title, is_si(item))][item["path"]] = item
         if doi:
-            local_candidates[("doi", doi)][item["path"]] = item
+            local_candidates[("doi", doi, is_si(item))][item["path"]] = item
     suggested_groups = set()
-    for (basis, _), values in local_candidates.items():
+    for (basis, _, _role), values in local_candidates.items():
         copies = list(values.values())
         paths = tuple(sorted(values))
         if len(copies) < 2 or len({item["digest"] for item in copies}) < 2 or paths in suggested_groups:
@@ -284,10 +296,10 @@ def scan_reconciliation(store, config, cancelled=None, *, local_root=None, inspe
     titles, dois = defaultdict(list), defaultdict(list)
     for item in local:
         if item["path"] not in managed:
-            titles[_title(item["title"])].append(item)
-            titles[_title(Path(item["path"]).stem)].append(item)
+            titles[(_title(item["title"]), is_si(item))].append(item)
+            titles[(_title(Path(item["path"]).stem), is_si(item))].append(item)
             if _doi(item["metadata"].get("doi")):
-                dois[_doi(item["metadata"]["doi"])].append(item)
+                dois[(_doi(item["metadata"]["doi"]), is_si(item))].append(item)
     matched_paths = set(managed)
     for item in cloud:
         _check(cancelled)
@@ -299,10 +311,10 @@ def scan_reconciliation(store, config, cancelled=None, *, local_root=None, inspe
         basis = "exact_original" if originals else "confirmed_link" if linked else ""
         if not candidates:
             doi = _doi(item.get("metadata", {}).get("doi"))
-            candidates = dois.get(doi, []) if doi else []
+            candidates = dois.get((doi, is_si(item)), []) if doi else []
             basis = "doi_candidate" if candidates else ""
             if not candidates:
-                candidates = titles.get(_title(item["title"]), []) if _title(item["title"]) else []
+                candidates = titles.get((_title(item["title"]), is_si(item)), []) if _title(item["title"]) else []
                 basis = "title_candidate" if candidates else ""
         candidates = list({candidate["path"]: candidate for candidate in candidates}.values())
         if candidates:

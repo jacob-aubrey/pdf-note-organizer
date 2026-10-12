@@ -6,16 +6,20 @@ from pathlib import Path
 import re
 import socket
 import tempfile
+import threading
 from urllib.parse import quote, unquote, urljoin, urlsplit
 from urllib.request import Request, HTTPRedirectHandler, build_opener
 
 from .citations import citation_for
 from .sorting.metadata_lookup import resolve_doi
+from .storage import canonical, digest_file
+from .supplement_library import attach_file, attachments, library_files
 
 SUPPLEMENT = re.compile(r"supplement|supporting[\s_-]*(?:information|material|data)|suppl[\s_/-]*|\besi\b|additional[\s_-]*files?", re.I)
 MAX_PAGE_BYTES = 2 * 1024 * 1024
 MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
 EXTENSIONS = {".pdf", ".zip", ".docx", ".xlsx", ".pptx", ".csv", ".tsv", ".txt", ".json", ".sdf", ".mol"}
+_PUBLISH_LOCK = threading.Lock()
 
 
 def public_url(url):
@@ -117,12 +121,12 @@ def find_supplements(store, worker, document_id):
     return list(unique.values())[:100], warnings, landing
 
 
-def download_supplement(url, target, cancelled=lambda: False):
+def download_supplement(url, target, cancelled=lambda: False, *, _publish=None):
     target = Path(target)
     extension = target.suffix.lower()
     if extension not in EXTENSIONS:
         raise ValueError("Choose a PDF, ZIP, Office document, or supported text/data filename.")
-    if target.exists():
+    if target.exists() and _publish is None:
         raise FileExistsError("That file already exists. Choose another filename; existing files are kept.")
     descriptor, temporary = tempfile.mkstemp(prefix=".notable-si-", dir=target.parent)
     try:
@@ -154,6 +158,8 @@ def download_supplement(url, target, cancelled=lambda: False):
             raise ValueError("The server did not return a text/data file.")
         if cancelled():
             raise InterruptedError("Download cancelled")
+        if _publish is not None:
+            return _publish(Path(temporary), target)
         # Windows rename refuses an occupied destination. POSIX rename replaces
         # it, so publish there through an exclusive hard link instead.
         if os.name == "nt":
@@ -165,22 +171,56 @@ def download_supplement(url, target, cancelled=lambda: False):
         Path(temporary).unlink(missing_ok=True)
 
 
-def attach_file(store, document_id, path, url=""):
-    path = Path(path).resolve()
-    if not path.is_file():
-        raise ValueError("Choose an existing supplementary file.")
-    documents = store.search_documents(document_id=document_id, whole_paper=True)
-    if not documents:
-        raise ValueError("This paper is no longer in the library.")
+def download_and_attach(store, document_id, url, target, cancelled=lambda: False):
+    """Reuse verified existing bytes before publishing a new exclusive file."""
+    if cancelled():
+        raise InterruptedError("Download cancelled")
+    target = Path(target).resolve()
+    # A previously attached URL is reusable only while its recorded bytes agree.
+    saved = attachments(store, document_id)
     with store.connect() as db:
-        db.executemany("INSERT OR REPLACE INTO paper_attachments VALUES(?,?,?)",
-                       [(row["id"], str(path), url) for row in documents])
+        known = {row["path"]: row["digest"] for row in db.execute("SELECT path,digest FROM supplement_files")}
+    for row in saved:
+        if row["url"] == url and Path(row["path"]).is_file() and known.get(canonical(row["path"])) == digest_file(row["path"]):
+            if cancelled():
+                raise InterruptedError("Download cancelled")
+            return {"path": row["path"], "reused": True}
+    def publish(temporary, destination):
+        # Two review windows may finish the same download together. Recheck
+        # under one publication lock so the second sees the first saved file.
+        with _PUBLISH_LOCK:
+            return publish_locked(temporary, destination)
 
+    def publish_locked(temporary, destination):
+        paths = library_files(store, document_id, cancelled)
+        if target.is_file() and canonical(target) not in paths:
+            paths.append(canonical(target))
+        digest, size = digest_file(temporary), temporary.stat().st_size
+        parent_digests = {row["digest"] for row in store.search_documents(document_id=document_id, whole_paper=True)}
+        if digest in parent_digests:
+            raise ValueError("This download is the article itself, not a supplementary file.")
+        for existing in paths:
+            if cancelled():
+                raise InterruptedError("Download cancelled")
+            try:
+                matches = Path(existing).stat().st_size == size and digest_file(existing) == digest
+            except OSError:
+                continue
+            if matches:
+                attached = attach_file(store, document_id, existing, url)
+                return {"path": str(attached), "reused": True}
+        if cancelled():
+            raise InterruptedError("Download cancelled")
+        with store.connect() as db:
+            tracked = db.execute("SELECT digest FROM supplement_files WHERE path=?", (canonical(destination),)).fetchone()
+            if tracked and tracked[0] != digest:
+                raise ValueError("That location is still associated with a different supplementary file. Choose another filename.")
+        if os.name == "nt":
+            os.rename(temporary, destination)
+        else:
+            os.link(temporary, destination)
+        # A failed database write leaves the completed file for retry/reuse.
+        attach_file(store, document_id, destination, url)
+        return {"path": str(destination), "reused": False}
 
-def attachments(store, document_id):
-    result = {}
-    with store.connect() as db:
-        for document in store.search_documents(document_id=document_id, whole_paper=True):
-            for row in db.execute("SELECT path,url FROM paper_attachments WHERE document_id=?", (document["id"],)):
-                result[row["path"]] = dict(row)
-    return list(result.values())
+    return download_supplement(url, target, cancelled, _publish=publish)

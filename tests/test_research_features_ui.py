@@ -8,7 +8,8 @@ from unittest.mock import patch
 import fitz
 from PIL import Image
 
-from note_organizer.citations import citation_for
+from note_organizer.citations import citation_for, save_citation
+from note_organizer.supplement_library import attachments, proposed_name
 from note_organizer.research_ui import CitationWindow, SupplementsWindow
 from note_organizer.storage import digest_file
 from tests import test_review_controls
@@ -103,15 +104,20 @@ class ResearchUITests(unittest.TestCase):
             dialog.selection_changed()
             self.assertEqual(dialog.selected_url.get(), "https://example.org/si.pdf")
             self.assertFalse(dialog.download.instate(["disabled"]))
-            self.root.attributes("-alpha", .01)
+            self.root.attributes("-alpha", 1)
             self.root.deiconify()
-            dialog.window.attributes("-alpha", .01)
+            dialog.window.attributes("-alpha", 1)
+            dialog.window.attributes("-topmost", True)
             dialog.window.deiconify()
             dialog.window.lift()
             self.wait(lambda: bool(dialog.tree.bbox("0")))
             x, y, width, height = dialog.tree.bbox("0")
             # The actual row must receive pointer input; an overlapping frame
             # used to hide the entire table even though its rows were loaded.
+            # Windows can expose a bbox before the transient is mapped by the
+            # window manager; wait for native hit testing to settle as well.
+            self.wait(lambda: dialog.tree.winfo_containing(dialog.tree.winfo_rootx() + x + 8,
+                                                           dialog.tree.winfo_rooty() + y + height // 2) == dialog.tree)
             target = dialog.tree.winfo_containing(dialog.tree.winfo_rootx() + x + 8,
                                                   dialog.tree.winfo_rooty() + y + height // 2)
             self.assertEqual(target, dialog.tree)
@@ -133,6 +139,52 @@ class ResearchUITests(unittest.TestCase):
                 self.assertLessEqual(widget.winfo_rootx() + widget.winfo_width(),
                                      self.root.winfo_rootx() + self.root.winfo_width())
         self.assertFalse(self.errors)
+
+    def test_local_si_candidate_can_be_attached_without_network_or_download(self):
+        path, document_id = self.paper()
+        existing = path.with_name(path.stem + "_SI.pdf")
+        with fitz.open() as pdf:
+            pdf.new_page().insert_text((50, 75), "Supporting information")
+            pdf.save(existing)
+        with patch("note_organizer.research_ui.find_supplements") as network:
+            dialog = SupplementsWindow(self.app, document_id, path)
+            self.wait(lambda: len(dialog.links) == 1)
+            network.assert_not_called()
+            dialog.tree.selection_set("0")
+            dialog.selection_changed()
+            self.assertTrue(dialog.download.instate(["disabled"]))
+            self.assertFalse(dialog.use_existing.instate(["disabled"]))
+            self.assertEqual(Path(dialog.selected_url.get()), existing.resolve())
+            dialog.use_existing.invoke()
+            self.wait(lambda: len(dialog.saved) == 1)
+            self.assertEqual(Path(dialog.saved[0]["path"]), existing.resolve())
+            self.assertTrue(existing.is_file())
+            dialog.window.destroy()
+
+    def test_download_dialog_proposes_sorter_name_and_reports_reused_file(self):
+        path, document_id = self.paper()
+        save_citation(self.store, document_id, {"title": "Article", "authors": ["Doe, Jane"], "journal": "Chemistry", "year": "2025"})
+        existing = path.with_name("unrelated existing name.pdf")
+        with fitz.open() as pdf:
+            pdf.new_page().insert_text((50, 75), "Supplementary results")
+            pdf.save(existing)
+        target = path.with_name("download.pdf")
+        response = BytesIO(existing.read_bytes())
+        response.headers = {"Content-Type": "application/pdf"}
+        with patch("note_organizer.research_ui.filedialog.asksaveasfilename", return_value=str(target)) as choose, \
+                patch("note_organizer.supplements.open_url", return_value=response):
+            dialog = SupplementsWindow(self.app, document_id, path)
+            self.wait(lambda: not self.app.workflow_futures)
+            dialog.web_links = [{"label": "SI", "source": "Publisher page", "url": "https://example.org/si.pdf"}]
+            dialog.show_links()
+            dialog.tree.selection_set("0")
+            dialog.selection_changed()
+            dialog.download.invoke()
+            self.wait(lambda: "Reused existing file:" in dialog.status.get())
+            self.assertEqual(choose.call_args.kwargs["initialfile"], proposed_name(self.store, document_id, ".pdf"))
+            self.assertFalse(target.exists())
+            self.assertEqual(Path(attachments(self.store, document_id)[0]["path"]), existing.resolve())
+            dialog.window.destroy()
 
 
 if __name__ == "__main__":

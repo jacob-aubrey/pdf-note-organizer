@@ -122,6 +122,9 @@ class Registry:
             if kind == "local":
                 db.execute("""INSERT OR IGNORE INTO paper_document_sources
                     SELECT id,? FROM documents WHERE path=?""", (source_id, locator))
+            if paper_id:
+                from .supplement_library import check_merge
+                check_merge(db, db.execute("SELECT * FROM paper_sources WHERE paper_id=?", (current_paper,)).fetchall())
             if not old or any(old[key] != value for key, value in (("digest", digest), ("title", title), ("metadata", metadata))):
                 # A generated variant can be registered after its first scan.
                 # Identity/provenance changes therefore need an export even
@@ -188,6 +191,8 @@ class Registry:
             if occupied and occupied[0] != source_id:
                 raise ValueError("The new path already belongs to another source.")
             db.execute("UPDATE paper_sources SET locator=?,updated_at=? WHERE id=?", (locator, timestamp(), source_id))
+            from .supplement_library import move_paths
+            move_paths(db, old["locator"], locator)
         return self.source(source_id)
 
     def link_sources(self, source_ids, paper_id=None):
@@ -216,6 +221,8 @@ class Registry:
             placeholders = ",".join("?" for _ in affected_papers)
             related_sources = db.execute("SELECT * FROM paper_sources WHERE paper_id IN (" + placeholders + ")",
                                          tuple(affected_papers)).fetchall()
+            from .supplement_library import check_merge
+            check_merge(db, related_sources)
             before = {row["id"]: row["paper_id"] for row in related_sources}
             for row in related_sources:
                 if row["paper_id"] != paper_id:

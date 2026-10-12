@@ -69,6 +69,8 @@ def save_citation(store, document_id, record):
                        [(row["id"], json.dumps(record, ensure_ascii=False)) for row in documents])
         db.executemany("UPDATE projects SET dirty=1 WHERE id=?",
                        [(project_id,) for project_id in {row["project_id"] for row in documents}])
+        from .supplement_library import bind_pending
+        bind_pending(db)
     return record
 
 

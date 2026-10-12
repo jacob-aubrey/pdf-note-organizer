@@ -418,6 +418,7 @@ class InboxController:
     def prepare(self, path, force=False):
         """Extract one reviewed file; call from a worker, never directly from Tk."""
         from .sorting.core_logic import get_basic_document_details, get_document_details, build_proposed_filename
+        from .supplement_library import source_details
         path = self._source(path)
         with self._lock:
             config = self.config()
@@ -432,17 +433,21 @@ class InboxController:
             if row["status"] == "preparing":
                 raise DownloadNotReady("This file is already being prepared.")
             if row["status"] == "review" and row["details"] and not force:
-                proposal = build_proposed_filename(row["details"], path.suffix,
+                # The user may have identified this file from the parent SI
+                # dialog after its first Inbox review was already cached.
+                details = source_details(self.store, path) or row["details"]
+                proposal = build_proposed_filename(details, path.suffix,
                     filename_format=config["filename_format"], custom_template=config["custom_filename_template"])
-                if proposal != row["proposed_filename"]:
-                    self._save_item(path, signature, "review", row["details"], proposal)
-                return {**row["details"], "path": str(path), "signature": signature,
+                if proposal != row["proposed_filename"] or details != row["details"]:
+                    self._save_item(path, signature, "review", details, proposal)
+                return {**details, "path": str(path), "signature": signature,
                         "proposed_filename": proposal}
             self._save_item(path, signature, "preparing")
         try:
-            if config["naming_mode"] == "Basic":
+            details = source_details(self.store, path)
+            if details is None and config["naming_mode"] == "Basic":
                 details = get_basic_document_details(path)
-            else:
+            elif details is None:
                 suffix = path.suffix.casefold()
                 cloud = config["gemini_enabled"] and (suffix == ".pdf" or
                          (suffix == ".docx" and config["allow_cloud_ai_for_word_documents"]) or
@@ -586,6 +591,9 @@ class InboxController:
                     raise ValueError("The destination changed. Choose a folder inside the sorted library.")
             job_id, target = uuid.uuid4().hex, folder / filename
             with self.store.connect() as db:
+                tracked = db.execute("SELECT digest FROM supplement_files WHERE path=?", (canonical(target),)).fetchone()
+                if tracked and tracked[0] != _digest(path):
+                    raise ValueError("That location is still associated with a different supplementary file. Choose another filename.")
                 db.execute("""INSERT INTO inbox_jobs (id,source,path,signature,details,state,created_at)
                     VALUES (?,?,?,?,?,'copying',?)""", (job_id, canonical(path), canonical(target),
                         signature, json.dumps(row["details"]), timestamp()))
@@ -601,6 +609,8 @@ class InboxController:
                 with self.store.connect() as db:
                     db.execute("UPDATE inbox_jobs SET state='confirmed' WHERE id=?", (job_id,))
                     db.execute("UPDATE inbox_items SET status='filed',updated_at=? WHERE path=?", (timestamp(), canonical(path)))
+                    from .supplement_library import filed
+                    filed(db, path, target, digest, row["details"])
             except Exception as error:
                 with self.store.connect() as db:
                     db.execute("UPDATE inbox_jobs SET state='error',error=? WHERE id=?", (str(error), job_id))
@@ -642,6 +652,8 @@ class InboxController:
                     db.execute("UPDATE inbox_jobs SET state=?,error=? WHERE id=?", (state, error, row["id"]))
                     if state == "confirmed":
                         db.execute("UPDATE inbox_items SET status='filed' WHERE path=?", (row["source"],))
+                        from .supplement_library import filed
+                        filed(db, source, target, row["digest"], json.loads(row["details"]))
                         recovered.append(self._filing_result(row))
                     elif error and (row["error"] != error or row["state"] != state):
                         errors.append(self._recovery_error(row, error))

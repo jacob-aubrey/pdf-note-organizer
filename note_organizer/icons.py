@@ -10,7 +10,7 @@ BUTTON_ICONS = {
     "Copy image": "copy", "Citation details…": "book-open", "Export citations…": "download",
     "Find supplementary files…": "folder-search", "Look up DOI": "search", "Copy citation": "copy",
     "Save citation": "save", "Find files": "search", "Download selected…": "download",
-    "Open selected link": "external-link", "Add file…": "files",
+    "Open selected link": "external-link", "Add file…": "files", "Use existing file": "files",
     "Open article": "external-link",
     "Settings": "settings", "Help": "circle-help", "Add folder…": "folder-plus",
     "Sync PDFs": "refresh-cw", "Apply & sync PDFs": "refresh-cw", "Refresh folders": "folder-sync",

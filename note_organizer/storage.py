@@ -102,6 +102,8 @@ class Store:
                 CREATE TABLE IF NOT EXISTS paper_attachments (
                     document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
                     path TEXT NOT NULL, url TEXT NOT NULL DEFAULT '', PRIMARY KEY(document_id,path));
+                CREATE TABLE IF NOT EXISTS supplement_files (
+                    path TEXT PRIMARY KEY, digest TEXT NOT NULL, details TEXT NOT NULL);
             """)
             if "hidden" not in {r[1] for r in db.execute("PRAGMA table_info(documents)")}:
                 db.execute("ALTER TABLE documents ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
@@ -110,6 +112,8 @@ class Store:
             if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='paper_sources'").fetchone():
                 from .paper_registry import ensure_document_sources
                 ensure_document_sources(db)
+            from .supplement_library import migrate_filings
+            migrate_filings(db)
 
     @contextmanager
     def connect(self):
@@ -148,6 +152,8 @@ class Store:
 
     def relocate_source(self, old_path, new_path):
         with self.connect() as db:
+            from .supplement_library import move_paths
+            move_paths(db, old_path, new_path)
             for row in db.execute("SELECT id,project_id FROM documents WHERE path=?", (canonical(old_path),)).fetchall():
                 root = db.execute("SELECT root FROM projects WHERE id=?", (row["project_id"],)).fetchone()[0]
                 if Path(new_path).resolve().is_relative_to(Path(root)):
@@ -228,6 +234,12 @@ class Store:
             for row in sources:
                 db.execute("UPDATE paper_sources SET locator=?,updated_at=? WHERE id=?",
                            (relocated(row["locator"]), timestamp(), row["id"]))
+            from .supplement_library import move_paths
+            attachment_paths = {row[0] for row in db.execute("SELECT path FROM paper_attachments")}
+            attachment_paths.update(row[0] for row in db.execute("SELECT path FROM supplement_files"))
+            for path in attachment_paths:
+                if relocated(path) != path:
+                    move_paths(db, path, relocated(path))
             for row in errors:
                 db.execute("DELETE FROM scan_errors WHERE project_id=? AND path=?", (row["project_id"], row["path"]))
                 db.execute("INSERT INTO scan_errors VALUES(?,?,?,?)",
@@ -422,6 +434,8 @@ class Store:
                 db.execute("UPDATE documents SET note_revision=note_revision+1 WHERE id=?", (doc_id,))
             if changed or any(counts.values()):
                 db.execute("UPDATE projects SET dirty=1 WHERE id=?", (project_id,))
+            from .supplement_library import scanned
+            scanned(db, path, digest)
             return counts
 
     def mark_missing(self, project_id, seen):

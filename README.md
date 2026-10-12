@@ -191,11 +191,19 @@ Choose **More → Export citations…** to save `.ris` or `.bib` (BibTeX). In Li
 
 ### Find supplementary information
 
-Select a paper and choose **More → Find supplementary files…**. **Find files** inspects explicit PDF hyperlinks, supplementary DOI relationships, and relevant links on the publisher's article page. This sends the DOI and requests public pages; it does not upload the PDF or notes. Discovery is optional and starts only when you choose Find files.
+Select a paper and choose **More → Find supplementary files…**. **Find files** inspects explicit PDF hyperlinks, supplementary DOI relationships, and relevant links on the publisher's article page. This sends the DOI and requests public pages; it does not upload the PDF or notes. Publisher discovery is optional and starts only when you choose Find files.
 
 Select a candidate to inspect its full URL. **Open selected link** opens it in your browser; **Open article** opens the paper's publisher page for a manual check. **Download selected…** saves a reviewed file to a new location and attaches it to the paper. Downloads keep existing files, reject HTML login/article pages masquerading as files, and support PDFs, ZIP archives, Office documents, and selected text/data formats up to 100 MB. Files are not extracted or executed. Closing the review stops a pending download before publishing its completed file.
 
-**Add file…** attaches an existing supplementary file in its current location. Attached locations remain available after restarting and rescanning. Publisher access restrictions, dynamic pages, and missing metadata can prevent automatic discovery or download. You can use your browser to obtain the file and attach it manually.
+Opening the dialog first checks the watched folders and sorted library locally. Existing attachments, reviewed parent DOI matches, and similar SI filenames appear as candidates. Select one and choose **Use existing file** to attach it in place. A similar filename is a review hint; it never attaches or merges papers automatically. **Add file…** can select another existing file manually.
+
+Downloads propose the same parent citation, naming style, custom template, and `_SI` marker as the paper sorter, including ZIP and data attachments. The download checks library files for identical bytes before creating another copy; an unchanged attachment from the same URL can be reused immediately. Different files at an occupied destination are never overwritten. Reusing a file keeps its existing name and location.
+
+Confirmed sorter filings with an explicit parent DOI attach SI automatically when exactly one library paper matches. If the parent arrives later, scanning or saving its citation retries the association. Ambiguous editions remain candidates for manual review. SI stays a separate document, and paper linking rejects a merge with its parent even when their title or DOI matches.
+
+For a browser download into your configured **ToSort** Inbox, review and file it normally. If the file does not identify its parent, open the parent paper's supplementary dialog, choose **Add file…**, and select the file in ToSort. Review it again in the Inbox to pick up the parent citation and `_SI` name; filing preserves the attachment at its destination.
+
+Attachments survive restarts and rescans. App-managed moves and watched-folder reconnection update their paths. A rescan repairs a moved PDF when its bytes identify one missing attachment; opening the SI dialog can similarly repair non-PDF attachments within the watched/sorted library. Multiple possible copies remain unresolved for review. Moves outside those folders need **Add file…** at the new location. Publisher access restrictions, dynamic pages, and missing metadata can prevent automatic discovery or download; use your browser and attach the file manually when needed.
 
 Feedback beside a tab's controls describes your last action there and clears when you leave the tab. The footer continues to show background work.
 
