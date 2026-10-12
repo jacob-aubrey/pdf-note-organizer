@@ -20,6 +20,7 @@ from .combined_pdf import materialize_combined, export_combined
 from .service import Service
 from .storage import SEARCH_FIELDS, NOTE_TYPES, digest_file
 from .search import SearchSyntaxError
+from .research_search import search_library, SCOPES
 from .viewers import open_pdf_page, VIEWERS
 from .theme import apply_theme, text_options, BACKGROUND, PANEL
 from .remarkable_cloud import PAIR_URL
@@ -31,8 +32,11 @@ from .pages import page_description, page_tooltip
 from .view_state import LibraryView, read_view, cloud_destinations
 from .pdf_worker import PDFWorker
 from .image_viewport import ImageViewport
+from .clipboard import copy_image
 from .inbox import InboxController
 from .workflow_ui import InboxView, ReconciliationWindow, background
+from .research_ui import CitationWindow, SupplementsWindow
+from .citations import export_citations
 
 
 class App:
@@ -1050,6 +1054,9 @@ class App:
             "Save editable copy…": "Make a separate Word notebook for your writing.", "Change history": "Read saved annotation changes for the selected note's actual PDF copy.",
             "Export annotated PDF…": "Save the selected paper with its combined PC and tablet notes as a separate PDF.",
             "Review extra PDFs…": "Review old app-generated reading copies and remove only verified copies whose notes and current notebook links are preserved.",
+            "Citation details…": "Review, edit, copy, or look up the selected paper's citation information.",
+            "Export citations…": "Export citations for the current paper/folder selection, or papers in the current Notes search, as RIS or BibTeX.",
+            "Find supplementary files…": "Find supplementary links for the selected paper and review downloads or attached files.",
         }
         Tooltip(button, "\n".join(f"{label}: {help_text[label]}" for label, _ in actions))
         def show():
@@ -1157,6 +1164,8 @@ class App:
         self.library_source_button.pack(side="left", padx=8)
         Tooltip(self.library_source_button, lambda: f"{self.library_paper_path(self.papers.selection()[0])}\n\nOpen the selected paper with its combined PC and tablet notes. Uncertain versions need review first." if self.papers.selection() else "Select a paper to open its PDF and saved notes.")
         self.more_button(paper_actions, [("Export annotated PDF…", self.export_paper_pdf),
+            ("Citation details…", self.citation_details), ("Export citations…", self.export_citation_selection),
+            ("Find supplementary files…", self.supplementary_files),
             ("Review extra PDFs…", self.review_extra_pdfs)]).pack(side="left", padx=(0, 8))
         self.library_send_button = Button(paper_actions, text="Send selected PDF…", command=self.send_paper, state="disabled")
         Tooltip(self.library_send_button, "Send a selected existing original PDF after reviewing duplicates and enabling PDF transfers in Settings → Connections.")
@@ -1178,6 +1187,9 @@ class App:
         ttk.Label(toolbar, text="Read your notes", style="Section.TLabel").pack(side="left")
         self.more_button(toolbar, [("Save editable copy…", self.editable_copy),
                                    ("Export annotated PDF…", self.export_note_pdf),
+                                   ("Citation details…", self.citation_details),
+                                   ("Export citations…", self.export_citation_selection),
+                                   ("Find supplementary files…", self.supplementary_files),
                                    ("Change history", self.history)]).pack(side="right")
         self.notebook_button = Button(toolbar, text="Open notebook", command=self.open_notebook, style="Primary.TButton")
         self.notebook_button.pack(side="right", padx=8)
@@ -1227,7 +1239,13 @@ class App:
         self.note_type = "All notes"
         self.search_entry = ttk.Entry(searchbar, textvariable=self.search, width=52)
         self.search_entry.pack(side="left", fill="x", expand=True)
-        Tooltip(self.search_entry, 'Search the current notes. Spaces mean AND; uppercase AND, OR, NOT, quotes and parentheses are supported. Use Search in… for fields and matching rules.')
+        Tooltip(self.search_entry, 'Search notes, printed PDF text, or both in the chosen folder and paper. Spaces mean AND; uppercase AND, OR, NOT, quotes and parentheses are supported. PDF results match within one page; scanned pages need a text layer.')
+        self.search_scope = tk.StringVar(value="Notes")
+        self.search_scope_control = ttk.Combobox(searchbar, textvariable=self.search_scope, values=SCOPES,
+                                                state="readonly", width=7)
+        self.search_scope_control.pack(side="left", padx=(8, 0))
+        Tooltip(self.search_scope_control, "Notes searches saved annotations. PDFs searches printed text on every page, including papers without notes. All combines both. Enter a query to search PDFs; the first search builds a local text cache. Search in… fields and note types apply to note results.")
+        self.search_scope.trace_add("write", self.search_changed)
         self.search_options_button = Button(searchbar, text="Search in…", command=self.search_options)
         self.search_options_button.pack(side="left", padx=(8, 0))
         self.search.trace_add("write", self.search_changed)
@@ -1237,12 +1255,17 @@ class App:
         self.search_summary_label = ttk.Label(tab, textvariable=self.search_summary, style="Muted.TLabel")
         self.search_error = tk.StringVar()
         self.search_error_label = ttk.Label(tab, textvariable=self.search_error, foreground="#FFB4AB", wraplength=800)
+        self.search_warning = tk.StringVar()
+        self.search_warning_label = ttk.Label(tab, style="Muted.TLabel", wraplength=800)
+        Tooltip(self.search_warning_label, lambda: self.search_warning.get())
         self.reader_pane = ttk.Panedwindow(tab, orient="horizontal")
         self.reader_pane.pack(fill="both", expand=True)
         left = ttk.Frame(self.reader_pane, width=280, padding=(0, 0, 16, 0))
         self.notes = self.tree(left, [("page", "PDF page", 78), ("kind", "Type", 70), ("text", "Note", 210)])
         self.notes.configure(displaycolumns=("page", "text"))
         self.notes.bind("<<TreeviewSelect>>", self.preview)
+        self.notes.bind("<Double-1>", lambda event: self.open_source())
+        self.notes.bind("<Return>", lambda event: self.open_source())
         self.notes.tooltip.extra = lambda row, column: self.note_help() if column == "page" else ""
         self.notes.tooltip.value = self.note_cell_value
         self.reader_pane.add(left, weight=1)
@@ -1251,14 +1274,19 @@ class App:
         buttons.pack(fill="x", pady=(0, 10))
         self.source_button = Button(buttons, text="Open PDF", command=self.open_source)
         self.source_button.pack(side="left", padx=(0, 8))
-        self.enlarge_button = Button(buttons, text="Enlarge image", command=self.enlarge)
+        image_buttons = ttk.Frame(right)
+        image_buttons.pack(fill="x", pady=(0, 10))
+        self.enlarge_button = Button(image_buttons, text="Enlarge image", command=self.enlarge)
         self.enlarge_button.pack(side="left")
+        self.copy_image_button = Button(image_buttons, text="Copy image", command=self.copy_note_image, state="disabled")
+        self.copy_image_button.pack(side="left", padx=(8, 0))
+        Tooltip(self.copy_image_button, "Copy the loaded note image at its original resolution. You can also focus the image and press Ctrl+C or right-click it.")
         Tooltip(self.enlarge_button, lambda: "Inspect this drawing or handwriting preview. Fit width or height, drag to pan, double-click to fit width, and Ctrl + scroll to zoom." if self.image else
                 "Select a drawing or handwriting note with a loaded preview. Highlights use extracted text and Open PDF.")
         self.full_page_button = Button(buttons, text="Full page context", command=self.full_page_context, state="disabled")
         self.full_page_button.pack(side="left", padx=(8, 0))
-        Tooltip(self.full_page_button, lambda: "Open the complete PDF page, including retained margins, to follow distant figures and matching stars. Fit width or height, drag to pan, double-click to fit width, and Ctrl + scroll to zoom. Generated on demand; no extra stored screenshot." if self.selected_entry() and self.selected_entry()["kind"] == "drawing" else
-                "Select a drawing or handwriting note first. Highlights use Open PDF.")
+        Tooltip(self.full_page_button, lambda: "Open the complete PDF page, including retained margins. Fit width or height, drag to pan, double-click to fit width, and Ctrl + scroll to zoom. Generated on demand; Copy image copies the complete page." if self.selected_entry() and self.selected_entry()["kind"] in {"drawing", "pdf"} else
+                "Select a drawing, handwriting note, or PDF text result first. Highlights use Open PDF.")
         self.show_details = tk.BooleanVar(value=False)
         ttk.Checkbutton(buttons, text="Details", variable=self.show_details, command=self.preview).pack(side="right")
         self.context_pane = ttk.Panedwindow(right, orient="vertical")
@@ -1273,6 +1301,12 @@ class App:
         self.canvas = tk.Canvas(self.context_pane, height=200, width=300, background=PANEL, highlightthickness=0)
         self.context_pane.add(self.canvas, weight=2)
         self.canvas.bind("<Configure>", self.schedule_image_resize)
+        self.canvas.bind("<Button-1>", lambda event: self.canvas.focus_set())
+        self.canvas.bind("<<Copy>>", self.copy_note_image)
+        self.canvas.bind("<Button-3>", self.show_image_menu)
+        self.canvas.bind("<Shift-F10>", self.show_image_menu)
+        self.image_menu = tk.Menu(self.canvas, tearoff=False)
+        menu_action(self.image_menu, "Copy image", self.copy_note_image)
         Tooltip(self.source_button, lambda: f"{self.entry_paper_path(self.selected_entry())}\n\nOpen the combined PC and tablet notes at physical PDF page {self.selected_entry()['page']}.\n{page_description(self.selected_entry())}" if self.selected_entry() else "Select a note first. Open PDF navigates using the physical PDF page position.")
         self.reader_pane.add(right, weight=3)
 
@@ -1328,6 +1362,8 @@ class App:
 
     @staticmethod
     def entry_pdf_target(entry):
+        if entry.get("kind") == "pdf" and not entry.get("logical_paper_id"):
+            return entry["path"], entry["page"]
         if entry.get("combined_view_unavailable"):
             raise ValueError(str(entry["combined_view_unavailable"]))
         return (entry.get("logical_paper_id") or entry.get("combined_view_path") or entry["path"],
@@ -1344,6 +1380,8 @@ class App:
         if column != "text" or not entry:
             return self.notes.set(row, column)
         text = entry.get("comment") or entry.get("quote") or entry.get("ocr") or "Drawing with page context"
+        if entry.get("kind") == "pdf":
+            text = "PDF: " + text
         if self.all_projects.get():
             text = Path(entry["path"]).stem + ": " + text
         return text
@@ -1614,7 +1652,54 @@ class App:
             if self.reserved_output(target):
                 messagebox.showerror("Choose another filename", "Use a separate file for a filtered export.")
                 return
-            self.service.command("export_view", target, list(self.entries))
+            self.service.command("export_view", target, [e for e in self.entries if e.get("kind") != "pdf"])
+
+    def research_paper(self):
+        if self.tabs.select() == str(self.notes_tab):
+            entry = self.selected_entry()
+            if entry:
+                return entry["document_id"], entry["path"]
+        selected = self.papers.selection()
+        if selected and any(row["id"] == selected[0] for row in self.view.documents()):
+            return selected[0], self.library_paper_path(selected[0])
+        messagebox.showinfo("Choose a paper", "Select a paper in Library or a result in Notes first.", parent=self.root)
+        return None
+
+    def citation_details(self):
+        paper = self.research_paper()
+        if paper:
+            return CitationWindow(self, paper[0])
+
+    def supplementary_files(self):
+        paper = self.research_paper()
+        if paper:
+            return SupplementsWindow(self, paper[0], paper[1])
+
+    def export_citation_selection(self):
+        in_notes = self.tabs.select() == str(self.notes_tab)
+        if in_notes and self.search.get().strip():
+            ids = list(dict.fromkeys(entry["document_id"] for entry in self.entries))
+        else:
+            project = self.selected_project()
+            selected = self.papers.selection()
+            if in_notes and self.all_projects.get():
+                ids = [row["id"] for row in self.view.documents()]
+            elif selected:
+                ids = [selected[0]]
+            else:
+                ids = [row["id"] for row in self.view.documents(project["id"] if project else None)]
+        if not ids:
+            messagebox.showinfo("No papers", "Choose a folder or search with matching papers first.", parent=self.root)
+            return
+        target = filedialog.asksaveasfilename(parent=self.root, title=f"Export citations — {len(ids)} selected paper(s)",
+                                            defaultextension=".ris", initialfile="Research citations.ris",
+                                            filetypes=[("RIS citations", "*.ris"), ("BibTeX citations", "*.bib")])
+        if target:
+            section = "notes" if in_notes else "library"
+            self.notify("Exporting citations…", section)
+            background(self, lambda: export_citations(self.store, ids, target),
+                       lambda count: self.notify(f"Exported {count} citation(s) to {target}", section),
+                       lambda error: self.notify(f"Could not export citations: {error}", section))
 
     def settings(self):
         project = self.selected_project()
@@ -1849,7 +1934,7 @@ class App:
                        document_id=paper[0] if paper and not self.all_projects.get() else None,
                        query=self.search.get(), fields=list(self.search_fields),
                        match_mode=self.search_mode, note_type=self.note_type, include_images=False)
-        signature = (repr(options), self.view.note_token(options["project_id"], options["document_id"]))
+        signature = (self.search_scope.get(), repr(options), self.view.note_token(options["project_id"], options["document_id"]))
         if signature == self.query_signature:
             return
         self.query_signature = signature
@@ -1862,9 +1947,10 @@ class App:
         if self.notes_after:
             self.root.after_cancel(self.notes_after)
             self.notes_after = None
-        self.note_count.set("Loading notes…")
+        self.note_count.set("Searching PDFs…" if self.search_scope.get() != "Notes" and self.search.get().strip() else "Loading notes…")
         self.export_button.configure(state="disabled")
-        self.query_future = self.query_executor.submit(self.store.entries, **options, cancelled=cancelled.is_set)
+        self.query_future = self.query_executor.submit(search_library, self.store, self.pdf_worker,
+                                                       self.search_scope.get(), **options, cancelled=cancelled.is_set)
         self.query_future.add_done_callback(lambda future: self.query_results.put((generation, current, future)))
 
     def finish_query(self, generation, current, future):
@@ -1886,6 +1972,13 @@ class App:
         else:
             self.search_error.set("")
             self.search_error_label.pack_forget()
+        warnings = getattr(entries, "warnings", [])
+        self.search_warning.set("\n".join(warnings))
+        if warnings:
+            self.search_warning_label.configure(text=f"{len(warnings)} PDF search issue(s). Hover for details.")
+            self.search_warning_label.pack(fill="x", before=self.reader_pane, pady=(0, 8))
+        else:
+            self.search_warning_label.pack_forget()
         self.notes.tooltip.reset()
         current = self.selected_entry() or current
         unchanged_order = [(e["document_id"], e["key"]) for e in self.entries] == [(e["document_id"], e["key"]) for e in entries]
@@ -1902,6 +1995,8 @@ class App:
             for i in range(start, end):
                 e = entries[i]
                 text = e.get("comment") or e.get("quote") or e.get("ocr") or "Drawing with page context"
+                if e.get("kind") == "pdf":
+                    text = "PDF: " + text
                 if self.all_projects.get():
                     text = Path(e["path"]).stem + ": " + text
                 values = tuple(str(v) for v in (e["page"], e["kind"], text.replace("\n", " ")))
@@ -1920,8 +2015,10 @@ class App:
                 target = selection[0] if selection else selected[0] or "0"
                 self.notes.selection_set(target)
                 self.notes.see(target)
-            self.note_count.set("Check search" if self.search_error.get() else f"{len(entries)} notes")
-            self.export_button.configure(state="normal" if entries else "disabled")
+            pdf_count = sum(e.get("kind") == "pdf" for e in entries)
+            count = f"{len(entries)} results" if self.search_scope.get() != "Notes" else f"{len(entries)} notes"
+            self.note_count.set("Check search" if self.search_error.get() else count)
+            self.export_button.configure(state="normal" if len(entries) > pdf_count else "disabled")
             self.preview()
         insert_rows()
 
@@ -1942,7 +2039,9 @@ class App:
         if e:
             title = paper_title(e["path"], e.get("metadata", {}))
             lines = [title, page_description(e)]
-            if e.get("quote"):
+            if e.get("kind") == "pdf":
+                lines.extend(["PDF text match", e.get("context", "")])
+            elif e.get("quote"):
                 lines.append(e["quote"])
             for key, label in [("comment", "Note"), ("ocr", "Transcription to check")]:
                 if e.get(key):
@@ -1963,11 +2062,14 @@ class App:
         elif self.papers.selection() and self.papers.selection()[0] in self.failed_papers:
             path, error = self.failed_papers[self.papers.selection()[0]]
             self.preview_text.insert("1.0", f"{Path(path).name}\n\nCould not read this PDF:\n{error}\n\nUse Sync PDFs to retry.")
+        elif self.search_scope.get() == "PDFs" and not self.search.get().strip():
+            self.preview_text.insert("1.0", "Enter a search to find printed text in your PDFs, including papers without notes.")
         else:
             self.preview_text.insert("1.0", "No notes to show.\n\nTry another paper or search, or add a PDF folder in Library.")
         self.source_button.configure(state="normal" if e else "disabled")
         self.enlarge_button.configure(state="normal" if self.image else "disabled")
-        self.full_page_button.configure(state="normal" if e and e["kind"] == "drawing" else "disabled")
+        self.copy_image_button.configure(state="normal" if self.image else "disabled")
+        self.full_page_button.configure(state="normal" if e and e["kind"] in {"drawing", "pdf"} else "disabled")
         self.preview_text.configure(state="disabled")
         self.image_size = None
         self.draw_image()
@@ -2001,6 +2103,27 @@ class App:
             self.tk_image = ImageTk.PhotoImage(copy)
             self.canvas.create_image(self.canvas.winfo_width()/2, 8, image=self.tk_image, anchor="n")
 
+    def copy_note_image(self, event=None):
+        if self.image is not None:
+            try:
+                copy_image(self.image, self.canvas.winfo_id())
+            except OSError as exc:
+                self.notify(f"Could not copy image: {exc}", "notes")
+            else:
+                self.notify("Note image copied at its original resolution.", "notes")
+        return "break"
+
+    def show_image_menu(self, event):
+        self.canvas.focus_set()
+        self.image_menu.entryconfigure(0, state="normal" if self.image is not None else "disabled")
+        x, y = ((self.canvas.winfo_rootx() + 8, self.canvas.winfo_rooty() + 8) if getattr(event, "keysym", "") == "F10"
+                else (event.x_root, event.y_root))
+        try:
+            self.image_menu.tk_popup(x, y)
+        finally:
+            self.image_menu.grab_release()
+        return "break"
+
     def enlarge(self):
         if not self.image:
             return
@@ -2025,6 +2148,10 @@ class App:
         return window
 
     def image_fit_controls(self, window, header, canvas, loading=False):
+        window.copy_image_button = Button(header, text="Copy image", command=canvas.copy_original,
+                                          state="disabled" if loading else "normal")
+        window.copy_image_button.pack(side="right", padx=(0, 8))
+        Tooltip(window.copy_image_button, "Copy this complete image at its original resolution. Ctrl+C works while the image has focus.")
         for text, command, attribute, axis in (
                 ("Fit height", canvas.fit_height, "fit_height_button", "height"),
                 ("Fit width", canvas.fit_width, "fit_width_button", "width")):
@@ -2035,7 +2162,7 @@ class App:
 
     def full_page_context(self):
         entry = self.selected_entry()
-        if not entry or entry["kind"] != "drawing":
+        if not entry or entry["kind"] not in {"drawing", "pdf"}:
             return
         # One context window bounds pending renders; waiting for PDF work must
         # never occupy the library/search worker.
@@ -2079,6 +2206,7 @@ class App:
             canvas.set_image(image, fit_width=True)
             window.fit_width_button.configure(state="normal")
             window.fit_height_button.configure(state="normal")
+            window.copy_image_button.configure(state="normal")
         def close_context(event):
             if event.widget == window and self.context_window == window:
                 self.context_window = None
@@ -2447,6 +2575,7 @@ class App:
                     continue
                 self.image_size = None
                 self.enlarge_button.configure(state="normal" if self.image else "disabled")
+                self.copy_image_button.configure(state="normal" if self.image else "disabled")
                 self.draw_image()
         self.show_work_progress()
         if not self.closing:

@@ -171,7 +171,31 @@ The generated Word notebook collects linked PC and tablet notes under one paper.
 
 Choose a folder and paper in Notes. **All folders** searches the saved library across watched folders. Search and the available filters can narrow highlighted text, comments, handwriting transcription, publication metadata, annotation color, and note type.
 
+The scope beside the search box offers **Notes**, **PDFs**, and **All**. Notes keeps the existing annotation search. PDFs searches the printed text on each page, including papers with no annotations; All combines note and PDF page results. Enter a query to search PDF contents. An empty search browses saved notes without indexing the library. Spaces mean AND; uppercase AND, OR, NOT, quoted phrases, and parentheses are supported. PDF words must match within the same page. **Search in…** fields and note-type filters apply to note results.
+
+The first PDF search extracts text in the background and caches it locally in the active library. Later searches reuse the cache; changed PDFs are checked again. A file changed since its saved scan needs **Sync PDFs** before its contents can be searched. Missing, unreadable, and password-protected sources appear as search issues without removing saved notes. Image-only scans need a searchable text layer; this feature does not run whole-document OCR or send PDFs online.
+
+PDF page results begin with **PDF:** and show an excerpt in the list. Select one to read its page text. **Open PDF**, double-click, or Enter opens the source at the physical page. **Full page context** renders a page preview that can also be copied. **Export view…** exports matching annotations to Word; printed PDF page results are excluded.
+
 Highlights and typed comments use text and source-page links. Drawings and handwriting also have retained context images. **More** offers an editable notebook copy and annotation history for the selected note's actual source. The preview's **Details** checkbox reveals extraction information when you need it.
+
+For a loaded drawing or handwriting image, choose **Copy image**, right-click the image, or click it and press **Ctrl+C**. The clipboard receives the complete retained image at its original resolution, with transparency flattened onto white. Enlarged images and Full page context offer the same copy actions. Text selection keeps its ordinary Ctrl+C behavior. Image copying currently requires Windows; a busy clipboard reports an error so you can retry.
+
+### Keep and export citation information
+
+In Library or Notes, select a paper or note and choose **More → Citation details…**. Review or edit its title, authors, year, journal, volume, issue, page range/article number, DOI, and URL. Separate authors with semicolons; commas can remain inside author names. Initial details reuse local PDF metadata and available Inbox filing information. A filename may supply a provisional title, so check the fields before exporting.
+
+**Look up DOI** optionally sends only the entered DOI to Crossref/DataCite and fills available fields for review. It does not save automatically. **Save citation** retains reviewed details separately from PDF scans and shares them with currently linked paper sources. Rescanning a paper keeps these edits. Saved titles, authors, and DOIs participate in the existing note search. **Cancel** discards draft edits. **Copy citation** copies the current fields as a plain-text reference, without applying a journal-specific citation style.
+
+Choose **More → Export citations…** to save `.ris` or `.bib` (BibTeX). In Library, the export uses the selected paper, or all papers in the chosen folder when no paper is selected. In Notes, an active query exports distinct papers represented by the displayed results; otherwise the folder/paper filters determine the selection. All folders with no query exports the active library. Linked source variants export once. No citation-service request is made during export. Import the resulting file into your reference manager; Zotero documents [RIS and BibTeX imports](https://www.zotero.org/support/kb/importing_standardized_formats).
+
+### Find supplementary information
+
+Select a paper and choose **More → Find supplementary files…**. **Find files** inspects explicit PDF hyperlinks, supplementary DOI relationships, and relevant links on the publisher's article page. This sends the DOI and requests public pages; it does not upload the PDF or notes. Discovery is optional and starts only when you choose Find files.
+
+Select a candidate to inspect its full URL. **Open selected link** opens it in your browser; **Open article** opens the paper's publisher page for a manual check. **Download selected…** saves a reviewed file to a new location and attaches it to the paper. Downloads keep existing files, reject HTML login/article pages masquerading as files, and support PDFs, ZIP archives, Office documents, and selected text/data formats up to 100 MB. Files are not extracted or executed. Closing the review stops a pending download before publishing its completed file.
+
+**Add file…** attaches an existing supplementary file in its current location. Attached locations remain available after restarting and rescanning. Publisher access restrictions, dynamic pages, and missing metadata can prevent automatic discovery or download. You can use your browser to obtain the file and attach it manually.
 
 Feedback beside a tab's controls describes your last action there and clears when you leave the tab. The footer continues to show background work.
 

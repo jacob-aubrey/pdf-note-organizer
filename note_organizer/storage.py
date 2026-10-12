@@ -93,6 +93,15 @@ class Store:
                 CREATE TABLE IF NOT EXISTS remarkable_items (
                     id TEXT PRIMARY KEY, payload TEXT NOT NULL);
                 CREATE INDEX IF NOT EXISTS document_project ON documents(project_id);
+                CREATE TABLE IF NOT EXISTS pdf_search_cache (
+                    document_id TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+                    digest TEXT NOT NULL, version TEXT NOT NULL, pages TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS paper_citations (
+                    document_id TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+                    payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS paper_attachments (
+                    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+                    path TEXT NOT NULL, url TEXT NOT NULL DEFAULT '', PRIMARY KEY(document_id,path));
             """)
             if "hidden" not in {r[1] for r in db.execute("PRAGMA table_info(documents)")}:
                 db.execute("ALTER TABLE documents ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
@@ -315,6 +324,34 @@ class Store:
                              (project_id, canonical(path))).fetchone()
             return dict(row) if row else None
 
+    def search_documents(self, project_id=None, document_id=None, *, whole_paper=False):
+        """Resolve a chosen logical paper to its independently retained sources."""
+        with self.connect() as db:
+            rows = annotated_documents(self.documents(project_id), load_paper_sources(db))
+        if document_id:
+            selected = next((row for row in rows if row["id"] == document_id), None)
+            if not selected:
+                return []
+            paper_id = selected.get("logical_paper_id")
+            rows = [row for row in rows if row["id"] == document_id or
+                    (paper_id and row.get("logical_paper_id") == paper_id or
+                     whole_paper and canonical(row["path"]) == canonical(selected["path"])) and
+                    (whole_paper or row["project_id"] == selected["project_id"])]
+        return rows
+
+    def cached_pdf_pages(self, document_id, digest, version):
+        with self.connect() as db:
+            row = db.execute("SELECT pages FROM pdf_search_cache WHERE document_id=? AND digest=? AND version=?",
+                             (document_id, digest, version)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def cache_pdf_pages(self, document_id, digest, version, pages):
+        with self.connect() as db:
+            # A scan or folder removal during extraction must not resurrect an old index.
+            db.execute("""INSERT OR REPLACE INTO pdf_search_cache SELECT id,digest,?,? FROM documents
+                          WHERE id=? AND digest=? AND hidden=0""",
+                       (version, json.dumps(pages, ensure_ascii=False), document_id, digest))
+
     def scan_result(self, project_id, path, error=""):
         with self.connect() as db:
             if error:
@@ -445,7 +482,7 @@ class Store:
                     in managed_originals}
             # Let SQLite discard large base64 images before copying JSON into Python.
             payload = "e.payload" if include_images else "json_remove(e.payload, '$.image') AS payload"
-            sql = f"SELECT {payload},d.path,d.id AS document_id,d.metadata,d.missing,d.digest AS source_digest,d.note_revision AS source_note_revision FROM entries e JOIN documents d ON d.id=e.document_id WHERE d.hidden=0"
+            sql = f"SELECT {payload},d.path,d.id AS document_id,d.metadata,d.missing,d.digest AS source_digest,d.note_revision AS source_note_revision,c.payload AS citation FROM entries e JOIN documents d ON d.id=e.document_id LEFT JOIN paper_citations c ON c.document_id=d.id WHERE d.hidden=0"
             args = []
             if project_id:
                 sql += " AND d.project_id=?"
@@ -465,6 +502,11 @@ class Store:
                 doc_id = row["document_id"]
                 if doc_id not in metadata:
                     metadata[doc_id] = json.loads(row["metadata"])
+                    if row["citation"]:
+                        citation = json.loads(row["citation"])
+                        metadata[doc_id].update({key: value for key, value in citation.items() if key != "pages"})
+                        metadata[doc_id]["citation_pages"] = citation.get("pages", "")
+                        metadata[doc_id]["author"] = "; ".join(citation.get("authors", []))
                 e.update(path=row["path"], document_id=doc_id, metadata=metadata[doc_id], missing=row["missing"],
                          source_digest=row["source_digest"], source_note_revision=row["source_note_revision"])
                 if metadata[doc_id].get("managed_cloud_id"):
@@ -477,7 +519,7 @@ class Store:
                 document = document_index.get(doc_id, {})
                 if document.get("logical_paper_id"):
                     e.update(logical_paper_id=document["logical_paper_id"],
-                             logical_paper_title=paper_titles.get((document["project_id"], document["logical_paper_id"]), ""))
+                             logical_paper_title=metadata[doc_id].get("title") if row["citation"] else paper_titles.get((document["project_id"], document["logical_paper_id"]), ""))
                 results.append(e)
             omitted = inherited_duplicate_ids(results, paper_documents) if paper_documents else set()
             results = [entry for entry in results if (entry["document_id"], entry["key"]) not in omitted

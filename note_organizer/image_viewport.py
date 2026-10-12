@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 
 from PIL import Image, ImageTk
+from .clipboard import copy_image
 
 
 class ImageCanvas(tk.Canvas):
@@ -18,6 +19,11 @@ class ImageCanvas(tk.Canvas):
         self.panning = False
         self.pan_cursor = self.grabbing_cursor()
         self.status = status
+        self.copy_menu = tk.Menu(self, tearoff=False)
+        self.copy_menu.add_command(label="Copy image", command=self.copy_original)
+        self.bind("<<Copy>>", self.copy_original)
+        self.bind("<Button-3>", self.show_copy_menu)
+        self.bind("<Shift-F10>", self.show_copy_menu)
         self.bind("<Configure>", self.resize)
         self.bind("<ButtonPress-1>", self.start_pan)
         self.bind("<B1-Motion>", self.pan)
@@ -28,6 +34,27 @@ class ImageCanvas(tk.Canvas):
         window.bind("<MouseWheel>", self.wheel)
         window.bind("<Button-4>", self.wheel)
         window.bind("<Button-5>", self.wheel)
+
+    def copy_original(self, event=None):
+        if self.original_image is not None:
+            try:
+                copy_image(self.original_image, self.winfo_id())
+            except OSError as exc:
+                self.status(f"Could not copy image: {exc}")
+            else:
+                self.status("Image copied at its original resolution.")
+        return "break"
+
+    def show_copy_menu(self, event):
+        self.focus_set()
+        self.copy_menu.entryconfigure(0, state="normal" if self.original_image is not None else "disabled")
+        x, y = ((self.winfo_rootx() + 8, self.winfo_rooty() + 8) if getattr(event, "keysym", "") == "F10"
+                else (event.x_root, event.y_root))
+        try:
+            self.copy_menu.tk_popup(x, y)
+        finally:
+            self.copy_menu.grab_release()
+        return "break"
 
     @property
     def auto_fit_width(self):

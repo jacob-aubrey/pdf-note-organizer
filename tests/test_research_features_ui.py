@@ -1,0 +1,139 @@
+"""Research controls in hidden Tk windows with disposable papers."""
+import base64
+from io import BytesIO
+from pathlib import Path
+import unittest
+from unittest.mock import patch
+
+import fitz
+from PIL import Image
+
+from note_organizer.citations import citation_for
+from note_organizer.research_ui import CitationWindow, SupplementsWindow
+from note_organizer.storage import digest_file
+from tests import test_review_controls
+from tests.ui_helpers import settle_library
+
+
+class ResearchUITests(unittest.TestCase):
+    setUp = test_review_controls.ReviewControlTests.setUp
+    tearDown = test_review_controls.ReviewControlTests.tearDown
+    wait = test_review_controls.ReviewControlTests.wait
+
+    def paper(self):
+        path = self.pc / "Research paper.pdf"
+        with fitz.open() as pdf:
+            pdf.new_page().insert_text((50, 75), "Unique iodine experiment")
+            pdf.save(path)
+        project = self.store.add_project(self.pc)
+        stream = BytesIO()
+        Image.new("RGB", (51, 27), "blue").save(stream, format="PNG")
+        self.store.save_scan(project, path, digest_file(path), "sig", "settings", {"title": "Research paper"}, [
+            {"key": "drawing", "kind": "drawing", "page": 1, "rect": [1, 2, 3, 4],
+             "comment": "Unique cobalt note", "image": base64.b64encode(stream.getvalue()).decode()}])
+        self.app.refresh()
+        settle_library(self.app, self.root)
+        self.wait(lambda: len(self.app.entries) == 1 and self.app.image is not None)
+        return path, self.store.documents()[0]["id"]
+
+    def test_copy_uses_original_image_and_text_copy_binding_is_unchanged(self):
+        self.paper()
+        app = self.app
+        original = app.image
+        self.assertFalse(app.copy_image_button.instate(["disabled"]))
+        with patch("note_organizer.ui.copy_image") as copied:
+            app.copy_image_button.invoke()
+            copied.assert_called_once_with(original, app.canvas.winfo_id())
+        self.assertIn("copied", app.action_feedback["notes"].get())
+        self.assertFalse(app.preview_text.bind("<<Copy>>"))
+        window = app.enlarge()
+        try:
+            with patch("note_organizer.image_viewport.copy_image") as copied:
+                window.copy_image_button.invoke()
+                copied.assert_called_once_with(original, window.image_canvas.winfo_id())
+        finally:
+            window.destroy()
+
+    def test_mixed_search_pdf_preview_and_open_target(self):
+        path, _ = self.paper()
+        app = self.app
+        app.search.set("cobalt OR iodine")
+        app.search_scope.set("All")
+        self.wait(lambda: app.note_count.get() == "2 results")
+        self.assertEqual([entry["kind"] for entry in app.entries], ["drawing", "pdf"])
+        app.notes.selection_set("1")
+        app.preview()
+        self.assertIn("Unique iodine experiment", app.preview_text.get("1.0", "end"))
+        self.assertTrue(app.copy_image_button.instate(["disabled"]))
+        self.assertFalse(app.full_page_button.instate(["disabled"]))
+        with patch.object(app, "open_pdf") as opened:
+            app.open_source()
+        opened.assert_called_once_with(app.entries[1]["path"], 1)
+        app.search_scope.set("PDFs")
+        self.wait(lambda: app.note_count.get() == "1 results")
+        self.assertTrue(app.export_button.instate(["disabled"]))
+        app.search_scope.set("Notes")
+        self.wait(lambda: app.note_count.get() == "1 notes")
+
+    def test_citation_draft_cancel_and_save_are_separate(self):
+        _, document_id = self.paper()
+        dialog = CitationWindow(self.app, document_id)
+        self.wait(lambda: not dialog.save.instate(["disabled"]))
+        dialog.fields["title"].set("Discarded draft")
+        dialog.window.destroy()
+        self.assertEqual(citation_for(self.store, document_id)["title"], "Research paper")
+        dialog = CitationWindow(self.app, document_id)
+        self.wait(lambda: not dialog.save.instate(["disabled"]))
+        dialog.fields["title"].set("Saved reviewed citation")
+        dialog.fields["authors"].set("Doe, Jane; Smith, A.")
+        dialog.save.invoke()
+        self.wait(lambda: not dialog.window.winfo_exists())
+        self.assertEqual(citation_for(self.store, document_id)["title"], "Saved reviewed citation")
+
+    def test_supplements_discovery_is_explicit_and_selected_url_is_visible(self):
+        path, document_id = self.paper()
+        with patch("note_organizer.research_ui.find_supplements", return_value=([
+                {"url": "https://example.org/si.pdf", "label": "Supporting information", "source": "PDF page 1"}], [], "")) as find:
+            dialog = SupplementsWindow(self.app, document_id, path)
+            self.wait(lambda: not self.app.workflow_futures)
+            find.assert_not_called()
+            dialog.find.invoke()
+            self.wait(lambda: len(dialog.links) == 1)
+            dialog.tree.selection_set("0")
+            dialog.selection_changed()
+            self.assertEqual(dialog.selected_url.get(), "https://example.org/si.pdf")
+            self.assertFalse(dialog.download.instate(["disabled"]))
+            self.root.attributes("-alpha", .01)
+            self.root.deiconify()
+            dialog.window.attributes("-alpha", .01)
+            dialog.window.deiconify()
+            dialog.window.lift()
+            self.wait(lambda: bool(dialog.tree.bbox("0")))
+            x, y, width, height = dialog.tree.bbox("0")
+            # The actual row must receive pointer input; an overlapping frame
+            # used to hide the entire table even though its rows were loaded.
+            target = dialog.tree.winfo_containing(dialog.tree.winfo_rootx() + x + 8,
+                                                  dialog.tree.winfo_rooty() + y + height // 2)
+            self.assertEqual(target, dialog.tree)
+            dialog.window.destroy()
+            self.assertTrue(dialog.cancelled.is_set())
+
+    def test_search_and_image_actions_fit_minimum_window(self):
+        self.paper()
+        self.root.attributes("-alpha", 0)
+        self.root.deiconify()
+        self.app.tabs.select(self.app.notes_tab)
+        self.root.geometry("940x700+0+0")
+        self.root.update()
+        for widget in (self.app.search_entry, self.app.search_scope_control, self.app.copy_image_button,
+                       self.app.full_page_button, self.app.enlarge_button):
+            with self.subTest(widget=widget):
+                self.assertTrue(widget.winfo_ismapped())
+                self.assertGreater(widget.winfo_width(), 20)
+                self.assertLessEqual(widget.winfo_rootx() + widget.winfo_width(),
+                                     self.root.winfo_rootx() + self.root.winfo_width())
+        self.assertFalse(self.errors)
+
+
+if __name__ == "__main__":
+    unittest.main()

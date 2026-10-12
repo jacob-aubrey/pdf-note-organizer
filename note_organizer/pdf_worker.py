@@ -131,6 +131,48 @@ def _inspect(path):
     return digest, metadata, annotations, error
 
 
+def _supplement_links(path):
+    import fitz
+    from .supplements import SUPPLEMENT
+    links = []
+    _check_cancelled()
+    with fitz.open(path) as document:
+        if document.needs_pass:
+            raise ValueError("This PDF requires a password.")
+        for number, page in enumerate(document, 1):
+            _check_cancelled()
+            for link in page.get_links():
+                url = link.get("uri", "")
+                if not url.startswith(("http://", "https://")):
+                    continue
+                rect = fitz.Rect(link["from"]) + (-25, -12, 25, 12)
+                label = " ".join(page.get_textbox(rect).split())
+                if SUPPLEMENT.search(url + " " + label):
+                    links.append({"url": url, "label": label[:180] or "Supplementary file",
+                                  "source": f"PDF page {number}"})
+    return links
+
+
+def _text_pages(path, expected_digest=None):
+    import fitz
+    from .storage import digest_file
+    _check_cancelled()
+    version = _file_version(path)
+    if expected_digest and digest_file(path) != expected_digest:
+        raise ValueError("PDF changed since its last scan. Use Sync PDFs before searching it.")
+    pages = []
+    with fitz.open(path) as document:
+        if document.needs_pass:
+            raise ValueError("Password-protected PDF: save an unlocked copy to search it.")
+        for number, page in enumerate(document, 1):
+            _check_cancelled()
+            pages.append({"page": number, "pdf_label": page.get_label() or "",
+                          "text": page.get_text(sort=True)})
+    if _file_version(path) != version:
+        raise OSError("PDF changed during text extraction. Try again after Sync PDFs.")
+    return pages
+
+
 def _full_page(path, page_number):
     import fitz
     from .extraction import drawing_page_bounds, preview_canvas
@@ -228,6 +270,12 @@ class PDFWorker:
 
     def extract(self, path, settings):
         return self._call(_extract, os.fspath(path), dict(settings))
+
+    def text_pages(self, path, expected_digest=None):
+        return self._call(_text_pages, os.fspath(path), expected_digest)
+
+    def supplement_links(self, path):
+        return self._call(_supplement_links, os.fspath(path))
 
     def render(self, item, bundle):
         return self._call(_render, item, dict(bundle))
