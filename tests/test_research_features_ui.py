@@ -44,9 +44,13 @@ class ResearchUITests(unittest.TestCase):
         self.assertFalse(app.copy_image_button.instate(["disabled"]))
         with patch("note_organizer.ui.copy_image") as copied:
             app.copy_image_button.invoke()
-            copied.assert_called_once_with(original, app.canvas.winfo_id())
+            copied.assert_called_once_with(original, app.preview_text.winfo_id())
         self.assertIn("copied", app.action_feedback["notes"].get())
-        self.assertFalse(app.preview_text.bind("<<Copy>>"))
+        app.preview_text.tag_add("sel", "1.0", "1.4")
+        app.preview_image_focused = True
+        with patch("note_organizer.ui.copy_image") as copied:
+            self.assertIsNone(app.copy_preview())  # Preserve Tk's normal text copy.
+            copied.assert_not_called()
         window = app.enlarge()
         try:
             with patch("note_organizer.image_viewport.copy_image") as copied:

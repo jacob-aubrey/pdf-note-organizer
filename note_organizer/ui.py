@@ -1848,6 +1848,8 @@ class App(WorkspaceLayouts):
         self.preview_text.configure(state="normal")
         self.preview_text.delete("1.0", "end")
         self.image = None
+        self.preview_image_name = None
+        self.preview_image_focused = False
         if e:
             title = paper_title(e["path"], e.get("metadata", {}))
             lines = [title, page_description(e)]
@@ -1883,7 +1885,8 @@ class App(WorkspaceLayouts):
         self.copy_image_button.configure(state="normal" if self.image else "disabled")
         self.full_page_button.configure(state="normal" if e and e["kind"] in {"drawing", "pdf"} else "disabled")
         self.preview_text.configure(state="disabled")
-        self.layout_note_preview()
+        self.preview_text.mark_set("preview_image", "end-1c")
+        self.preview_text.yview_moveto(0)
         self.image_size = None
         self.draw_image()
 
@@ -1904,37 +1907,43 @@ class App(WorkspaceLayouts):
         self.image_after = self.root.after(80, self.draw_image)
 
     def draw_image(self):
+        if self.image_after:
+            self.root.after_cancel(self.image_after)
         self.image_after = None
-        size = (max(20, self.canvas.winfo_width()-16), max(20, self.canvas.winfo_height()-16))
+        # The image is part of the text document, so text and ink share one
+        # scrollbar. Fit its width without clipping tall handwriting previews.
+        size = (max(20, self.preview_text.winfo_width()-28), self.image.height if self.image else 0)
         if self.image and self.image_size == size:
             return
         self.image_size = size
-        self.canvas.delete("all")
+        position = self.preview_text.yview()[0]
+        self.preview_text.configure(state="normal")
+        self.preview_text.delete("preview_image", "end-1c")
+        self.preview_image_name = None
         if self.image:
             copy = self.image.copy()
             copy.thumbnail(size)
-            self.tk_image = ImageTk.PhotoImage(copy, master=self.canvas)
-            self.canvas.create_image(self.canvas.winfo_width()/2, 8, image=self.tk_image, anchor="n")
+            self.tk_image = ImageTk.PhotoImage(copy, master=self.preview_text)
+            self.preview_text.insert("end-1c", "\n\n")
+            self.preview_image_name = self.preview_text.image_create("end-1c", image=self.tk_image, align="top")
+        else:
+            self.tk_image = None
+        self.preview_text.configure(state="disabled")
+        self.preview_text.yview_moveto(position)
 
-    def layout_note_preview(self):
-        entry = self.selected_entry()
-        drawing = bool(entry and entry.get("kind") == "drawing")
-        present = str(self.canvas) in {str(pane) for pane in self.context_pane.panes()}
-        if drawing and not present:
-            self.context_pane.add(self.canvas, weight=2)
-        elif not drawing and present:
-            self.context_pane.forget(self.canvas)
-        if drawing and self.context_pane.winfo_height() > 40:
-            length = len(self.preview_text.get("1.0", "end-1c"))
-            fraction = min(.48, max(.18, .16 + length / 5000))
-            position = round(self.context_pane.winfo_height()*fraction)
-            if abs(self.context_pane.sashpos(0)-position) > 2:
-                self.context_pane.sashpos(0, position)
+    def focus_preview_image(self, event):
+        index = self.preview_text.index(f"@{event.x},{event.y}")
+        items = self.preview_text.dump(index, f"{index}+1c", image=True)
+        self.preview_image_focused = any(value == self.preview_image_name for kind, value, _ in items if kind == "image")
+
+    def copy_preview(self, event=None):
+        if self.preview_image_focused and not self.preview_text.tag_ranges("sel"):
+            return self.copy_note_image()
 
     def copy_note_image(self, event=None):
         if self.image is not None:
             try:
-                copy_image(self.image, self.canvas.winfo_id())
+                copy_image(self.image, self.preview_text.winfo_id())
             except OSError as exc:
                 self.notify(f"Could not copy image: {exc}", "notes")
             else:
@@ -1942,9 +1951,14 @@ class App(WorkspaceLayouts):
         return "break"
 
     def show_image_menu(self, event):
-        self.canvas.focus_set()
+        keyboard = getattr(event, "keysym", "") == "F10"
+        if not keyboard:
+            self.focus_preview_image(event)
+        if not self.preview_image_focused or self.image is None:
+            return
+        self.preview_text.focus_set()
         self.image_menu.entryconfigure(0, state="normal" if self.image is not None else "disabled")
-        x, y = ((self.canvas.winfo_rootx() + 8, self.canvas.winfo_rooty() + 8) if getattr(event, "keysym", "") == "F10"
+        x, y = ((self.preview_text.winfo_rootx() + 8, self.preview_text.winfo_rooty() + 8) if keyboard
                 else (event.x_root, event.y_root))
         try:
             self.image_menu.tk_popup(x, y)

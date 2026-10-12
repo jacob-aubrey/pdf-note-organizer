@@ -53,6 +53,50 @@ BUTTON_HELP = {
 }
 
 
+class WrapToolbar(ttk.Frame):
+    """Flow controls into as many rows as their measured widths require."""
+    def __init__(self, parent, gap=8, **kwargs):
+        super().__init__(parent, width=1, **kwargs)
+        self.gap, self.controls, self.pending, self.layout = gap, [], None, None
+        self.grid_propagate(False)
+        self.bind("<Configure>", self.schedule)
+        self.bind("<Destroy>", self.cancel, add="+")
+
+    def add(self, control):
+        self.controls.append(control)
+        control.bind("<Configure>", self.schedule, add="+")
+        self.schedule()
+        return control
+
+    def schedule(self, event=None):
+        if self.pending is None:
+            self.pending = self.after_idle(self.reflow)
+
+    def cancel(self, event=None):
+        if event is None or event.widget is self:
+            if self.pending is not None:
+                self.after_cancel(self.pending)
+                self.pending = None
+
+    def reflow(self):
+        self.pending = None
+        widths = tuple(control.winfo_reqwidth() for control in self.controls)
+        signature = (self.winfo_width(), widths)
+        if signature == self.layout:
+            return
+        self.layout = signature
+        column = used = height = row_height = 0
+        for control, width in zip(self.controls, widths):
+            if column and used + self.gap + width > signature[0]:
+                height += row_height + self.gap
+                column, used, row_height = 0, 0, 0
+            control.place(x=used + (self.gap if column else 0), y=height, width=width, height=control.winfo_reqheight())
+            used += width + (self.gap if column else 0)
+            row_height = max(row_height, control.winfo_reqheight())
+            column += 1
+        self.configure(height=max(1, height + row_height))
+
+
 def annotate_buttons(parent):
     """Finish tooltip coverage without replacing specific contextual help."""
     for widget in parent.winfo_children():

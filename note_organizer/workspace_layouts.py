@@ -5,7 +5,7 @@ from .storage import SEARCH_FIELDS
 from .research_search import SCOPES
 from .theme import PANEL, text_options
 from .icons import Button, icon, menu_action
-from .widgets import Tooltip, PathField, PathTextTooltip, SelectionDetails
+from .widgets import Tooltip, PathField, PathTextTooltip, SelectionDetails, WrapToolbar
 from .pages import page_description
 
 
@@ -227,41 +227,36 @@ class WorkspaceLayouts:
         right = ttk.Frame(self.reader_pane)
         buttons = ttk.Frame(right)
         buttons.pack(fill="x", pady=(0, 10))
-        self.source_button = Button(buttons, text="Open PDF", command=self.open_source)
-        self.source_button.pack(side="left", padx=(0, 8))
-        image_buttons = ttk.Frame(right)
-        image_buttons.pack(fill="x", pady=(0, 10))
-        self.enlarge_button = Button(image_buttons, text="Enlarge image", command=self.enlarge)
-        self.enlarge_button.pack(side="left")
-        self.copy_image_button = Button(image_buttons, text="Copy image", command=self.copy_note_image, state="disabled")
-        self.copy_image_button.pack(side="left", padx=(8, 0))
-        Tooltip(self.copy_image_button, "Copy the loaded note image at its original resolution. You can also focus the image and press Ctrl+C or right-click it.")
+        self.show_details = tk.BooleanVar(value=False)
+        ttk.Checkbutton(buttons, text="Details", variable=self.show_details, command=self.preview).pack(side="right", anchor="n", padx=(12, 0))
+        self.preview_actions = actions = WrapToolbar(buttons)
+        actions.pack(side="left", fill="x", expand=True)
+        self.source_button = actions.add(Button(actions, text="Open PDF", command=self.open_source))
+        self.full_page_button = actions.add(Button(actions, text="Full page context", command=self.full_page_context, state="disabled"))
+        self.enlarge_button = actions.add(Button(actions, text="Enlarge image", command=self.enlarge))
+        self.copy_image_button = actions.add(Button(actions, text="Copy image", command=self.copy_note_image, state="disabled"))
+        Tooltip(self.copy_image_button, "Copy the loaded note image at its original resolution. Click the inline image and press Ctrl+C, or right-click it.")
         Tooltip(self.enlarge_button, lambda: "Inspect this drawing or handwriting preview. Fit width or height, drag to pan, double-click to fit width, and Ctrl + scroll to zoom." if self.image else
                 "Select a drawing or handwriting note with a loaded preview. Highlights use extracted text and Open PDF.")
-        self.full_page_button = Button(buttons, text="Full page context", command=self.full_page_context, state="disabled")
-        self.full_page_button.pack(side="left", padx=(8, 0))
         Tooltip(self.full_page_button, lambda: "Open the complete PDF page, including retained margins. Fit width or height, drag to pan, double-click to fit width, and Ctrl + scroll to zoom. Generated on demand; Copy image copies the complete page." if self.selected_entry() and self.selected_entry()["kind"] in {"drawing", "pdf"} else
                 "Select a drawing, handwriting note, or PDF text result first. Highlights use Open PDF.")
-        self.show_details = tk.BooleanVar(value=False)
-        ttk.Checkbutton(buttons, text="Details", variable=self.show_details, command=self.preview).pack(side="right")
-        self.context_pane = ttk.Panedwindow(right, orient="vertical")
-        self.context_pane.pack(fill="both", expand=True)
-        text_frame = ttk.Frame(self.context_pane)
+        text_frame = ttk.Frame(right)
+        text_frame.pack(fill="both", expand=True)
         self.preview_text = tk.Text(text_frame, height=9, width=35, wrap="word", state="disabled", **text_options())
         scroll = ttk.Scrollbar(text_frame, orient="vertical", command=self.preview_text.yview)
         scroll.pack(side="right", fill="y")
         self.preview_text.pack(fill="both", expand=True)
         self.preview_text.configure(yscrollcommand=scroll.set)
-        self.context_pane.add(text_frame, weight=1)
-        self.canvas = tk.Canvas(self.context_pane, height=200, width=300, background=PANEL, highlightthickness=0)
-        self.context_pane.add(self.canvas, weight=2)
-        self.context_pane.bind("<Configure>", lambda event: self.layout_note_preview())
-        self.canvas.bind("<Configure>", self.schedule_image_resize)
-        self.canvas.bind("<Button-1>", lambda event: self.canvas.focus_set())
-        self.canvas.bind("<<Copy>>", self.copy_note_image)
-        self.canvas.bind("<Button-3>", self.show_image_menu)
-        self.canvas.bind("<Shift-F10>", self.show_image_menu)
-        self.image_menu = tk.Menu(self.canvas, tearoff=False)
+        self.preview_text.mark_set("preview_image", "end-1c")
+        self.preview_text.mark_gravity("preview_image", "left")
+        self.preview_image_name = None
+        self.preview_image_focused = False
+        self.preview_text.bind("<Configure>", self.schedule_image_resize)
+        self.preview_text.bind("<Button-1>", self.focus_preview_image)
+        self.preview_text.bind("<<Copy>>", self.copy_preview)
+        self.preview_text.bind("<Button-3>", self.show_image_menu)
+        self.preview_text.bind("<Shift-F10>", self.show_image_menu)
+        self.image_menu = tk.Menu(self.preview_text, tearoff=False)
         menu_action(self.image_menu, "Copy image", self.copy_note_image)
         Tooltip(self.source_button, lambda: f"{self.entry_paper_path(self.selected_entry())}\n\nOpen the combined PC and tablet notes at physical PDF page {self.selected_entry()['page']}.\n{page_description(self.selected_entry())}" if self.selected_entry() else "Select a note first. Open PDF navigates using the physical PDF page position.")
         self.reader_pane.add(right, weight=3)

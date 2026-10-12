@@ -266,7 +266,7 @@ class AuditTests(unittest.TestCase):
                 settle_notes(app, root)
                 self.assertIn("Invalid PDF", app.preview_text.get("1.0", "end"))
                 self.assertEqual(app.style.lookup("TButton", "foreground"), "#DCE4EE")
-                self.assertEqual(app.canvas.cget("background"), "#18191a")
+                self.assertEqual(app.preview_text.cget("background"), "#18191a")
                 self.assertFalse(errors)
         finally:
             for pending in root.tk.call("after", "info"):

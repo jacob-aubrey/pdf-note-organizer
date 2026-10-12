@@ -39,7 +39,7 @@ In Notes, use **Actions → Tags & collections…** to label the selected paper 
 
 **Accessible reading view…** opens the current results in your browser with semantic headings, searchable text, source links, zoom and print controls. It is a local snapshot; open it again after changing the results. This improves access to reading content. The full Tk application has not been certified with NVDA or other screen readers.
 
-Keyboard shortcuts include **Ctrl+F** for search, **F5** to sync PDFs, **Ctrl+,** for Settings, **Alt+1/2/3** for Inbox/Library/Notes, **Ctrl+Shift+S** for saved searches, **Ctrl+Shift+T** for labels and **Ctrl+Shift+A** for the accessible reading view. Text-only notes use the full preview area; drawings reserve space for their image. Saved timestamps appear in local time.
+Keyboard shortcuts include **Ctrl+F** for search, **F5** to sync PDFs, **Ctrl+,** for Settings, **Alt+1/2/3** for Inbox/Library/Notes, **Ctrl+Shift+S** for saved searches, **Ctrl+Shift+T** for labels and **Ctrl+Shift+A** for the accessible reading view. Drawing images appear directly below the note text, with one scrollbar for the entire preview. Images fit the available width; Enlarge image opens the original. The four preview actions wrap as needed in a narrow pane and return to one row when there is room. Saved timestamps appear in local time.
 
 When linked copies have different reviewed citations, choose the citation to retain before linking or exporting. A citation draft must be saved to apply it to the linked paper. Undoing a link restores its previous citations when no later citation edit would be lost. Supplements use DOI and verified content matches to associate with their parent paper; attachments can be opened from the paper's supplement view.
 
