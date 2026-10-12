@@ -6,7 +6,7 @@ from tkinter import filedialog, ttk
 from urllib.parse import unquote, urlsplit
 import webbrowser
 
-from .citations import FIELDS, citation_for, citation_text, lookup_citation, save_citation
+from .citations import FIELDS, CitationConflict, citation_for, citation_text, lookup_citation, save_citation
 from .supplements import find_supplements, download_and_attach, attach_file, attachments, EXTENSIONS
 from .supplement_library import find_existing, proposed_name
 from .icons import Button
@@ -15,14 +15,40 @@ from .widgets import Tooltip, ReadOnlyText, PathField, bind_dialog_close, fit_di
 from .workflow_ui import background
 
 
+def review_citation_conflict(app, records, chosen, action_label="Use citation and link"):
+    window = tk.Toplevel(app.root)
+    window.title("Choose the paper's citation")
+    window.transient(app.root)
+    frame = ttk.Frame(window, padding=18)
+    frame.pack(fill="both", expand=True)
+    ttk.Label(frame, text="These copies have different saved citations. Review and choose one for the linked paper.",
+              wraplength=620).pack(anchor="w")
+    choice = tk.IntVar(value=0)
+    for index, record in enumerate(records):
+        ttk.Radiobutton(frame, text=f"Citation {index+1}", variable=choice, value=index).pack(anchor="w", pady=(12, 2))
+        ReadOnlyText(frame, height=4, value=citation_text(record)).pack(fill="x")
+    controls = ttk.Frame(frame)
+    controls.pack(fill="x", pady=(14, 0))
+    def accept():
+        record = records[choice.get()]
+        window.destroy()
+        chosen(record)
+    Button(controls, text=action_label, command=accept, style="Primary.TButton").pack(side="right")
+    Button(controls, text="Cancel", command=window.destroy).pack(side="right", padx=8)
+    bind_dialog_close(window, window.destroy)
+    fit_dialog(window, app.root)
+
+
 class CitationWindow:
     def __init__(self, app, document_id):
         self.app, self.document_id = app, document_id
+        self.saving = False
         self.window = window = tk.Toplevel(app.root)
         window.title("Citation details")
         window.configure(background=BACKGROUND)
         window.transient(app.root)
-        bind_dialog_close(window, window.destroy)
+        bind_dialog_close(window, self.close)
+        window.protocol("WM_DELETE_WINDOW", self.close)
         frame = ttk.Frame(window, padding=18)
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(1, weight=1)
@@ -48,7 +74,7 @@ class CitationWindow:
         self.save = Button(controls, text="Save citation", command=self.save_record, style="Primary.TButton", state="disabled")
         self.save.pack(side="right")
         Tooltip(self.save, "Save these reviewed details with this paper and its linked sources. PDF rescans keep your citation edits.")
-        cancel = Button(controls, text="Cancel", command=window.destroy)
+        self.cancel = cancel = Button(controls, text="Cancel", command=self.close)
         cancel.pack(side="right", padx=8)
         Tooltip(cancel, "Close without saving draft citation changes.")
         annotate_buttons(window)
@@ -57,6 +83,10 @@ class CitationWindow:
 
     def alive(self):
         return not self.app.closing and self.window.winfo_exists()
+
+    def close(self):
+        if not self.saving:
+            self.window.destroy()
 
     def busy(self, busy):
         for widget in self.inputs + [self.lookup, self.copy, self.save]:
@@ -79,8 +109,16 @@ class CitationWindow:
 
     def failed(self, error):
         if self.alive():
+            self.saving = False
+            self.cancel.configure(state="normal")
             self.busy(False)
             self.status.set(str(error))
+            if isinstance(error, CitationConflict):
+                def chosen(record):
+                    if self.alive():
+                        self.fill(record)
+                        self.status.set("Chosen citation loaded as a draft. Review the fields, then Save citation to apply it to every linked copy.")
+                review_citation_conflict(self.app, error.records, chosen, "Use citation draft")
 
     def look_up(self):
         doi = self.fields["doi"].get()
@@ -105,7 +143,11 @@ class CitationWindow:
             self.status.set(str(exc))
 
     def save_record(self):
+        if self.saving:
+            return
         record = self.draft()
+        self.saving = True
+        self.cancel.configure(state="disabled")
         self.busy(True)
         self.status.set("Saving citation…")
         def saved(result):
@@ -179,6 +221,10 @@ class SupplementsWindow:
         self.open_file = Button(controls, text="Open containing folder", command=self.open_attachment, state="disabled")
         self.open_file.pack(side="left", padx=8)
         Tooltip(self.open_file, "Open the folder containing the selected attachment so you can inspect the saved file.")
+        self.open_attachment_file = Button(controls, text="Open attached file", command=self.open_saved_file, state="disabled")
+        self.open_attachment_file.pack(side="left")
+        self.attached.bind("<Return>", lambda _: self.open_saved_file())
+        self.attached.bind("<Double-1>", lambda _: self.open_saved_file())
         close = Button(controls, text="Close", command=window.destroy)
         close.pack(side="right")
         Tooltip(close, "Close this supplementary-file review. A pending download is stopped before publishing its completed file.")
@@ -227,6 +273,7 @@ class SupplementsWindow:
         self.download.configure(state="normal" if selected and not local and not getattr(self, "downloading", False) else "disabled")
         self.use_existing.configure(state="normal" if local else "disabled")
         self.open_file.configure(state="normal" if self.attached.selection() else "disabled")
+        self.open_attachment_file.configure(state="normal" if self.attached.selection() else "disabled")
         self.article.configure(state="normal" if self.landing else "disabled")
         self.selected_url.set(link.get("path") or link.get("url", ""))
         self.attached_path.set(self.saved[int(self.attached.selection()[0])]["path"] if self.attached.selection() else "")
@@ -299,6 +346,14 @@ class SupplementsWindow:
     def open_attachment(self):
         if self.attached.selection():
             self.app.open_path(Path(self.saved[int(self.attached.selection()[0])]["path"]).parent)
+
+    def open_saved_file(self):
+        if self.attached.selection():
+            path = Path(self.saved[int(self.attached.selection()[0])]["path"])
+            if path.is_file():
+                self.app.open_path(path)
+            else:
+                self.status.set("This attachment moved or is unavailable. Use Find files to reconnect it.")
 
     def download_selected(self):
         if not self.tree.selection():

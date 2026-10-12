@@ -10,7 +10,7 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 
-import fitz
+import pymupdf as fitz
 
 from .extraction import extract, scan_fingerprint
 from .paper_registry import Registry
@@ -101,7 +101,7 @@ def save_cloud_notes(store, item, bundle, main_path, *, old=None, extractor=None
                             logical_folder=str(Path(main_path).parent), tablet_layers_only=True,
                             cloud_hash=item.hash)
             staged.append((project, digest, scan_fingerprint(settings), metadata, entries))
-    registry = Registry(store)
+    Registry(store)
     legacy_path = old.get('legacy_path') or (old.get('path') if old.get('storage_version') != STORAGE_VERSION else '')
     legacy_ids = old.get('legacy_document_ids')
     if legacy_ids is None:

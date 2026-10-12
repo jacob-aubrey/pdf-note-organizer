@@ -585,7 +585,7 @@ class RemarkableSync:
                 registry.link_sources([existing["id"], cloud_source["id"]], paper_id=cloud_source["paper_id"])
             mapping_identity = False
             try:
-                import fitz
+                import pymupdf as fitz
                 with fitz.open(stream=bundle[item.id + ".pdf"], filetype="pdf") as original:
                     mapped = page_map(json.loads(bundle[item.id + ".content"]), original.page_count)
                     mapping_identity = ([index for _, index in mapped] == list(range(original.page_count))

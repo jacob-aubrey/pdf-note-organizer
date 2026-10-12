@@ -13,10 +13,11 @@ import json
 from pathlib import Path
 import re
 import threading
+import time
 from types import SimpleNamespace
 import uuid
 
-import fitz
+import pymupdf as fitz
 
 from .remarkable_cloud import CloudError, _delete_guarded, _guarded_file, atomic_write
 from .remarkable_pdf import RENDER_REVISION, UnsupportedAnnotations, annotated_pdf, page_map
@@ -28,6 +29,7 @@ from .storage import canonical
 CACHE_LIMIT_BYTES = 128 * 1024 * 1024
 COMBINED_REVISION = 3
 _cache_lock = threading.RLock()
+_cache_maintenance = {}
 _CACHE_NAME = re.compile(r"[a-f0-9]{64}(?:-[a-f0-9]{32})?\.pdf")
 
 
@@ -304,11 +306,11 @@ def _cache_root(store):
     return store.path.parent / "remarkable" / "reading-cache"
 
 
-def _cache_records(root):
+def _cache_records(root, *, key=None, verify=True):
     records = []
     if not root.is_dir():
         return records
-    for path in root.glob("*.pdf"):
+    for path in root.glob((key + "*.pdf") if key else "*.pdf"):
         if not _CACHE_NAME.fullmatch(path.name):
             continue
         manifest = path.with_suffix(".json")
@@ -319,7 +321,9 @@ def _cache_records(root):
                 continue
             if path.name.split("-", 1)[0].removesuffix(".pdf") != info["key"]:
                 continue
-            if _digest(path.read_bytes()) != info.get("digest"):
+            if key is not None and info["key"] != key:
+                continue
+            if verify and _digest(path.read_bytes()) != info.get("digest"):
                 continue  # A user-edited cache file is preserved, never reused.
             info["_manifest_digest"] = _digest(manifest_data)
             records.append((path, manifest, info, path.stat()))
@@ -328,14 +332,16 @@ def _cache_records(root):
     return records
 
 
-def prune_reading_cache(store, *, limit_bytes=CACHE_LIMIT_BYTES, keep=()):
+def prune_reading_cache(store, *, limit_bytes=CACHE_LIMIT_BYTES, keep=(), max_removals=None):
     """Delete only integrity-verified generated PDFs; edited/unknown files stay."""
     with _cache_lock:
         kept = {canonical(path) for path in keep}
-        records = _cache_records(_cache_root(store))
+        records = _cache_records(_cache_root(store), verify=False)
         total, removed = sum(stat.st_size for _, _, _, stat in records), 0
         for path, manifest, info, stat in sorted(records, key=lambda row: row[3].st_mtime_ns):
             if total <= max(0, limit_bytes):
+                break
+            if max_removals is not None and removed >= max_removals:
                 break
             if canonical(path) in kept:
                 continue
@@ -355,11 +361,16 @@ def prune_reading_cache(store, *, limit_bytes=CACHE_LIMIT_BYTES, keep=()):
 
 def _cached_reading(store, key, create, cancelled, cache_limit_bytes):
     root = _cache_root(store)
-    for path, _, manifest, _ in _cache_records(root):
+    for path, _, manifest, _ in _cache_records(root, key=key):
         if manifest["key"] == key:
             _check(cancelled)
             path.touch()
-            prune_reading_cache(store, limit_bytes=cache_limit_bytes, keep=[path])
+            now = time.monotonic()
+            if now - _cache_maintenance.get(str(root), -120) >= 120:
+                prune_reading_cache(store, limit_bytes=cache_limit_bytes, keep=[path], max_removals=16)
+                if len(_cache_maintenance) >= 32:
+                    _cache_maintenance.clear()
+                _cache_maintenance[str(root)] = now
             return path
     data = create()
     if data is None:

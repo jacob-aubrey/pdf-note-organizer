@@ -84,7 +84,7 @@ def _local_info(path, document, cancelled, inspect_pdf=None):
 
 
 def _inspect_locally(path, metadata, cancelled):
-    import fitz
+    import pymupdf as fitz
     annotations, read_error = None, ""
     with fitz.open(path) as pdf:
         if pdf.needs_pass:
@@ -392,7 +392,7 @@ def _folder_rows(root, directories, folders, scope_id, config, rows, cancelled):
                              confidence="cached_only", cached=True, actions=["review_mapping", "review_create_cloud_folder"]))
 
 
-def link_registry_sources(store, sources, paper_id=None):
+def link_registry_sources(store, sources, paper_id=None, *, citation=None):
     """Confirm a scanner suggestion without modifying its independent PDFs/notes.
 
     Accept existing registry source IDs or the scanner's source descriptors.
@@ -424,4 +424,4 @@ def link_registry_sources(store, sources, paper_id=None):
         else:
             source_ids.append(registry.register_cloud(source["cloud_id"], digest=source.get("digest", ""),
                 title=source.get("title", ""), metadata=source.get("metadata"))["id"])
-    return registry.link_sources(source_ids, paper_id)
+    return registry.link_sources(source_ids, paper_id, citation=citation)

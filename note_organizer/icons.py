@@ -7,6 +7,16 @@ ASSETS = Path(__file__).with_name("assets") / "icons"
 
 # Labels remain intact for keyboard help, tooltips and action identification.
 BUTTON_ICONS = {
+    "Actions ▾": "ellipsis", "Folder actions ▾": "folder-open", "Set up Inbox…": "settings",
+    "Library storage & backups…": "files", "Create verified backup…": "save",
+    "Compact library…": "refresh-cw", "Restore backup…": "rotate-ccw",
+    "Tags & collections…": "folder-plus", "Saved searches…": "search",
+    "Save labels": "save", "Save current search": "save", "Apply saved search": "search",
+    "Delete saved search": "trash-2", "Use citation and link": "link",
+    "Use citation draft": "book-open",
+    "Accessible reading view…": "book-open", "Test connection": "plug",
+    "Open attached file": "external-link", "Open restored library": "folder-open",
+    "Review recovery archives…": "history", "Back up & remove duplicates…": "files",
     "Copy image": "copy", "Citation details…": "book-open", "Export citations…": "download",
     "Find supplementary files…": "folder-search", "Look up DOI": "search", "Copy citation": "copy",
     "Save citation": "save", "Find files": "search", "Download selected…": "download",
@@ -64,7 +74,7 @@ def icon(master, name, disabled=False):
     if key not in cache:
         with Image.open(ASSETS / f"{name}.png") as source:
             mask = source.getchannel("A").resize((size, size), Image.Resampling.LANCZOS)
-        image = Image.new("RGBA", (size, size), "#777E86" if disabled else "#DCE4EE")
+        image = Image.new("RGBA", (size, size), "#9CA3AB" if disabled else "#DCE4EE")
         image.putalpha(mask)
         cache[key] = ImageTk.PhotoImage(image, master=root)
     return cache[key]

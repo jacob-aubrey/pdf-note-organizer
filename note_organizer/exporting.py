@@ -10,7 +10,7 @@ import shutil
 import tempfile
 from itertools import groupby
 
-import fitz
+import pymupdf as fitz
 from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn

@@ -7,7 +7,7 @@ the page boxes changes only the origin from which viewers display those objects.
 import math
 import re
 
-import fitz
+import pymupdf as fitz
 
 
 _PADDING = 6

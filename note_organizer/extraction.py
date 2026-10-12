@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 from urllib.parse import quote as encode_annotation_id
 
-import fitz
+import pymupdf as fitz
 
 from .storage import digest_file
 

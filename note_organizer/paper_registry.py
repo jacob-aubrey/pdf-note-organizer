@@ -73,6 +73,10 @@ class Registry:
                 CREATE INDEX IF NOT EXISTS paper_sources_by_paper ON paper_sources(paper_id);
             """)
             ensure_document_sources(db)
+            columns = {row[1] for row in db.execute("PRAGMA table_info(paper_link_operations)")}
+            for name in ("citation_before", "citation_after"):
+                if name not in columns:
+                    db.execute(f"ALTER TABLE paper_link_operations ADD COLUMN {name} TEXT NOT NULL DEFAULT '{{}}'")
 
     @staticmethod
     def _decode(row):
@@ -105,6 +109,15 @@ class Registry:
                         raise ValueError("The selected paper identity does not exist.")
                 else:
                     db.execute("INSERT INTO paper_registry VALUES(?,?,?)", (current_paper, title, at))
+            if paper_id:
+                from .citations import reviewed_records, CitationConflict
+                linked_ids = {row[0] for row in db.execute("SELECT m.document_id FROM paper_document_sources m JOIN paper_sources s ON s.id=m.source_id WHERE s.paper_id=?", (paper_id,))}
+                new_ids = {row[0] for row in db.execute("SELECT id FROM documents WHERE path=?", (locator,))} if kind == "local" else set()
+                records = reviewed_records(db, linked_ids | new_ids)
+                if len(records) > 1:
+                    raise CitationConflict(records)
+                if records:
+                    db.executemany("INSERT OR REPLACE INTO paper_citations VALUES(?,?)", [(document_id, json.dumps(records[0], ensure_ascii=False)) for document_id in new_ids])
             # Empty values do not erase known source information on a title-only refresh.
             digest = digest or (old["digest"] if old else "")
             title = title or (old["title"] if old else "")
@@ -195,7 +208,7 @@ class Registry:
             move_paths(db, old["locator"], locator)
         return self.source(source_id)
 
-    def link_sources(self, source_ids, paper_id=None):
+    def link_sources(self, source_ids, paper_id=None, *, citation=None):
         """Confirm shared paper identities, retaining all already-linked variants.
 
         Selecting sources confirms their entire existing paper relationship,
@@ -223,6 +236,23 @@ class Registry:
                                          tuple(affected_papers)).fetchall()
             from .supplement_library import check_merge
             check_merge(db, related_sources)
+            from .citations import reviewed_records, CitationConflict, normalize_record
+            document_ids = [row[0] for row in db.execute(
+                "SELECT document_id FROM paper_document_sources WHERE source_id IN (" +
+                ",".join("?" for _ in related_sources) + ")", [row["id"] for row in related_sources])]
+            records = reviewed_records(db, document_ids)
+            if len(records) > 1 and citation is None:
+                raise CitationConflict(records)
+            canonical_citation = normalize_record(citation) if citation is not None else records[0] if records else None
+            if canonical_citation is not None and not canonical_citation["title"]:
+                raise ValueError("Review a paper title before choosing its canonical citation.")
+            citation_before = {doc: (row[0] if (row := db.execute("SELECT payload FROM paper_citations WHERE document_id=?", (doc,)).fetchone()) else None) for doc in document_ids}
+            citation_after = json.dumps(canonical_citation, ensure_ascii=False) if canonical_citation else None
+            if citation_after:
+                db.executemany("INSERT OR REPLACE INTO paper_citations VALUES(?,?)", [(doc, citation_after) for doc in document_ids])
+                from .supplement_library import index_doi
+                for doc in document_ids:
+                    index_doi(db, doc, canonical_citation)
             before = {row["id"]: row["paper_id"] for row in related_sources}
             for row in related_sources:
                 if row["paper_id"] != paper_id:
@@ -236,6 +266,8 @@ class Registry:
                 db.execute("""INSERT INTO paper_link_operations(paper_id,before_relationships,
                     after_relationships,history_cutoff,at) VALUES(?,?,?,?,?)""",
                            (paper_id, json.dumps(before, sort_keys=True), json.dumps(after, sort_keys=True), cutoff, at))
+                db.execute("UPDATE paper_link_operations SET citation_before=?,citation_after=? WHERE id=last_insert_rowid()",
+                           (json.dumps(citation_before), json.dumps(citation_after)))
                 # Linking changes notebook grouping and inherited-note counts,
                 # even when none of the underlying annotation payloads changed.
                 _mark_papers_dirty(db, tuple(affected_papers))
@@ -292,10 +324,20 @@ class Registry:
                                (source_id, after[source_id], previous_paper, at))
                     db.execute("UPDATE paper_sources SET paper_id=?,updated_at=? WHERE id=?", (previous_paper, at, source_id))
             db.execute("UPDATE paper_link_operations SET undone_at=? WHERE id=?", (at, operation["id"]))
+            citation_after = json.loads(operation["citation_after"])
+            for doc, payload in json.loads(operation["citation_before"]).items():
+                current_citation = db.execute("SELECT payload FROM paper_citations WHERE document_id=?", (doc,)).fetchone()
+                # Edits made after linking remain available on both restored papers.
+                if current_citation and current_citation[0] == citation_after:
+                    db.execute("DELETE FROM paper_citations WHERE document_id=?", (doc,))
+                    if payload is not None:
+                        db.execute("INSERT INTO paper_citations VALUES(?,?)", (doc, payload))
+                    from .supplement_library import index_doi
+                    index_doi(db, doc)
             _mark_papers_dirty(db, tuple(affected_papers))
             return {**operation, "undone_at": at, "restored_paper_ids": sorted(affected_papers)}
 
 
-def link_registry_sources(store, source_ids, paper_id=None):
+def link_registry_sources(store, source_ids, paper_id=None, *, citation=None):
     """Entry point for a user-confirmed link, never a scanner side effect."""
-    return Registry(store).link_sources(source_ids, paper_id)
+    return Registry(store).link_sources(source_ids, paper_id, citation=citation)

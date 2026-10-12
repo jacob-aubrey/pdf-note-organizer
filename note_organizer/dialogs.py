@@ -7,7 +7,7 @@ from tkinter import filedialog, messagebox, ttk
 from .library_paths import library_diagnostics
 from .theme import BACKGROUND
 from .viewers import VIEWERS, find_viewer
-from .icons import Button, menu_action
+from .icons import Button
 from .widgets import Tooltip, PathField, SelectionDetails, annotate_buttons, bind_dialog_close, fit_dialog
 
 
@@ -56,6 +56,32 @@ class ProcessingFields:
         self.group.trace_add("write", explain)
         self.layout.trace_add("write", explain)
         explain()
+        # Keep precision controls available without making first-time setup busy.
+        self.advanced = tk.BooleanVar(value=False)
+        precision = [widget for widget in parent.winfo_children() if widget.winfo_manager() == "grid" and int(widget.grid_info()["row"]) in {1, 2}]
+        for widget in parent.winfo_children():
+            if widget.winfo_manager() == "grid" and int(widget.grid_info()["row"]) >= 1:
+                widget.grid_configure(row=int(widget.grid_info()["row"])+1)
+        def advanced():
+            for widget in precision:
+                widget.grid() if self.advanced.get() else widget.grid_remove()
+        advanced_toggle = ttk.Checkbutton(parent, text="Advanced: stroke distance & context margin", variable=self.advanced, command=advanced)
+        advanced_toggle.grid(row=1, column=0, columnspan=2, sticky="w", pady=5)
+        Tooltip(advanced_toggle, "Show precise stroke joining and context crop settings. The example illustrates how the grouping mode treats nearby handwriting.")
+        advanced()
+        preview = tk.Canvas(parent, width=300, height=48, background=BACKGROUND, highlightthickness=0, takefocus=False)
+        preview.grid(row=7, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        def draw(*_):
+            preview.delete("all")
+            whole = self.group.get() == "Whole page"
+            lines = self.group.get() == "Nearby lines"
+            boxes = [(8, 5, 292, 43)] if whole else [(8, 5, 140, 21), (8, 27, 140, 43), (158, 5, 292, 43)] if lines else [(8, 5, 140, 43), (158, 5, 292, 43)]
+            for box in boxes:
+                preview.create_rectangle(*box, outline="#87C5F5", width=2)
+            for x, y in ((18, 13), (18, 35), (168, 13), (168, 35)):
+                preview.create_line(x, y, x+42, y-2, x+55, y+2, x+95, y-1, fill="#DCE4EE", width=2)
+        self.group.trace_add("write", draw)
+        draw()
 
     def values(self, parent):
         try:
@@ -85,7 +111,7 @@ class PreferencesDialog:
         bind_dialog_close(window, self.cancel)
         frame = ttk.Frame(window, padding=18)
         frame.pack(fill="both", expand=True)
-        tabs = ttk.Notebook(frame)
+        self.tabs = tabs = ttk.Notebook(frame)
         tabs.pack(fill="both", expand=True)
         general = ttk.Frame(tabs, padding=14)
         library = ttk.Frame(tabs, padding=14)
@@ -94,7 +120,7 @@ class PreferencesDialog:
         self.sorting = self.integration = None
         if hasattr(app, "inbox"):
             from .workflow_ui import SortingFields, IntegrationFields
-            sorting_tab = ttk.Frame(tabs)
+            self.sorting_tab = sorting_tab = ttk.Frame(tabs)
             connections_tab = ttk.Frame(tabs, padding=14)
             tabs.add(sorting_tab, text="Sorting")
             tabs.add(connections_tab, text="Connections")
@@ -161,6 +187,7 @@ class PreferencesDialog:
         actions.pack(fill="x", pady=(0, 12))
         for label, action, help_text in [
             ("Open data folder", lambda: app.open_path(app.data_dir), "Open the active library's database, cache and log directory."),
+            ("Library storage & backups…", lambda: app.storage_maintenance(), "Create or restore a verified backup and reclaim database storage while preserving history."),
             ("Show sync details", app.show_sync_details, "Open the latest processing log in Library."),
         ]:
             button = Button(actions, text=label, command=action)

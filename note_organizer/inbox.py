@@ -37,6 +37,7 @@ DEFAULT_CONFIG = {
     "custom_filename_template": "",
     "online_metadata_lookup_enabled": True,
     "gemini_enabled": False,
+    "gemini_model": "gemini-3.5-flash-lite",
     "allow_cloud_ai_for_word_documents": False,
     "allow_cloud_ai_for_presentation_documents": False,
 }
@@ -114,6 +115,8 @@ def _complete_document(path):
 def _clean_config(data, base=None):
     from .sorting.core_logic import FILENAME_FORMATS, validate_filename_template
     result = {**DEFAULT_CONFIG, **(base or {})}
+    if base and base.get("api_key_protected") and "gemini_model" not in base:
+        result["gemini_model"] = "gemini-2.5-flash"
     for key in DEFAULT_CONFIG:
         if key not in data:
             continue
@@ -125,6 +128,9 @@ def _clean_config(data, base=None):
         else:
             result[key] = str(value or "")
     result["naming_mode"] = "Basic" if result["naming_mode"] == "Basic" else "Automatic"
+    import re
+    if not re.fullmatch(r"gemini-[a-zA-Z0-9._-]{1,100}", result["gemini_model"]):
+        raise ValueError("Enter a Gemini model ID, such as gemini-3.5-flash-lite.")
     if result["filename_format"] not in FILENAME_FORMATS:
         raise ValueError("Choose a supported filename format.")
     if result["filename_format"] == "custom":
@@ -204,6 +210,8 @@ class InboxController:
     def config(self):
         saved = self._saved_config
         result = {**DEFAULT_CONFIG, **{key: saved[key] for key in DEFAULT_CONFIG if key in saved}}
+        if saved.get("api_key_protected") and "gemini_model" not in saved:
+            result["gemini_model"] = "gemini-2.5-flash"
         result["api_key_present"] = bool(saved.get("api_key_protected"))
         return result
 
@@ -239,7 +247,7 @@ class InboxController:
                     raise ValueError("The saved Gemini key is unavailable for this Windows account. Enter your own key before enabling Gemini naming.") from None
             self._validate_exclusions(result)
             metadata_options = {"naming_mode", "online_metadata_lookup_enabled",
-                                "gemini_enabled",
+                                "gemini_enabled", "gemini_model",
                                 "allow_cloud_ai_for_word_documents", "allow_cloud_ai_for_presentation_documents",
                                 "api_key_protected"}
             metadata_changed = any(saved.get(key, DEFAULT_CONFIG.get(key)) != result.get(key, DEFAULT_CONFIG.get(key))
@@ -453,7 +461,7 @@ class InboxController:
                          (suffix == ".docx" and config["allow_cloud_ai_for_word_documents"]) or
                          (suffix == ".pptx" and config["allow_cloud_ai_for_presentation_documents"]))
                 details = get_document_details(path, self._key(), allow_cloud_ai=cloud,
-                    allow_online_metadata_lookup=config["online_metadata_lookup_enabled"])
+                    allow_online_metadata_lookup=config["online_metadata_lookup_enabled"], model=config["gemini_model"])
             if not details:
                 raise ValueError("Document information could not be read. You can still name the file manually.")
             if file_signature(path) != signature:

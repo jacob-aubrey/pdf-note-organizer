@@ -11,23 +11,59 @@ Sorting supports `.pdf`, `.docx`, `.pptx`, and legacy `.ppt`. **Only PDFs enter 
 
 This README starts with setup and ordinary use. The [existing-library cleanup walkthrough](#bring-an-existing-pc-and-tablet-library-together) explains how to work through disorganized collections a few papers at a time. Troubleshooting and technical reference follow afterward.
 
-The current source version is **Notable 2.4.1**. This update brings PC and reMarkable notes together in one reading view and keeps margin handwriting visible. New syncs keep one main PDF in the paper folder and save tablet notes separately. Existing extra reading copies stay in place until you review their removal. An older saved library may also need a one-time note refresh; source PDFs are read, without changing their contents.
+The current version is **Notable 2.5.0**. This release adds verified backup and recovery, history-preserving storage compaction, indexed PDF search, tags and research collections, saved searches, an accessible reading view, explicit citation conflict review and faster background PDF scheduling. The [implementation report](AUDIT_IMPLEMENTATION.md) maps the audit recommendations to the changes and verification.
 
 ## Set up and open the source app
 
 ### First setup on Windows
 
-This version runs from Python source. **No updated executable has been packaged. The executable in `dist/` belongs to the old version.** Use the source launcher when checking current behavior.
+Use the versioned **`dist/Notable-2.5.0.exe`** after running the release builder described below, or launch from Python source. Older unversioned executables belong to previous releases. The versioned executable has a matching `.manifest.json` containing its SHA-256 digest and packaged smoke-test result.
 
 The project environment is configured for Python 3.13. Install Python 3.13, open PowerShell in the project folder, and run:
 
 ```powershell
 py -3.13 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.lock
 .\.venv\Scripts\python.exe "PDF Note Organizer.py"
 ```
 
 The first command creates the project's own Python environment. The second installs the packages into that environment. Creating `.venv` is a first-time step; reinstalling requirements is useful when dependencies change.
+
+`requirements.lock` includes hashes for the tested Windows x64/Python 3.13 wheels and every runtime dependency. `requirements.txt` lists the direct dependencies for other platforms; it is not the reproducible Windows environment.
+
+### New in 2.5: reading, organizing and storage
+
+**Actions ▾** exposes additional commands in each workspace. Library also has a visible **Folder actions ▾** menu. An unconfigured Inbox offers **Set up Inbox**. Advanced processing distances stay collapsed until needed; an example illustrates the grouping choices.
+
+In Notes, use **Actions → Tags & collections…** to label the selected paper and its linked copies. Separate names with semicolons. Choose a tag or collection in the Notes filter to browse its notes and printed PDF matches. **Saved searches…** stores search text, fields, matching mode, note type, collection and Notes/PDFs/All scope. Applying a saved search uses your currently selected folder and paper.
+
+**Accessible reading view…** opens the current results in your browser with semantic headings, searchable text, source links, zoom and print controls. It is a local snapshot; open it again after changing the results. This improves access to reading content. The full Tk application has not been certified with NVDA or other screen readers.
+
+Keyboard shortcuts include **Ctrl+F** for search, **F5** to sync PDFs, **Ctrl+,** for Settings, **Alt+1/2/3** for Inbox/Library/Notes, **Ctrl+Shift+S** for saved searches, **Ctrl+Shift+T** for labels and **Ctrl+Shift+A** for the accessible reading view. Text-only notes use the full preview area; drawings reserve space for their image. Saved timestamps appear in local time.
+
+When linked copies have different reviewed citations, choose the citation to retain before linking or exporting. A citation draft must be saved to apply it to the linked paper. Undoing a link restores its previous citations when no later citation edit would be lost. Supplements use DOI and verified content matches to associate with their parent paper; attachments can be opened from the paper's supplement view.
+
+Open **Library → Actions → Library storage & backups…**, also available in **Settings → Library & diagnostics**:
+
+- **Create verified backup…** saves a SQLite snapshot, retained tablet sources, settings and available original PDFs/attachments in a hash-verified ZIP. Protect this archive as private library data: it may include encrypted local credentials. Keep a copy on separate storage for disaster recovery. Unavailable external files cannot be included.
+- **Compact library…** creates and verifies that backup first, shares repeated note images, reclaims unused database pages and checks integrity. Note revisions remain. This is an explicit maintenance action; launching the upgrade does not compact the existing database.
+- **Restore backup…** verifies the archive and creates a new independent directory. **Open restored library** launches it with recovered original snapshots. Inbox watching and cloud services start paused for setup review. Existing directories cannot be overwritten.
+- **Review extra PDFs…** retains the existing reviewed cleanup workflow. **Review recovery archives…** removes a raw tablet archive only when every member is proven identical to retained baseline/layer assets and its notes have migrated. It requires review and a verified backup; uncertain archives remain with an explanation.
+
+PDF text indexing builds as papers are searched. Short terms and negative queries retain the existing matching behavior through a conservative fallback. Reading PDFs retain the guarded cache budget. Large PDF text jobs yield between small page batches so a preview can run promptly; obsolete previews and searches cancel cooperatively.
+
+Optional Gemini naming has a model selector and **Test connection** in Sorting settings. The test checks the selected model with your draft/saved key; it does not send a document or generate text. Existing configured libraries preserve their model compatibility. New setups default to `gemini-3.5-flash-lite`; availability still depends on your account.
+
+### Build and verify the Windows executable
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-build.txt
+.\.venv\Scripts\python.exe scripts/build_release.py
+```
+
+The build lock includes hashed runtime and packaging/test dependencies. The builder checks dependencies and unused/undefined names, runs the complete regression suite, builds `dist/Notable-2.5.0.exe`, and launches a packaged smoke test against a disposable library. It checks native PDF rendering/text extraction and bundled UI assets before producing the SHA-256 manifest. Windows CI runs the same pipeline and uploads the executable and manifest as build artifacts. Generated build directories are disposable; older executables and legacy source are retained as deliberate rollback copies. Existing databases in `dist/` are library data, not build debris.
+
+The downloadable README PDF, if present, describes 2.4.1. This Markdown guide and the implementation report document 2.5.0.
 
 For later launches, run this from the project folder:
 

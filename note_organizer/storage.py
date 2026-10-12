@@ -6,9 +6,11 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import threading
 import uuid
 from .search import compile_search, normalize
 from .pages import page_search_text
+from .image_storage import intern as intern_image, expand as expand_image, image as stored_image
 from .paper_projection import (load_paper_sources, annotated_documents, inherited_duplicate_ids,
                                project_papers)
 
@@ -66,6 +68,7 @@ def matches_search(entry, query, fields, match_mode, note_type, matcher=None):
 class Store:
     def __init__(self, path):
         self.path = Path(path)
+        self._supplements = threading.local()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             db.executescript("""
@@ -104,6 +107,20 @@ class Store:
                     path TEXT NOT NULL, url TEXT NOT NULL DEFAULT '', PRIMARY KEY(document_id,path));
                 CREATE TABLE IF NOT EXISTS supplement_files (
                     path TEXT PRIMARY KEY, digest TEXT NOT NULL, details TEXT NOT NULL);
+                CREATE INDEX IF NOT EXISTS history_by_document ON history(document_id,id DESC);
+                CREATE INDEX IF NOT EXISTS supplement_by_digest ON supplement_files(digest);
+                CREATE INDEX IF NOT EXISTS attachment_by_path ON paper_attachments(path);
+                CREATE INDEX IF NOT EXISTS document_digest ON documents(project_id,digest);
+                CREATE TABLE IF NOT EXISTS note_images (
+                    digest TEXT PRIMARY KEY, encoding TEXT NOT NULL, data BLOB NOT NULL);
+                CREATE TABLE IF NOT EXISTS document_dois (
+                    document_id TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE, doi TEXT NOT NULL);
+                CREATE INDEX IF NOT EXISTS documents_by_doi ON document_dois(doi);
+                CREATE TABLE IF NOT EXISTS document_labels (
+                    document_id TEXT REFERENCES documents(id) ON DELETE CASCADE,
+                    kind TEXT NOT NULL CHECK(kind IN ('tag','collection')), value TEXT NOT NULL,
+                    PRIMARY KEY(document_id,kind,value));
+                CREATE INDEX IF NOT EXISTS labels_by_value ON document_labels(kind,value);
             """)
             if "hidden" not in {r[1] for r in db.execute("PRAGMA table_info(documents)")}:
                 db.execute("ALTER TABLE documents ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
@@ -114,6 +131,14 @@ class Store:
                 ensure_document_sources(db)
             from .supplement_library import migrate_filings
             migrate_filings(db)
+            from .supplement_library import index_doi
+            for row in db.execute("SELECT id FROM documents WHERE id NOT IN (SELECT document_id FROM document_dois)").fetchall():
+                index_doi(db, row[0])
+            from .search_index import initialize
+            initialize(db)
+        # Legacy filing association performs I/O only after schema commits.
+        from .supplement_library import reconcile
+        reconcile(self)
 
     @contextmanager
     def connect(self):
@@ -352,6 +377,10 @@ class Store:
         return rows
 
     def cached_pdf_pages(self, document_id, digest, version):
+        from .search_index import read
+        indexed = read(self, document_id, digest, version, "", "All words")
+        if indexed is not None:
+            return indexed[0]
         with self.connect() as db:
             row = db.execute("SELECT pages FROM pdf_search_cache WHERE document_id=? AND digest=? AND version=?",
                              (document_id, digest, version)).fetchone()
@@ -360,9 +389,12 @@ class Store:
     def cache_pdf_pages(self, document_id, digest, version, pages):
         with self.connect() as db:
             # A scan or folder removal during extraction must not resurrect an old index.
-            db.execute("""INSERT OR REPLACE INTO pdf_search_cache SELECT id,digest,?,? FROM documents
+            saved = db.execute("""INSERT OR REPLACE INTO pdf_search_cache SELECT id,digest,?,? FROM documents
                           WHERE id=? AND digest=? AND hidden=0""",
-                       (version, json.dumps(pages, ensure_ascii=False), document_id, digest))
+                       (version, "[]", document_id, digest))
+            if saved.rowcount:
+                from .search_index import write
+                write(db, document_id, digest, version, pages)
 
     def scan_result(self, project_id, path, error=""):
         with self.connect() as db:
@@ -390,13 +422,13 @@ class Store:
                 if len(candidates) == 1:
                     old = candidates[0]
             doc_id = old["id"] if old else str(uuid.uuid4())
-            previous = {r["key"]: r["payload"] for r in db.execute(
+            previous = {r["key"]: json.dumps(intern_image(db, json.loads(r["payload"])), sort_keys=True, ensure_ascii=False) for r in db.execute(
                 "SELECT key,payload FROM entries WHERE document_id=?", (doc_id,))}
             current = {}
             for entry in entries:
                 if entry["key"] in current:
                     raise ValueError("Duplicate annotation identity; the previous saved notes were retained.")
-                current[entry["key"]] = json.dumps(entry, sort_keys=True, ensure_ascii=False)
+                current[entry["key"]] = json.dumps(intern_image(db, entry), sort_keys=True, ensure_ascii=False)
             changed = (old is None or old["path"] != path or old["metadata"] != json.dumps(metadata, sort_keys=True)
                        or old["digest"] != digest or bool(old["missing"]) or bool(old["hidden"]))
             if old and old["path"] != path and db.execute(
@@ -434,9 +466,34 @@ class Store:
                 db.execute("UPDATE documents SET note_revision=note_revision+1 WHERE id=?", (doc_id,))
             if changed or any(counts.values()):
                 db.execute("UPDATE projects SET dirty=1 WHERE id=?", (project_id,))
-            from .supplement_library import scanned
-            scanned(db, path, digest)
-            return counts
+            from .supplement_library import index_doi
+            index_doi(db, doc_id)
+        if connection is None:
+            pending = getattr(self._supplements, "pending", None)
+            if pending is None:
+                from .supplement_library import reconcile
+                reconcile(self, [(path, digest)])
+            else:
+                pending.append((path, digest))
+        return counts
+
+    @contextmanager
+    def supplement_batch(self):
+        previous = getattr(self._supplements, "pending", None)
+        self._supplements.pending = [] if previous is None else previous
+        try:
+            yield
+        finally:
+            if previous is None:
+                self.flush_supplements()
+            self._supplements.pending = previous
+
+    def flush_supplements(self):
+        pending = getattr(self._supplements, "pending", None)
+        if pending:
+            from .supplement_library import reconcile
+            reconcile(self, pending)
+            pending.clear()
 
     def mark_missing(self, project_id, seen):
         with self.connect() as db:
@@ -512,7 +569,7 @@ class Store:
             for row in db.execute(sql, args):
                 if cancelled and cancelled():
                     raise InterruptedError("Note query cancelled")
-                e = json.loads(row["payload"])
+                e = expand_image(db, json.loads(row["payload"]), include_images)
                 doc_id = row["document_id"]
                 if doc_id not in metadata:
                     metadata[doc_id] = json.loads(row["metadata"])
@@ -546,20 +603,26 @@ class Store:
     def entry_image(self, document_id, key, *, expected_digest=None, expected_note_revision=None):
         """Fetch only the image currently needed for the note preview or export."""
         with self.connect() as db:
-            row = db.execute("""SELECT json_extract(e.payload, '$.image') AS image,d.digest,d.note_revision
+            row = db.execute("""SELECT json_extract(e.payload, '$.image') AS image,
+                json_extract(e.payload, '$.image_ref') AS image_ref,d.digest,d.note_revision
                 FROM entries e JOIN documents d ON d.id=e.document_id
                 WHERE e.document_id=? AND e.key=? AND d.hidden=0""", (document_id, key)).fetchone()
+            value = (stored_image(db, row["image_ref"]) if row["image_ref"] else row["image"]) if row else ""
         guarded = expected_digest is not None or expected_note_revision is not None
         if (guarded and row is None or row is not None and (
                 expected_digest is not None and row["digest"] != expected_digest or
                 expected_note_revision is not None and row["note_revision"] != expected_note_revision)):
             raise ValueError("Saved notes changed while loading this image. Refresh Notes and try again.")
-        return (row["image"] or "") if row else ""
+        return value or ""
 
     def history(self, document_id, include_images=True):
         with self.connect() as db:
             payload = "payload" if include_images else "json_remove(payload,'$.image') AS payload"
-            return [dict(r) for r in db.execute(f"SELECT id,document_id,key,action,at,{payload} FROM history WHERE document_id=? ORDER BY id DESC", (document_id,))]
+            rows = [dict(r) for r in db.execute(f"SELECT id,document_id,key,action,at,{payload} FROM history WHERE document_id=? ORDER BY id DESC", (document_id,))]
+            for row in rows:
+                if '"image_ref"' in row["payload"]:
+                    row["payload"] = json.dumps(expand_image(db, json.loads(row["payload"]), include_images), sort_keys=True, ensure_ascii=False)
+            return rows
 
     def import_legacy(self, paths):
         with self.connect() as db:

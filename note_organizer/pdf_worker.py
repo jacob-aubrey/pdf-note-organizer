@@ -1,5 +1,5 @@
 """Run native PDF work in one spawned process, leaving Tk's interpreter free."""
-from concurrent.futures import CancelledError, ProcessPoolExecutor
+from concurrent.futures import CancelledError, ProcessPoolExecutor, TimeoutError
 from concurrent.futures.process import BrokenProcessPool
 from contextlib import contextmanager
 import json
@@ -10,20 +10,25 @@ import os
 from pathlib import Path
 import sqlite3
 import threading
+import heapq
+import itertools
 
 
 _cancel_event = None
+_job_cancel_event = None
 MAX_PREVIEW_SIDE = 1600
 MAX_PREVIEW_PIXELS = 2_000_000
 
 
-def _initialize(cancel_event):
-    global _cancel_event
+def _initialize(cancel_event, job_cancel_event=None):
+    global _cancel_event, _job_cancel_event
     _cancel_event = cancel_event
+    _job_cancel_event = job_cancel_event
 
 
 def _cancelled():
-    return _cancel_event is not None and _cancel_event.is_set()
+    return bool((_cancel_event is not None and _cancel_event.is_set()) or
+                (_job_cancel_event is not None and _job_cancel_event.is_set()))
 
 
 def _check_cancelled():
@@ -112,7 +117,7 @@ def _file_version(path):
 
 
 def _inspect(path):
-    import fitz
+    import pymupdf as fitz
     from .storage import digest_file
     _check_cancelled()
     before = _file_version(path)
@@ -132,7 +137,7 @@ def _inspect(path):
 
 
 def _supplement_links(path):
-    import fitz
+    import pymupdf as fitz
     from .supplements import SUPPLEMENT
     links = []
     _check_cancelled()
@@ -153,8 +158,8 @@ def _supplement_links(path):
     return links
 
 
-def _text_pages(path, expected_digest=None):
-    import fitz
+def _text_pages(path, expected_digest=None, start=0, stop=None):
+    import pymupdf as fitz
     from .storage import digest_file
     _check_cancelled()
     version = _file_version(path)
@@ -164,9 +169,10 @@ def _text_pages(path, expected_digest=None):
     with fitz.open(path) as document:
         if document.needs_pass:
             raise ValueError("Password-protected PDF: save an unlocked copy to search it.")
-        for number, page in enumerate(document, 1):
+        for index in range(start, min(stop, len(document)) if stop is not None else len(document)):
             _check_cancelled()
-            pages.append({"page": number, "pdf_label": page.get_label() or "",
+            page = document[index]
+            pages.append({"page": index+1, "pdf_label": page.get_label() or "",
                           "text": page.get_text(sort=True)})
     if _file_version(path) != version:
         raise OSError("PDF changed during text extraction. Try again after Sync PDFs.")
@@ -174,7 +180,7 @@ def _text_pages(path, expected_digest=None):
 
 
 def _full_page(path, page_number):
-    import fitz
+    import pymupdf as fitz
     from .extraction import drawing_page_bounds, preview_canvas
     _check_cancelled()
     if type(page_number) is not int or page_number < 1:
@@ -216,20 +222,38 @@ def _full_page(path, page_number):
 class PDFWorker:
     """Blocking API for background callers; all PDF jobs share one process.
 
-    The process starts at the first job. Cancellation applies to the whole app
-    on shutdown; stale individual previews are discarded by their UI generation.
+    The process starts at the first job. Shutdown and stale individual requests
+    cancel cooperatively; previews take priority over queued background work.
     Only paths, settings and bytes cross the process boundary, never PDF objects.
     """
     def __init__(self):
         self._context = multiprocessing.get_context("spawn")
         self._cancel_event = self._context.Event()
+        self._job_cancel_event = self._context.Event()
         self._lock = threading.Lock()
+        self._schedule = threading.Condition()
+        self._waiting = []
+        self._sequence = itertools.count()
+        self._active = False
         self._pool = None
         self._retiring = set()
         self._closed = False
         self._shutdown_done = threading.Event()
 
-    def _call(self, function, *args):
+    def _call(self, function, *args, priority=10, cancelled=None):
+        ticket = (priority, next(self._sequence))
+        with self._schedule:
+            heapq.heappush(self._waiting, ticket)
+            while self._active or self._waiting[0] != ticket:
+                if self._closed or self._cancel_event.is_set() or cancelled and cancelled():
+                    self._waiting.remove(ticket)
+                    heapq.heapify(self._waiting)
+                    self._schedule.notify_all()
+                    raise InterruptedError("PDF request cancelled")
+                self._schedule.wait(.05)
+            heapq.heappop(self._waiting)
+            self._active = True
+        self._job_cancel_event.clear()
         pool = None
         try:
             with self._lock:
@@ -237,10 +261,20 @@ class PDFWorker:
                     raise InterruptedError("PDF work stopped")
                 if self._pool is None:
                     self._pool = ProcessPoolExecutor(max_workers=1, mp_context=self._context,
-                                                    initializer=_initialize, initargs=(self._cancel_event,))
+                                                    initializer=_initialize, initargs=(self._cancel_event, self._job_cancel_event))
                 pool = self._pool
                 future = pool.submit(function, *args)
-            return future.result()
+            while True:
+                if cancelled and cancelled():
+                    self._job_cancel_event.set()
+                try:
+                    result = future.result(timeout=.05)
+                    if cancelled and cancelled():
+                        raise InterruptedError("PDF request cancelled")
+                    return result
+                except TimeoutError:
+                    if future.done():
+                        raise  # A PDF operation itself raised TimeoutError.
         except BrokenProcessPool:
             if pool is not None:
                 self._discard_broken_pool(pool)
@@ -249,6 +283,10 @@ class PDFWorker:
             raise
         except CancelledError as error:
             raise InterruptedError("PDF work stopped") from error
+        finally:
+            with self._schedule:
+                self._active = False
+                self._schedule.notify_all()
 
     def _discard_broken_pool(self, pool):
         with self._lock:
@@ -269,10 +307,25 @@ class PDFWorker:
                 self._retiring.discard(finished)
 
     def extract(self, path, settings):
-        return self._call(_extract, os.fspath(path), dict(settings))
+        return self._call(_extract, os.fspath(path), dict(settings), priority=20)
 
     def text_pages(self, path, expected_digest=None):
-        return self._call(_text_pages, os.fspath(path), expected_digest)
+        return self.text_pages_cancellable(path, expected_digest)
+
+    def text_pages_cancellable(self, path, expected_digest=None, cancelled=None):
+        # Yield the process between small batches so page previews do not wait
+        # behind a complete book. File identity guards span every batch.
+        version, pages, start = _file_version(path), [], 0
+        while True:
+            chunk = self._call(_text_pages, os.fspath(path), expected_digest if not start else None,
+                               start, start+12, priority=15, cancelled=cancelled)
+            pages.extend(chunk)
+            if len(chunk) < 12:
+                break
+            start += 12
+        if version != _file_version(path):
+            raise OSError("PDF changed during indexing; sync and search again.")
+        return pages
 
     def supplement_links(self, path):
         return self._call(_supplement_links, os.fspath(path))
@@ -281,7 +334,7 @@ class PDFWorker:
         return self._call(_render, item, dict(bundle))
 
     def materialize(self, library_path, reference):
-        return self._call(_materialize, os.fspath(library_path), os.fspath(reference))
+        return self._call(_materialize, os.fspath(library_path), os.fspath(reference), priority=0)
 
     def export_combined(self, library_path, reference, target, *, expected_digest=None, require_absent=True):
         return self._call(_export_combined, os.fspath(library_path), os.fspath(reference), os.fspath(target),
@@ -295,7 +348,10 @@ class PDFWorker:
         return self._call(_tablet_only, item, dict(bundle))
 
     def full_page(self, path, onebased_page):
-        return self._call(_full_page, os.fspath(path), onebased_page)
+        return self.full_page_cancellable(path, onebased_page)
+
+    def full_page_cancellable(self, path, onebased_page, cancelled=None):
+        return self._call(_full_page, os.fspath(path), onebased_page, priority=0, cancelled=cancelled)
 
     def inspect(self, path):
         return self._call(_inspect, os.fspath(path))

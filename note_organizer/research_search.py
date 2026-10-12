@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from .search import compile_search, normalize, tokenize
+from .search_index import read as indexed_pages
 
 SCOPES = ("Notes", "PDFs", "All")
 MAX_PDF_RESULTS = 2000
@@ -36,13 +37,19 @@ def search_library(store, worker, scope="Notes", **options):
         if cancelled():
             raise InterruptedError("Search cancelled")
     check()
+    from .research_tools import label_ids
+    selected_labels = label_ids(store, options.pop("label_filter", "All papers"))
     query, mode = options.get("query", ""), options.get("match_mode", "All words")
     matcher = compile_search(query, mode)
     results = SearchResults(store.entries(**options) if scope != "PDFs" else ())
+    if selected_labels is not None:
+        results[:] = [entry for entry in results if entry["document_id"] in selected_labels]
     # Browsing Notes/All with an empty query never indexes every paper.
     if scope == "Notes" or not query.strip():
         return results
     documents = store.search_documents(options.get("project_id"), options.get("document_id"))
+    if selected_labels is not None:
+        documents = [document for document in documents if document["id"] in selected_labels]
     seen, pdf_count = set(), 0
     for document in documents:
         check()
@@ -62,14 +69,23 @@ def search_library(store, worker, scope="Notes", **options):
             managed = bool(metadata.get("managed_cloud_id"))
             physical = worker.materialize(store.path, document.get("logical_paper_id") or path) if managed else path
             version = file_version(physical)
-            pages = store.cached_pdf_pages(document["id"], document["digest"], version)
-            if pages is None:
-                pages = worker.text_pages(physical, None if managed else document["digest"])
-                check()
-                if version != file_version(physical):
-                    raise OSError("PDF changed while indexing; sync it and search again.")
+            indexed = indexed_pages(store, document["id"], document["digest"], version, query, mode)
+            if indexed is None:
+                pages = store.cached_pdf_pages(document["id"], document["digest"], version)
+                if pages is None:
+                    if hasattr(type(worker), "text_pages_cancellable"):
+                        pages = worker.text_pages_cancellable(physical, None if managed else document["digest"], cancelled)
+                    else:
+                        pages = worker.text_pages(physical, None if managed else document["digest"])
+                    check()
+                    if version != file_version(physical):
+                        raise OSError("PDF changed while indexing; sync it and search again.")
                 store.cache_pdf_pages(document["id"], document["digest"], version, pages)
-            if pages and not any(page["text"].strip() for page in pages):
+                indexed = indexed_pages(store, document["id"], document["digest"], version, query, mode)
+                if indexed is None:
+                    raise ValueError("Library changed during indexing. Search again.")
+            pages, page_count, has_text = indexed
+            if page_count and not has_text:
                 results.warnings.append(f"{Path(path).name}: No searchable text layer. Scanned pages need OCR before PDF text search.")
                 continue
             for page in pages:
@@ -80,7 +96,7 @@ def search_library(store, worker, scope="Notes", **options):
                     continue
                 results.append({"document_id": document["id"], "key": f"pdf-page:{page['page']}",
                                 "kind": "pdf", "path": path, "page": page["page"],
-                                "page_count": len(pages), "pdf_label": page["pdf_label"],
+                                "page_count": page_count, "pdf_label": page["pdf_label"],
                                 "rect": [0, 0, 0, 0], "metadata": metadata,
                                 "quote": excerpt(page["text"], query, mode), "context": page["text"],
                                 "logical_paper_id": document.get("logical_paper_id") if managed else None,

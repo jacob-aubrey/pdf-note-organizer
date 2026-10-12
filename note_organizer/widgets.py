@@ -7,6 +7,18 @@ from .screens import work_area, popup_position
 
 
 BUTTON_HELP = {
+    "Create verified backup…": "Save the library, note history, private sources and available original files in an integrity-checked backup archive.",
+    "Compact library…": "Create a verified backup, share repeated note images, and reclaim unused database pages while retaining history.",
+    "Restore backup…": "Verify a backup and restore an independent library with its own original file snapshots. Inbox watching and cloud services start paused.",
+    "Review recovery archives…": "Compare raw recovery archives with retained baseline and tablet layer assets before reviewing backed-up cleanup.",
+    "Open restored library": "Open this restored library in a separate app window with its own data and recovered original files.",
+    "Save labels": "Save tags and research collections for the selected paper and all its linked copies.",
+    "Save current search": "Save the current query, search fields, note type and collection filter under the entered name.",
+    "Apply saved search": "Run the selected saved search within the folder and paper currently selected in Notes.",
+    "Delete saved search": "Remove the selected saved search from this library. Notes and papers stay preserved.",
+    "Open attached file": "Open the selected supplementary file in its default application.",
+    "Use citation and link": "Use the reviewed citation for the linked paper while preserving independent source files and note history.",
+    "Use citation draft": "Load this citation into the editor for review. Save citation applies the reviewed details to all linked copies.",
     "Help": "Read the workflow guide and page-number conventions.",
     "Settings": "Configure document sorting, your own optional Gemini key, the PDF viewer and processing defaults; enable optional reMarkable services or inspect the active library.",
     "Add folder…": "Watch an existing PC folder for new and changed annotated PDFs.",
@@ -321,7 +333,7 @@ class ReadOnlyText(ttk.Frame):
         super().__init__(parent)
         self.value = None
         self.text = tk.Text(self, height=height, width=width, wrap="word", state="disabled",
-                            background="#2b2b2b", foreground="#DCE4EE", selectbackground="#1F6AA5",
+                            background="#2b2b2b", foreground="#DCE4EE", selectbackground="#1B629B",
                             selectforeground="white", relief="flat", borderwidth=0,
                             font=("Segoe UI", 9), padx=6, pady=5, cursor="xterm")
         self.scroll = ttk.Scrollbar(self, orient="vertical", command=self.text.yview)
@@ -476,7 +488,7 @@ class SelectionDetails(ttk.Frame):
         body = self.body = ttk.Frame(self, style="Card.TFrame")
         body.pack(fill="both", expand=True)
         self.text = tk.Text(body, height=height, width=1, wrap="word", state="disabled",
-                            background="#2b2b2b", foreground="#DCE4EE", selectbackground="#1F6AA5",
+                            background="#2b2b2b", foreground="#DCE4EE", selectbackground="#1B629B",
                             selectforeground="white", relief="flat", borderwidth=0,
                             font=("Segoe UI", 9), padx=0, pady=3, cursor="arrow")
         scroll = self.scroll = ttk.Scrollbar(body, orient="vertical", command=self.text.yview)

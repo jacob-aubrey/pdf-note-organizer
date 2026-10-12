@@ -170,10 +170,25 @@ def migrate_filings(db):
         for row in db.execute("SELECT path,digest,details FROM inbox_jobs WHERE state IN ('confirmed','handed_off') AND digest!=''").fetchall():
             if json.loads(row["details"]).get("is_supplementary_material"):
                 db.execute("INSERT OR IGNORE INTO supplement_files VALUES(?,?,?)", (canonical(row["path"]), row["digest"], row["details"]))
-    bind_pending(db)
+    # Existing pending relationships are verified outside schema transactions.
 
 
-def bind_pending(db):
+def index_doi(db, document_id, metadata=None):
+    """Maintain a small normalized parent lookup independently of note payloads."""
+    row = db.execute("SELECT d.path,d.metadata,c.payload FROM documents d LEFT JOIN paper_citations c ON c.document_id=d.id WHERE d.id=?", (document_id,)).fetchone()
+    if row is None:
+        return
+    record = json.loads(row[2] or row[1]) if metadata is None else metadata
+    doi = normalize_doi(record.get("doi") or (record.get("identifier") or {}).get("doi"))
+    if not doi and db.execute("SELECT 1 FROM sqlite_master WHERE name='inbox_jobs'").fetchone():
+        job = db.execute("SELECT details FROM inbox_jobs WHERE path=? AND state IN ('confirmed','handed_off') ORDER BY created_at DESC LIMIT 1", (row[0],)).fetchone()
+        if job:
+            record = json.loads(job[0])
+            doi = normalize_doi(record.get("doi") or (record.get("identifier") or {}).get("doi"))
+    db.execute("INSERT OR REPLACE INTO document_dois VALUES(?,?)", (document_id, doi))
+
+
+def bind_pending(db, verified=None):
     """Retry after scans/citation edits: a parent can arrive after its SI."""
     files = db.execute("SELECT * FROM supplement_files").fetchall()
     if not files:
@@ -183,7 +198,11 @@ def bind_pending(db):
     si_paths = {row["path"] for row in files}
     si_paths.update(row[0] for row in db.execute("SELECT DISTINCT path FROM paper_attachments"))
     parents = []
-    for row in db.execute("SELECT d.*,c.payload AS citation FROM documents d LEFT JOIN paper_citations c ON c.document_id=d.id WHERE d.hidden=0 AND d.missing=0"):
+    dois = {normalize_doi(json.loads(item["details"]).get("supplemental_parent_doi")) for item in files}
+    dois.discard("")
+    if not dois:
+        return
+    for row in db.execute("SELECT d.*,c.payload AS citation FROM documents d JOIN document_dois di ON di.document_id=d.id LEFT JOIN paper_citations c ON c.document_id=d.id WHERE d.hidden=0 AND d.missing=0 AND di.doi IN (" + ",".join("?" for _ in dois) + ")", tuple(dois)):
         meta = json.loads(row["metadata"])
         if row["path"] in si_paths or meta.get("is_supplementary_material"):
             continue
@@ -206,10 +225,7 @@ def bind_pending(db):
         matches = [(doc, group) for doc, group, parent_doi, digest in parents
                    if doi and doi == parent_doi and digest != item["digest"]]
         if len({group for _, group in matches}) == 1:
-            try:
-                if not Path(item["path"]).is_file() or digest_file(item["path"]) != item["digest"]:
-                    continue
-            except OSError:
+            if not verified or verified.get(item["path"]) != item["digest"]:
                 continue
             if has_registry:
                 source = db.execute("SELECT paper_id FROM paper_sources WHERE kind='local' AND locator=?", (item["path"],)).fetchone()
@@ -223,33 +239,69 @@ def filed(db, source, target, digest, details):
     move_paths(db, source, target)
     if details.get("is_supplementary_material"):
         remember_file(db, target, digest, details)
-    bind_pending(db)
+    for row in db.execute("SELECT id FROM documents WHERE path=?", (canonical(target),)).fetchall():
+        index_doi(db, row[0], details)
+    bind_pending(db, {canonical(target): digest})
 
 
-def scanned(db, path, digest):
-    # Only unique, byte-identical missing locators are repaired automatically.
-    missing = [row for row in db.execute("SELECT path FROM supplement_files WHERE digest=?", (digest,))
-               if not Path(row["path"]).exists()]
-    if len(missing) == 1:
-        matches = {canonical(path)}
-        size = Path(path).stat().st_size
-        try:
-            for project in db.execute("SELECT root FROM projects"):
-                for candidate in Path(project["root"]).rglob("*"):
-                    if candidate.suffix.lower() != ".pdf" or candidate.is_symlink() or not candidate.is_file():
-                        continue
-                    key = canonical(candidate)
-                    if key not in matches and candidate.stat().st_size == size and digest_file(candidate) == digest:
-                        matches.add(key)
-                    if len(matches) > 1:
-                        break
-                if len(matches) > 1:
-                    break
-        except OSError:
-            matches.add("unreadable library location")
-        if len(matches) == 1:
-            move_paths(db, missing[0]["path"], path)
-    bind_pending(db)
+def reconcile(store, scans=()):
+    """One discovery per scan batch, with all filesystem work outside DB writes."""
+    with store.connect() as db:
+        files = [dict(row) for row in db.execute("SELECT * FROM supplement_files")]
+        attached = {row[0] for row in db.execute("SELECT DISTINCT path FROM paper_attachments")}
+        roots = [row[0] for row in db.execute("SELECT root FROM projects")]
+    if not files:
+        return
+    moves, verified = [], {}
+    missing_by_digest = {}
+    for row in files:
+        if not Path(row["path"]).exists():
+            missing_by_digest.setdefault(row["digest"], []).append(row["path"])
+        elif row["path"] not in attached:
+            try:
+                verified[row["path"]] = digest_file(row["path"])
+            except OSError:
+                pass
+    # Build a digest catalog once, only when a missing SI matches a scanned PDF.
+    targets = {digest for _, digest in scans if len(missing_by_digest.get(digest, [])) == 1}
+    if targets:
+        sizes = {Path(path).stat().st_size for path, digest in scans if digest in targets and Path(path).is_file()}
+        catalog = {digest: set() for digest in targets}
+        visited = set()
+        errors = []
+        for root in roots:
+            try:
+                if not Path(root).is_dir():
+                    errors.append(root)
+                for folder, dirs, names in os.walk(root, onerror=errors.append):
+                    dirs[:] = [name for name in dirs if name not in {".git", "notes_media", "Notebook backups"}
+                               and not Path(folder, name).is_symlink()
+                               and not Path(folder, name).resolve().is_relative_to(store.path.parent.resolve())]
+                    for name in names:
+                        candidate = Path(folder, name)
+                        key = canonical(candidate)
+                        if candidate.suffix.lower() != ".pdf" or candidate.is_symlink() or key in visited:
+                            continue
+                        visited.add(key)
+                        if candidate.stat().st_size not in sizes:
+                            continue
+                        digest = digest_file(candidate)
+                        if digest in catalog:
+                            catalog[digest].add(key)
+            except OSError:
+                errors.append(root)
+        if not errors:
+            for digest, matches in catalog.items():
+                if len(matches) == 1:
+                    target = next(iter(matches))
+                    moves.append((missing_by_digest[digest][0], target, digest))
+                    verified[target] = digest
+    with store.connect() as db:
+        for old, target, digest in moves:
+            current = db.execute("SELECT digest FROM supplement_files WHERE path=?", (old,)).fetchone()
+            if current and current[0] == digest:
+                move_paths(db, old, target)
+        bind_pending(db, verified)
 
 
 def library_files(store, document_id, cancelled=lambda: False):

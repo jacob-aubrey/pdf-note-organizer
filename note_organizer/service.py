@@ -160,7 +160,8 @@ class Service:
                              "errors": {p["id"]: {r["path"] for r in self.store.errors(p["id"])}
                                         for p in projects}}
         try:
-            yield
+            with self.store.supplement_batch():
+                yield
         finally:
             self.scan_context = previous
 
@@ -343,6 +344,7 @@ class Service:
                 self.post(f"Tablet notes retained; refresh needs review for {item['name']}: {exc}", True)
 
     def export_pending(self):
+        self.store.flush_supplements()
         with self.activity("Saving notebooks"):
             self._export_pending()
 
@@ -488,6 +490,20 @@ class Service:
         """Serialize an explicitly reviewed cleanup with sync and notebook writes."""
         if self.stop_event.is_set():
             raise InterruptedError("The app is closing; extra PDFs were retained.")
+        if action in {"backup", "compact", "restore", "archive_cleanup"}:
+            if self.thread is not None and self.thread.is_alive() and threading.current_thread() != self.thread:
+                future = Future()
+                self.command("storage_maintenance", action, values, future)
+                return self.wait_for_action(future)
+            from . import maintenance
+            inbox = getattr(self, "inbox", None)
+            with inbox._lock if inbox is not None else nullcontext():
+                if action == "archive_cleanup":
+                    from .archive_storage import cleanup
+                    return cleanup(self.store, values)
+                if action == "restore":
+                    return maintenance.restore(*values)
+                return getattr(maintenance, action)(self.store, values)
         if action != "cleanup":
             raise ValueError("Choose a supported storage action.")
         from .source_storage import execute_legacy_cleanup
@@ -500,6 +516,8 @@ class Service:
     def apply_paper_identity(self, action, values):
         if action == "link":
             from .reconciliation import link_registry_sources
+            if isinstance(values, dict):
+                return link_registry_sources(self.store, values["sources"], citation=values["citation"])
             return link_registry_sources(self.store, values)
         if action == "undo":
             from .paper_registry import Registry
@@ -562,6 +580,17 @@ class Service:
                                 continue
                             try:
                                 result = self.apply_paper_identity(action, values)
+                            except Exception as exc:
+                                future.set_exception(exc)
+                            else:
+                                future.set_result(result)
+                        elif name == "storage_maintenance":
+                            action, values, future = args
+                            if not future.set_running_or_notify_cancel():
+                                continue
+                            try:
+                                with self.activity("Library maintenance"):
+                                    result = self.storage_action(action, values)
                             except Exception as exc:
                                 future.set_exception(exc)
                             else:

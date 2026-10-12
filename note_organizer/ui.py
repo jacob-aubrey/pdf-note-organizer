@@ -20,13 +20,13 @@ from .combined_pdf import materialize_combined, export_combined
 from .service import Service
 from .storage import SEARCH_FIELDS, NOTE_TYPES, digest_file
 from .search import SearchSyntaxError
-from .research_search import search_library, SCOPES
+from .research_search import search_library
 from .viewers import open_pdf_page, VIEWERS
-from .theme import apply_theme, text_options, BACKGROUND, PANEL
+from .theme import apply_theme, BACKGROUND, PANEL
 from .remarkable_cloud import PAIR_URL
-from .remarkable_sync import default_config, scoped_folders, effective_config
-from .icons import Button, menu_action, icon
-from .widgets import Tooltip, PathField, PathTextTooltip, ReadOnlyText, annotate_buttons, fit_dialog, bind_dialog_close, dismiss_tooltips, CellTooltip, SelectionDetails
+from .remarkable_sync import scoped_folders, effective_config
+from .icons import Button, menu_action
+from .widgets import Tooltip, PathField, ReadOnlyText, annotate_buttons, fit_dialog, bind_dialog_close, dismiss_tooltips, CellTooltip, SelectionDetails
 from .dialogs import PreferencesDialog, ProcessingFields
 from .pages import page_description, page_tooltip
 from .view_state import LibraryView, read_view, cloud_destinations
@@ -37,9 +37,11 @@ from .inbox import InboxController
 from .workflow_ui import InboxView, ReconciliationWindow, background
 from .research_ui import CitationWindow, SupplementsWindow
 from .citations import export_citations
+from .workspace_layouts import WorkspaceLayouts
+from .time_display import local_time
 
 
-class App:
+class App(WorkspaceLayouts):
     def __init__(self, root, store, data_dir):
         self.root, self.store, self.data_dir = root, store, Path(data_dir)
         self.view = LibraryView(store.path)
@@ -100,6 +102,7 @@ class App:
         root.minsize(940, 620)
         root.protocol("WM_DELETE_WINDOW", self.close)
         self.build()
+        self.bind_shortcuts()
         self.initial_controls = []
         self.lock_initial_controls(self.root)
         self.status.set("Loading saved library…")
@@ -369,6 +372,44 @@ class App:
             return
         self.preferences_dialog = PreferencesDialog(self)
         self.preferences_window = self.preferences_dialog.window
+
+    def setup_inbox(self):
+        self.global_settings()
+        self.preferences_dialog.tabs.select(self.preferences_dialog.sorting_tab)
+
+    def storage_maintenance(self):
+        from .maintenance_ui import MaintenanceWindow
+        return MaintenanceWindow(self)
+
+    def organize_paper(self):
+        from .research_tools import open_labels
+        return open_labels(self)
+
+    def saved_searches(self):
+        from .research_tools import open_saved_searches
+        return open_saved_searches(self)
+
+    def refresh_label_choices(self):
+        from .research_tools import labels
+        background(self, lambda: labels(self.store), lambda values: self.label_picker.configure(values=["All papers", *values]) if not self.closing else None)
+
+    def bind_shortcuts(self):
+        def focus_search():
+            self.tabs.select(self.notes_tab)
+            self.search_entry.focus_set()
+            self.search_entry.selection_range(0, "end")
+        actions = {"<Control-f>": focus_search, "<F5>": self.service.request_sync,
+                   "<Control-comma>": self.global_settings, "<Control-Shift-S>": self.saved_searches,
+                   "<Control-Shift-T>": self.organize_paper, "<Control-Shift-A>": self.accessible_reader,
+                   "<Alt-Key-1>": lambda: self.tabs.select(self.inbox_tab),
+                   "<Alt-Key-2>": lambda: self.tabs.select(self.library_tab),
+                   "<Alt-Key-3>": lambda: self.tabs.select(self.notes_tab)}
+        for sequence, action in actions.items():
+            self.root.bind(sequence, lambda event, function=action: (function(), "break")[1])
+
+    def accessible_reader(self):
+        from .accessible_reader import open_reader
+        return open_reader(self)
 
     def build_feedback(self, parent, section):
         value = self.action_feedback[section] = tk.StringVar()
@@ -1041,10 +1082,10 @@ class App:
                             details.text.configure(height=height)
         pane.bind("<Configure>", position, add="+")
 
-    def more_button(self, parent, actions, text="More ▾"):
+    def more_button(self, parent, actions, text="Actions ▾"):
         button = Button(parent, text=text)
         menu = tk.Menu(button, tearoff=False, background=PANEL, foreground="#DCE4EE",
-                       activebackground="#1F6AA5", activeforeground="white", borderwidth=0)
+                       activebackground="#1B629B", activeforeground="white", borderwidth=0)
         for label, action in actions:
             menu_action(menu, label, action)
         button.action_menu = menu
@@ -1057,6 +1098,16 @@ class App:
             "Citation details…": "Review, edit, copy, or look up the selected paper's citation information.",
             "Export citations…": "Export citations for the current paper/folder selection, or papers in the current Notes search, as RIS or BibTeX.",
             "Find supplementary files…": "Find supplementary links for the selected paper and review downloads or attached files.",
+            "Tags & collections…": "Organize the selected paper with local tags and research collections.",
+            "Saved searches…": "Save or apply searches in the current folder and paper scope.",
+            "Accessible reading view…": "Open current results in your browser with semantic headings, keyboard search and screen reader support.",
+            "Library storage & backups…": "Create or restore verified backups and compact the library without removing history.",
+            "Rebuild notebook…": "Regenerate this folder's Word notebook from saved notes.",
+            "Remove folder…": "Stop watching the selected folder. Original files remain on disk.",
+            "Locate moved folder…": "Reconnect a moved folder while retaining saved history.",
+            "Folder settings": "Change this folder's extraction and Word settings.",
+            "Filing recovery…": "Inspect copies retained after interrupted filing.",
+            "Review library…": "Compare duplicate papers and PC/tablet folder differences before changing relationships.",
         }
         Tooltip(button, "\n".join(f"{label}: {help_text[label]}" for label, _ in actions))
         def show():
@@ -1067,248 +1118,7 @@ class App:
         button.configure(command=show)
         return button
 
-    def build_library(self):
-        tab = self.library_tab
-        heading = ttk.Frame(tab)
-        heading.pack(fill="x", pady=(0, 12))
-        ttk.Label(heading, text="Your PDF library", style="Section.TLabel").pack(side="left")
-        Button(heading, text="Add folder…", command=self.add).pack(side="right")
-        review_library = Button(heading, text="Review library…", command=self.review_library)
-        review_library.pack(side="right", padx=8)
-        Tooltip(review_library, "Find duplicate papers and folder differences using local files and saved tablet information. Review proposed links before changing anything.")
-        guidance = ttk.Label(tab, text="Combining existing libraries? Review library checks duplicate papers and folder differences before you enable transfers.",
-                             style="Muted.TLabel", wraplength=900)
-        guidance.pack(fill="x", pady=(0, 10))
-        guidance.bind("<Configure>", lambda event: guidance.configure(wraplength=max(100, event.width)))
-        self.build_feedback(tab, "library")
-        self.library_actions = []
-        self.local_sync_summary = tk.StringVar()
-        self.location = tk.StringVar()
-        # Sync status and its expandable log stay together below the workspace.
-        self.library_sync = ttk.Frame(tab, padding=(10, 8), style="Card.TFrame")
-        self.library_sync.pack(side="bottom", fill="x", pady=(12, 0))
-        sync_row = ttk.Frame(self.library_sync, style="Card.TFrame")
-        sync_row.pack(fill="x")
-        Button(sync_row, text="Sync PDFs", command=self.service.request_sync).pack(side="right")
-        self.activity_toggle = Button(sync_row, text="Show sync details", command=self.toggle_activity, style="Quiet.TButton")
-        self.activity_toggle.pack(side="right", padx=8)
-        summary = ttk.Label(sync_row, textvariable=self.local_sync_summary, style="CardTitle.TLabel", wraplength=650)
-        summary.pack(side="left", fill="x", expand=True)
-        summary.bind("<Configure>", lambda e: summary.configure(wraplength=max(100, e.width)))
-        self.activity_frame = ttk.Frame(self.library_sync)
-        log_locations = ttk.Frame(self.activity_frame)
-        log_locations.pack(side="bottom", fill="x", pady=(6, 0))
-        ttk.Label(log_locations, text="Location").pack(side="left", padx=(0, 8))
-        self.activity_location_paths = {}
-        self.activity_locations = ttk.Combobox(log_locations, state="disabled", width=30)
-        self.activity_locations.pack(side="left", fill="x", expand=True)
-        self.activity_path_access = PathField(self.activity_locations,
-            "Choose a saved sync location or retained recovery copy to inspect and copy its complete path.",
-            value=lambda: self.activity_location_paths.get(self.activity_locations.get(), ""))
-        self.activity_path_copy = self.activity_path_access.add_copy_button(log_locations)
-        self.activity_path_copy.pack(side="right", padx=(6, 0))
-        log_body = ttk.Frame(self.activity_frame)
-        log_body.pack(fill="both", expand=True)
-        self.activity = tk.Text(log_body, height=5, wrap="word", state="disabled", **text_options())
-        self.activity_path_tooltip = PathTextTooltip(self.activity)
-        log_scroll = ttk.Scrollbar(log_body, orient="vertical", command=self.activity.yview)
-        log_scroll.pack(side="right", fill="y")
-        self.activity.pack(fill="both", expand=True)
-        self.activity.configure(yscrollcommand=log_scroll.set)
-        self.library_pane = ttk.Panedwindow(tab, orient="horizontal")
-        self.library_pane.pack(fill="both", expand=True)
-        folders = ttk.Frame(self.library_pane, width=280, height=300, padding=(0, 0, 14, 0))
-        folders.pack_propagate(False)
-        ttk.Label(folders, text="Watched folders", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
-        folder_actions = ttk.Frame(folders)
-        folder_actions.pack(fill="x", pady=(0, 10))
-        settings = Button(folder_actions, text="Folder settings", command=self.settings)
-        folder_actions.columnconfigure(0, weight=1)
-        settings.grid(row=0, column=0, sticky="w")
-        self.library_actions.append(settings)
-        Tooltip(settings, lambda: "Change this folder's extraction and Word settings." if self.selected_project() else "Select a watched folder first.")
-        self.library_folder_button = Button(folder_actions, text="Open folder", command=self.open_selected_folder, state="disabled")
-        self.library_folder_button.grid(row=1, column=0, sticky="w", pady=(8, 0))
-        Tooltip(self.library_folder_button, lambda: f"{self.selected_project()['root']}\n\nOpen the selected watched folder in File Explorer." if not self.library_folder_button.instate(["disabled"]) and self.selected_project() else
-                "Select an available watched folder. For a moved folder, right-click it and choose Locate moved folder.")
-        self.folder_details = SelectionDetails(folders, "Watched folder", height=2)
-        self.folder_details.pack(side="bottom", fill="x", pady=(10, 0))
-        self.projects = self.tree(folders, [("name", "Folder", 170), ("state", "Status", 145)])
-        self.projects.tooltip.value = lambda row, column: self.watched_folder_path(row) if column == "name" else self.projects.set(row, column)
-        self.projects.tooltip.extra = lambda row, column: "Select this watched folder to inspect and copy its full path." if column == "name" else ""
-        self.projects.tooltip.full_with_help = True
-        self.projects.bind("<<TreeviewSelect>>", self.project_selected)
-        self.folder_menu = tk.Menu(self.projects, tearoff=False, background=PANEL, foreground="#DCE4EE",
-                                   activebackground="#1F6AA5", activeforeground="white", borderwidth=0)
-        menu_action(self.folder_menu, "Rebuild notebook…", self.rebuild)
-        menu_action(self.folder_menu, "Remove folder…", self.remove)
-        menu_action(self.folder_menu, "Locate moved folder…", self.locate_folder)
-        self.projects.bind("<Button-3>", self.show_folder_menu)
-        self.projects.bind("<Shift-F10>", self.show_folder_menu)
-        self.projects.bind("<Menu>", self.show_folder_menu)
-        self.library_pane.add(folders, weight=1)
-        papers = ttk.Frame(self.library_pane, width=650, height=300)
-        papers.pack_propagate(False)
-        self.paper_heading = tk.StringVar(value="Papers")
-        paper_heading = ttk.Label(papers, textvariable=self.paper_heading, style="Section.TLabel")
-        paper_heading.pack(fill="x", pady=(0, 8))
-        paper_heading.bind("<Configure>", lambda e: paper_heading.configure(wraplength=max(100, e.width)))
-        Tooltip(paper_heading, lambda: self.paper_heading.get())
-        paper_actions = ttk.Frame(papers)
-        paper_actions.pack(fill="x", pady=(0, 10))
-        view = Button(paper_actions, text="View notes", command=self.view_notes, style="Primary.TButton")
-        view.pack(side="left")
-        self.library_actions.append(view)
-        Tooltip(view, lambda: "Read notes from the selected folder and paper." if self.selected_project() else "Select a watched folder first.")
-        self.library_source_button = Button(paper_actions, text="Open PDF", command=self.open_paper, state="disabled")
-        self.library_source_button.pack(side="left", padx=8)
-        Tooltip(self.library_source_button, lambda: f"{self.library_paper_path(self.papers.selection()[0])}\n\nOpen the selected paper with its combined PC and tablet notes. Uncertain versions need review first." if self.papers.selection() else "Select a paper to open its PDF and saved notes.")
-        self.more_button(paper_actions, [("Export annotated PDF…", self.export_paper_pdf),
-            ("Citation details…", self.citation_details), ("Export citations…", self.export_citation_selection),
-            ("Find supplementary files…", self.supplementary_files),
-            ("Review extra PDFs…", self.review_extra_pdfs)]).pack(side="left", padx=(0, 8))
-        self.library_send_button = Button(paper_actions, text="Send selected PDF…", command=self.send_paper, state="disabled")
-        Tooltip(self.library_send_button, "Send a selected existing original PDF after reviewing duplicates and enabling PDF transfers in Settings → Connections.")
-        self.paper_details = SelectionDetails(papers, "Selected paper", height=2)
-        self.paper_details.pack(side="bottom", fill="x", pady=(10, 0))
-        self.papers = self.tree(papers, [("name", "Paper", 320), ("count", "Notes", 65), ("state", "Status", 115)])
-        self.papers.tooltip.value = lambda row, column: self.library_paper_path(row) if column == "name" else self.papers.set(row, column)
-        self.papers.tooltip.extra = lambda row, column: "Select this PDF to inspect and copy its full path." if column == "name" else ""
-        self.papers.tooltip.full_with_help = True
-        self.papers.bind("<<TreeviewSelect>>", self.paper_selected)
-        self.papers.bind("<Double-1>", self.view_notes)
-        self.library_pane.add(papers, weight=3)
-        self.initial_split(self.library_pane, .30)
 
-    def build_reader(self):
-        tab = self.notes_tab
-        toolbar = ttk.Frame(tab)
-        toolbar.pack(fill="x", pady=(0, 14))
-        ttk.Label(toolbar, text="Read your notes", style="Section.TLabel").pack(side="left")
-        self.more_button(toolbar, [("Save editable copy…", self.editable_copy),
-                                   ("Export annotated PDF…", self.export_note_pdf),
-                                   ("Citation details…", self.citation_details),
-                                   ("Export citations…", self.export_citation_selection),
-                                   ("Find supplementary files…", self.supplementary_files),
-                                   ("Change history", self.history)]).pack(side="right")
-        self.notebook_button = Button(toolbar, text="Open notebook", command=self.open_notebook, style="Primary.TButton")
-        self.notebook_button.pack(side="right", padx=8)
-        self.export_button = Button(toolbar, text="Export view…", command=self.export_view)
-        self.export_button.pack(side="right")
-        Tooltip(self.export_button, lambda: "Export the notes currently shown to a separate Word document." if self.entries else "Choose a folder or search with matching notes before exporting.")
-        Tooltip(self.notebook_button, lambda: "Open this folder's generated Word notebook." if not self.notebook_button.instate(["disabled"]) else "Select one folder instead of All folders to open its notebook.")
-        self.notes_folder_button = Button(toolbar, text="Open folder", command=lambda: self.open_selected_folder(notes=True), state="disabled")
-        self.notes_folder_button.pack(side="left", padx=(16, 0))
-        Tooltip(self.notes_folder_button, lambda: f"{self.reader_folder_path()}\n\nOpen the PC folder selected below in File Explorer." if not self.notes_folder_button.instate(["disabled"]) else
-                "Select one available folder instead of All folders.")
-        self.build_feedback(tab, "notes")
-        filters = ttk.Frame(tab)
-        filters.pack(fill="x", pady=(0, 10))
-        filters.columnconfigure(3, weight=1)
-        ttk.Label(filters, text="Folder").grid(row=0, column=0, padx=(0, 8))
-        folder_filter = ttk.Frame(filters)
-        folder_filter.grid(row=0, column=1, sticky="ew")
-        self.reader_folder = ttk.Combobox(folder_filter, state="readonly", width=24)
-        self.reader_folder.pack(side="left", fill="x", expand=True)
-        self.reader_folder.bind("<<ComboboxSelected>>", self.reader_folder_selected)
-        ttk.Label(filters, text="Paper").grid(row=0, column=2, padx=(16, 8))
-        paper_filter = ttk.Frame(filters)
-        paper_filter.grid(row=0, column=3, sticky="ew")
-        self.reader_paper = ttk.Combobox(paper_filter, state="readonly", width=25)
-        self.reader_paper.pack(side="left", fill="x", expand=True)
-        self.reader_paper.bind("<<ComboboxSelected>>", self.reader_paper_selected)
-        self.reader_folder_path_access = PathField(self.reader_folder, "Choose All folders to search across the whole active library.", value=self.reader_folder_path)
-        self.reader_folder_copy = self.reader_folder_path_access.add_copy_button(folder_filter)
-        self.reader_folder_copy.pack(side="right", padx=(6, 0))
-        self.reader_paper_path_access = PathField(self.reader_paper,
-            lambda: "Select one folder to choose its paper. Copy full path uses the selected note's source PDF." if self.all_projects.get() else "Choose All papers to read every paper in the selected folder. With All papers selected, Copy full path uses the selected note's source PDF.",
-            value=self.reader_paper_path)
-        self.reader_paper_copy = self.reader_paper_path_access.add_copy_button(paper_filter)
-        self.reader_paper_copy.pack(side="right", padx=(6, 0))
-        self.reader_project_ids = []
-        self.reader_paper_ids = []
-        self.active_project_id = None
-        self.all_projects = tk.BooleanVar(value=False)
-        searchbar = ttk.Frame(tab)
-        searchbar.pack(fill="x", pady=(0, 16))
-        self.search_label = ttk.Label(searchbar, text="Search", image=icon(searchbar, "search"), compound="left")
-        self.search_label.pack(side="left", padx=(0, 8))
-        self.search = tk.StringVar()
-        self.search_fields = list(SEARCH_FIELDS)
-        self.search_mode = "Words / Boolean"
-        self.note_type = "All notes"
-        self.search_entry = ttk.Entry(searchbar, textvariable=self.search, width=52)
-        self.search_entry.pack(side="left", fill="x", expand=True)
-        Tooltip(self.search_entry, 'Search notes, printed PDF text, or both in the chosen folder and paper. Spaces mean AND; uppercase AND, OR, NOT, quotes and parentheses are supported. PDF results match within one page; scanned pages need a text layer.')
-        self.search_scope = tk.StringVar(value="Notes")
-        self.search_scope_control = ttk.Combobox(searchbar, textvariable=self.search_scope, values=SCOPES,
-                                                state="readonly", width=7)
-        self.search_scope_control.pack(side="left", padx=(8, 0))
-        Tooltip(self.search_scope_control, "Notes searches saved annotations. PDFs searches printed text on every page, including papers without notes. All combines both. Enter a query to search PDFs; the first search builds a local text cache. Search in… fields and note types apply to note results.")
-        self.search_scope.trace_add("write", self.search_changed)
-        self.search_options_button = Button(searchbar, text="Search in…", command=self.search_options)
-        self.search_options_button.pack(side="left", padx=(8, 0))
-        self.search.trace_add("write", self.search_changed)
-        self.note_count = tk.StringVar()
-        ttk.Label(searchbar, textvariable=self.note_count, style="Muted.TLabel", width=12, anchor="e").pack(side="right")
-        self.search_summary = tk.StringVar()
-        self.search_summary_label = ttk.Label(tab, textvariable=self.search_summary, style="Muted.TLabel")
-        self.search_error = tk.StringVar()
-        self.search_error_label = ttk.Label(tab, textvariable=self.search_error, foreground="#FFB4AB", wraplength=800)
-        self.search_warning = tk.StringVar()
-        self.search_warning_label = ttk.Label(tab, style="Muted.TLabel", wraplength=800)
-        Tooltip(self.search_warning_label, lambda: self.search_warning.get())
-        self.reader_pane = ttk.Panedwindow(tab, orient="horizontal")
-        self.reader_pane.pack(fill="both", expand=True)
-        left = ttk.Frame(self.reader_pane, width=280, padding=(0, 0, 16, 0))
-        self.notes = self.tree(left, [("page", "PDF page", 78), ("kind", "Type", 70), ("text", "Note", 210)])
-        self.notes.configure(displaycolumns=("page", "text"))
-        self.notes.bind("<<TreeviewSelect>>", self.preview)
-        self.notes.bind("<Double-1>", lambda event: self.open_source())
-        self.notes.bind("<Return>", lambda event: self.open_source())
-        self.notes.tooltip.extra = lambda row, column: self.note_help() if column == "page" else ""
-        self.notes.tooltip.value = self.note_cell_value
-        self.reader_pane.add(left, weight=1)
-        right = ttk.Frame(self.reader_pane)
-        buttons = ttk.Frame(right)
-        buttons.pack(fill="x", pady=(0, 10))
-        self.source_button = Button(buttons, text="Open PDF", command=self.open_source)
-        self.source_button.pack(side="left", padx=(0, 8))
-        image_buttons = ttk.Frame(right)
-        image_buttons.pack(fill="x", pady=(0, 10))
-        self.enlarge_button = Button(image_buttons, text="Enlarge image", command=self.enlarge)
-        self.enlarge_button.pack(side="left")
-        self.copy_image_button = Button(image_buttons, text="Copy image", command=self.copy_note_image, state="disabled")
-        self.copy_image_button.pack(side="left", padx=(8, 0))
-        Tooltip(self.copy_image_button, "Copy the loaded note image at its original resolution. You can also focus the image and press Ctrl+C or right-click it.")
-        Tooltip(self.enlarge_button, lambda: "Inspect this drawing or handwriting preview. Fit width or height, drag to pan, double-click to fit width, and Ctrl + scroll to zoom." if self.image else
-                "Select a drawing or handwriting note with a loaded preview. Highlights use extracted text and Open PDF.")
-        self.full_page_button = Button(buttons, text="Full page context", command=self.full_page_context, state="disabled")
-        self.full_page_button.pack(side="left", padx=(8, 0))
-        Tooltip(self.full_page_button, lambda: "Open the complete PDF page, including retained margins. Fit width or height, drag to pan, double-click to fit width, and Ctrl + scroll to zoom. Generated on demand; Copy image copies the complete page." if self.selected_entry() and self.selected_entry()["kind"] in {"drawing", "pdf"} else
-                "Select a drawing, handwriting note, or PDF text result first. Highlights use Open PDF.")
-        self.show_details = tk.BooleanVar(value=False)
-        ttk.Checkbutton(buttons, text="Details", variable=self.show_details, command=self.preview).pack(side="right")
-        self.context_pane = ttk.Panedwindow(right, orient="vertical")
-        self.context_pane.pack(fill="both", expand=True)
-        text_frame = ttk.Frame(self.context_pane)
-        self.preview_text = tk.Text(text_frame, height=9, width=35, wrap="word", state="disabled", **text_options())
-        scroll = ttk.Scrollbar(text_frame, orient="vertical", command=self.preview_text.yview)
-        scroll.pack(side="right", fill="y")
-        self.preview_text.pack(fill="both", expand=True)
-        self.preview_text.configure(yscrollcommand=scroll.set)
-        self.context_pane.add(text_frame, weight=1)
-        self.canvas = tk.Canvas(self.context_pane, height=200, width=300, background=PANEL, highlightthickness=0)
-        self.context_pane.add(self.canvas, weight=2)
-        self.canvas.bind("<Configure>", self.schedule_image_resize)
-        self.canvas.bind("<Button-1>", lambda event: self.canvas.focus_set())
-        self.canvas.bind("<<Copy>>", self.copy_note_image)
-        self.canvas.bind("<Button-3>", self.show_image_menu)
-        self.canvas.bind("<Shift-F10>", self.show_image_menu)
-        self.image_menu = tk.Menu(self.canvas, tearoff=False)
-        menu_action(self.image_menu, "Copy image", self.copy_note_image)
-        Tooltip(self.source_button, lambda: f"{self.entry_paper_path(self.selected_entry())}\n\nOpen the combined PC and tablet notes at physical PDF page {self.selected_entry()['page']}.\n{page_description(self.selected_entry())}" if self.selected_entry() else "Select a note first. Open PDF navigates using the physical PDF page position.")
-        self.reader_pane.add(right, weight=3)
 
     def toggle_activity(self):
         if self.activity_frame.winfo_manager():
@@ -1463,6 +1273,15 @@ class App:
         sel = self.projects.selection()
         return self.view.project(int(sel[0])) if sel else None
 
+    def update_search_options_summary(self):
+        filtered = len(self.search_fields) != len(SEARCH_FIELDS) or self.search_mode != "Words / Boolean" or self.note_type != "All notes"
+        self.search_options_button.configure(text="Search in… •" if filtered else "Search in…")
+        self.search_summary.set(" · ".join([f"{len(self.search_fields)} search fields", self.search_mode, self.note_type]) if filtered else "")
+        if filtered:
+            self.search_summary_label.pack(fill="x", before=self.reader_pane, pady=(0, 8))
+        else:
+            self.search_summary_label.pack_forget()
+
     def search_options(self):
         window = tk.Toplevel(self.root)
         window.title("Search options")
@@ -1506,13 +1325,7 @@ class App:
                 messagebox.showinfo("Choose a field", "Select at least one field to search.", parent=window)
                 return
             self.search_fields, self.search_mode, self.note_type = selected, mode.get(), kind.get()
-            filtered = len(selected) != len(SEARCH_FIELDS) or self.search_mode != "Words / Boolean" or self.note_type != "All notes"
-            self.search_options_button.configure(text="Search in… •" if filtered else "Search in…")
-            self.search_summary.set(" · ".join([f"{len(selected)} search fields", self.search_mode, self.note_type]) if filtered else "")
-            if filtered:
-                self.search_summary_label.pack(fill="x", before=self.reader_pane, pady=(0, 8))
-            else:
-                self.search_summary_label.pack_forget()
+            self.update_search_options_summary()
             self.refresh_notes()
             window.destroy()
         buttons = ttk.Frame(frame)
@@ -1529,8 +1342,6 @@ class App:
         Tooltip(cancel, "Close without applying these search options.")
         annotate_buttons(window)
         window.update_idletasks()
-        x = self.root.winfo_rootx() + (self.root.winfo_width()-window.winfo_reqwidth())//2
-        y = self.root.winfo_rooty() + (self.root.winfo_height()-window.winfo_reqheight())//2
         fit_dialog(window, self.root)
         window.resizable(False, False)
 
@@ -1861,7 +1672,7 @@ class App:
         self.reader_folder.configure(values=["All folders"] + labels)
         rows = []
         for p in projects:
-            state = "Export pending" if p["error"] else "Needs export" if p["dirty"] else "Saved " + p["exported_at"][11:16] + " UTC"
+            state = "Export pending" if p["error"] else "Needs export" if p["dirty"] else "Saved " + local_time(p["exported_at"])
             errors = self.view.errors(p["id"])
             if errors:
                 state = f"{len(errors)} PDF read errors"
@@ -1933,7 +1744,8 @@ class App:
         options = dict(project_id=p["id"] if p and not self.all_projects.get() else None,
                        document_id=paper[0] if paper and not self.all_projects.get() else None,
                        query=self.search.get(), fields=list(self.search_fields),
-                       match_mode=self.search_mode, note_type=self.note_type, include_images=False)
+                       match_mode=self.search_mode, note_type=self.note_type, include_images=False,
+                       label_filter=self.label_filter.get())
         signature = (self.search_scope.get(), repr(options), self.view.note_token(options["project_id"], options["document_id"]))
         if signature == self.query_signature:
             return
@@ -2071,6 +1883,7 @@ class App:
         self.copy_image_button.configure(state="normal" if self.image else "disabled")
         self.full_page_button.configure(state="normal" if e and e["kind"] in {"drawing", "pdf"} else "disabled")
         self.preview_text.configure(state="disabled")
+        self.layout_note_preview()
         self.image_size = None
         self.draw_image()
 
@@ -2100,8 +1913,23 @@ class App:
         if self.image:
             copy = self.image.copy()
             copy.thumbnail(size)
-            self.tk_image = ImageTk.PhotoImage(copy)
+            self.tk_image = ImageTk.PhotoImage(copy, master=self.canvas)
             self.canvas.create_image(self.canvas.winfo_width()/2, 8, image=self.tk_image, anchor="n")
+
+    def layout_note_preview(self):
+        entry = self.selected_entry()
+        drawing = bool(entry and entry.get("kind") == "drawing")
+        present = str(self.canvas) in {str(pane) for pane in self.context_pane.panes()}
+        if drawing and not present:
+            self.context_pane.add(self.canvas, weight=2)
+        elif not drawing and present:
+            self.context_pane.forget(self.canvas)
+        if drawing and self.context_pane.winfo_height() > 40:
+            length = len(self.preview_text.get("1.0", "end-1c"))
+            fraction = min(.48, max(.18, .16 + length / 5000))
+            position = round(self.context_pane.winfo_height()*fraction)
+            if abs(self.context_pane.sashpos(0)-position) > 2:
+                self.context_pane.sashpos(0, position)
 
     def copy_note_image(self, event=None):
         if self.image is not None:
@@ -2191,6 +2019,7 @@ class App:
         info.pack(fill="x")
         info.bind("<Configure>", lambda event: info.configure(wraplength=max(100, event.width - 24)))
         viewport = ImageViewport(window, window, lambda text: info.configure(text="Complete page including retained margins. " + text), background=PANEL)
+        context_cancel = threading.Event()
         viewport.pack(fill="both", expand=True)
         canvas = viewport.canvas
         window.context_canvas = canvas
@@ -2209,6 +2038,7 @@ class App:
             window.copy_image_button.configure(state="normal")
         def close_context(event):
             if event.widget == window and self.context_window == window:
+                context_cancel.set()
                 self.context_window = None
                 if self.context_future:
                     self.context_future.cancel()
@@ -2218,12 +2048,14 @@ class App:
         except ValueError as exc:
             info.configure(text=str(exc))
             return
-        self.context_future = future = self.context_executor.submit(self.load_full_page, reference, page)
+        self.context_future = future = self.context_executor.submit(self.load_full_page, reference, page, context_cancel.is_set)
         future.add_done_callback(lambda result: self.dialog_results.put((window, loaded, result)))
 
-    def load_full_page(self, path, page):
+    def load_full_page(self, path, page, cancelled=None):
         path = self.materialize_pdf(path)
-        data = self.pdf_worker.full_page(str(path), page)
+        if cancelled and cancelled():
+            raise InterruptedError("Page preview closed")
+        data = self.pdf_worker.full_page_cancellable(str(path), page, cancelled) if cancelled is not None and hasattr(type(self.pdf_worker), "full_page_cancellable") else self.pdf_worker.full_page(str(path), page)
         with Image.open(BytesIO(data)) as image:
             return image.copy()
 
@@ -2398,7 +2230,7 @@ class App:
                 for h in rows:
                     payload = json.loads(h["payload"])
                     summary = payload.get("comment") or payload.get("quote") or payload.get("ocr") or "Drawing with saved context image"
-                    lines.append(f"{h['at']} | {h['action']} | {page_description(payload)}\n{summary}")
+                    lines.append(f"{local_time(h['at'], '%Y-%m-%d %H:%M %Z')} | {h['action']} | {page_description(payload)}\n{summary}")
             except Exception as exc:
                 lines.append(f"History unavailable: {exc}")
             history_text.set("\n\n".join(lines) if lines else "No saved annotation changes for this PDF copy.", paths={"Source PDF": e["path"]})
@@ -2449,6 +2281,9 @@ class App:
             "Updates are watched while the app is open, checked every five minutes, and caught up at startup. "
             "Closing the app stops watching.\n\n"
             "Hover over a file or folder location to see its complete path and an explanation. The small Copy full path button copies the entire location. For a selected table row with several locations, choose the location in its details panel first.\n\n"
+            "Library → Actions → Library storage & backups creates verified backups, restores an independent library and compacts repeated drawing images without removing note history. Recovery archive review removes only proven duplicate raw archives after backup.\n\n"
+            "Notes → Actions contains tags and research collections, saved searches and an accessible browser reading view. Collection or tag filters apply to both note and printed PDF results. Saved searches apply to the current folder and paper selection.\n\n"
+            "Keyboard: Ctrl+F searches notes; F5 syncs PDFs; Ctrl+, opens Settings. Alt+1/2/3 selects Inbox/Library/Notes. Ctrl+Shift+S opens saved searches, Ctrl+Shift+T edits tags, and Ctrl+Shift+A opens the accessible reading view. Tab and Shift+Tab move between controls; Enter opens the selected note's PDF.\n\n"
             f"Version {__version__}")
         window.help_text = ReadOnlyText(frame, content, height=18)
         window.help_text.pack(fill="both", expand=True)

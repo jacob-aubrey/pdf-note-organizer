@@ -6,7 +6,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from .icons import Button, icon
 from .theme import BACKGROUND
-from .widgets import Tooltip, PathField, ReadOnlyText, annotate_buttons, bind_dialog_close, fit_dialog
+from .widgets import Tooltip, PathField, ReadOnlyText, annotate_buttons, bind_dialog_close
 
 
 def background(app, function, success, error=None):
@@ -51,11 +51,13 @@ class InboxView:
         self.generation = 0
         toolbar = ttk.Frame(parent)
         toolbar.pack(fill="x", pady=(0, 12))
+        setup = Button(toolbar, text="Set up Inbox…", command=lambda: app.setup_inbox())
+        setup.pack(side="right")
+        Tooltip(setup, "Choose incoming documents and library folders directly in Sorting settings.")
+        app.more_button(toolbar, [("Filing recovery…", app.filing_recovery), ("Review library…", app.review_library)]).pack(side="right", padx=(0, 8))
         for label, action in (("Add documents…", self.add_documents),
                               ("Refresh inbox", self.refresh),
-                              ("Open inbox", lambda: self.open_folder("watch_folder")),
-                              ("Filing recovery…", app.filing_recovery),
-                              ("Review library…", app.review_library)):
+                              ("Open inbox", lambda: self.open_folder("watch_folder"))):
             button = Button(toolbar, text=label, command=action)
             button.pack(side="left", padx=(0, 8))
             Tooltip(button, {"Add documents…": "Copy PDF, Word (.docx), or PowerPoint (.ppt/.pptx) documents into your inbox for review. The source files stay where they are. Dropping documents onto the list also copies them.",
@@ -381,6 +383,15 @@ class SortingFields:
         self.key_entry = ttk.Entry(parent, textvariable=self.api_key, show="•")
         self.key_entry.pack(fill="x", pady=(4, 6))
         Tooltip(self.key_entry, "Enter your own key, then Save preferences. It is protected for your Windows account in this app's local library and excluded from shared source and ordinary settings import. Blank preserves a saved key unless you have marked it for removal.")
+        self.gemini_model = tk.StringVar(value=self.initial.get("gemini_model", "gemini-3.5-flash-lite"))
+        ttk.Label(parent, text="Gemini model").pack(anchor="w")
+        model = ttk.Combobox(parent, textvariable=self.gemini_model,
+                             values=["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-2.5-flash"], width=40)
+        model.pack(anchor="w", pady=(4, 6))
+        Tooltip(model, "Choose a model available to your key. Existing users can retain Gemini 2.5 Flash. Model access can change; Test connection checks availability without sending document text.")
+        self.test_connection_button = Button(parent, text="Test connection", command=self.test_connection)
+        self.test_connection_button.pack(anchor="w", pady=(0, 8))
+        Tooltip(self.test_connection_button, "Check the selected Gemini model and your draft or saved key without sending any document text or requesting a generation.")
         key_actions = ttk.Frame(parent)
         key_actions.pack(fill="x", pady=(0, 8))
         self.key_status = tk.StringVar(value="Key saved for your Windows account" if self.initial.get("api_key_present") else "No Gemini key saved")
@@ -417,6 +428,34 @@ class SortingFields:
         for check in (self.word_ai_check, self.slides_ai_check):
             check.configure(state="normal" if cloud else "disabled")
         self.template_entry.configure(state="normal" if self.format.get() == self.labels["custom"] else "disabled")
+
+    def test_connection(self):
+        if self.key_removal_pending:
+            self.help.set("Undo key removal or enter a key before testing.")
+            return
+        key, model = self.api_key.get().strip(), self.gemini_model.get().strip()
+        self.test_connection_button.configure(state="disabled")
+        self.help.set("Checking model access. No document text is sent…")
+        def check():
+            from google import genai
+            from .sorting.key_protection import _unprotect_for_current_windows_user
+            secret = key
+            if not secret:
+                saved = self.app.store.preference("inbox", {})
+                secret = _unprotect_for_current_windows_user(saved.get("api_key_protected", "")) if saved.get("api_key_protected") else ""
+            if not secret:
+                raise ValueError("Enter your Gemini key first, or save one in Settings.")
+            try:
+                with genai.Client(api_key=secret, http_options={"timeout": 15000}) as client:
+                    client.models.get(model=model)
+            except Exception:
+                raise ValueError("Connection check failed. Check your key, model ID, account access and network.") from None
+            return f"Connection verified: {model}. No document text was sent and no generation was requested."
+        def completed(message):
+            if self.parent.winfo_exists():
+                self.test_connection_button.configure(state="normal")
+                self.help.set(message)
+        background(self.app, check, completed, lambda error: completed(str(error)))
 
     def filename_style_help(self):
         style = next((key for key, label in self.labels.items() if label == self.format.get()), "smart")
@@ -470,6 +509,7 @@ class SortingFields:
                   "filename_format": next((key for key, label in self.labels.items() if label == self.format.get()), "smart"),
                   "custom_filename_template": self.template.get(), "online_metadata_lookup_enabled": self.online.get(),
                   "gemini_enabled": False if self.key_removal_pending else self.gemini_enabled.get(),
+                  "gemini_model": self.gemini_model.get().strip(),
                   "allow_cloud_ai_for_word_documents": self.word_ai.get(),
                   "allow_cloud_ai_for_presentation_documents": self.slides_ai.get()}
         if self.key_removal_pending:
@@ -864,4 +904,13 @@ class ReconciliationWindow:
             if self.window.winfo_exists():
                 self.feedback.set(str(exc))
                 self.selected()
+                from .citations import CitationConflict
+                if isinstance(exc, CitationConflict):
+                    from .research_ui import review_citation_conflict
+                    def choose(record):
+                        self.busy = True
+                        self.selected()
+                        background(self.app, lambda: self.app.service.paper_identity_action(
+                            "link", {"sources": sources, "citation": record}), saved, failed)
+                    review_citation_conflict(self.app, exc.records, choose)
         background(self.app, linked, saved, failed)

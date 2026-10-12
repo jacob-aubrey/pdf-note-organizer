@@ -604,7 +604,7 @@ class CloudClient:
                                     {item_id + ".metadata": json.dumps(metadata, sort_keys=True).encode()}, scope_id)
 
     def upload_pdf(self, data, name, parent_id, item_id, scope_id=""):
-        import fitz
+        import pymupdf as fitz
         try:
             with fitz.open(stream=data, filetype="pdf") as pdf:
                 if pdf.needs_pass or pdf.page_count < 1:

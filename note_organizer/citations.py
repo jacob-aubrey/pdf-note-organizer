@@ -13,6 +13,22 @@ FIELDS = (("title", "Title"), ("authors", "Authors (separate with semicolons)"),
           ("issue", "Issue"), ("pages", "Pages / article number"), ("doi", "DOI"), ("url", "URL"))
 
 
+class CitationConflict(ValueError):
+    def __init__(self, records):
+        self.records = records
+        super().__init__("These copies have different reviewed citations. Choose one canonical citation before linking or exporting them.")
+
+
+def reviewed_records(db, document_ids):
+    records = {}
+    for document_id in sorted(document_ids):
+        row = db.execute("SELECT payload FROM paper_citations WHERE document_id=?", (document_id,)).fetchone()
+        if row:
+            record = normalize_record(json.loads(row[0]))
+            records.setdefault(json.dumps(record, sort_keys=True), record)
+    return list(records.values())
+
+
 def clean(value):
     return " ".join(str(value or "").split())
 
@@ -32,17 +48,18 @@ def normalize_record(record):
     return result
 
 
-def citation_for(store, document_id):
+def citation_for(store, document_id, *, allow_conflicts=False):
     documents = store.search_documents(document_id=document_id, whole_paper=True)
     selected = next((row for row in documents if row["id"] == document_id), None)
     if selected is None:
         raise ValueError("This paper is no longer in the library.")
     with store.connect() as db:
-        ordered = [selected] + [row for row in documents if row["id"] != document_id]
-        for document in ordered:
-            saved = db.execute("SELECT payload FROM paper_citations WHERE document_id=?", (document["id"],)).fetchone()
-            if saved:
-                return json.loads(saved[0])
+        saved = reviewed_records(db, [row["id"] for row in documents])
+        if len(saved) > 1 and not allow_conflicts:
+            raise CitationConflict(saved)
+        if saved:
+            return saved[0]
+        selected = min(documents, key=lambda row: (row["path"].casefold(), row["id"]))
         metadata = json.loads(selected["metadata"])
         # PDF /Pages is a page count, not a citation page range.
         metadata.pop("pages", None)
@@ -65,12 +82,19 @@ def save_citation(store, document_id, record):
     if not documents:
         raise ValueError("This paper is no longer in the library.")
     with store.connect() as db:
+        db.execute("CREATE TABLE IF NOT EXISTS citation_history(id INTEGER PRIMARY KEY,document_id TEXT,at TEXT,payload TEXT)")
+        from .storage import timestamp
+        db.executemany("INSERT INTO citation_history(document_id,at,payload) VALUES(?,?,?)",
+                       [(row["id"], timestamp(), json.dumps(record, ensure_ascii=False)) for row in documents])
         db.executemany("INSERT OR REPLACE INTO paper_citations VALUES(?,?)",
                        [(row["id"], json.dumps(record, ensure_ascii=False)) for row in documents])
         db.executemany("UPDATE projects SET dirty=1 WHERE id=?",
                        [(project_id,) for project_id in {row["project_id"] for row in documents}])
-        from .supplement_library import bind_pending
-        bind_pending(db)
+        from .supplement_library import index_doi
+        for row in documents:
+            index_doi(db, row["id"], record)
+    from .supplement_library import reconcile
+    reconcile(store)
     return record
 
 

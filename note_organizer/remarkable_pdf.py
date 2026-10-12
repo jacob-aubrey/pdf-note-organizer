@@ -7,7 +7,7 @@ from io import BytesIO
 import json
 import math
 
-import fitz
+import pymupdf as fitz
 
 
 RENDER_REVISION = 3

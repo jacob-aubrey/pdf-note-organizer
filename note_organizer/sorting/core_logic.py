@@ -11,7 +11,10 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pypdf import PdfReader
 
 # Load extraction and cloud libraries only when needed, after the UI opens.
 genai = None
@@ -1138,6 +1141,7 @@ def get_document_details(
     *,
     allow_cloud_ai: bool = False,
     allow_online_metadata_lookup: bool = True,
+    model: str | None = None,
 ) -> dict[str, Any] | None:
     """Use validated DOI metadata first, then optional AI as a fallback.
 
@@ -1186,7 +1190,7 @@ def get_document_details(
         for attempt in range(2):
             try:
                 response = client.models.generate_content(
-                    model=GEMINI_MODEL,
+                    model=model or GEMINI_MODEL,
                     contents=_ai_prompt(extraction.text),
                     config=genai_types.GenerateContentConfig(
                         temperature=0.0,
@@ -1301,8 +1305,6 @@ def _citation_author_part(details: Mapping[str, Any]) -> str:
 def _filename_template_values(details: Mapping[str, Any]) -> dict[str, str]:
     primary_creator = _first_useful(details.get("primary_creator"), details.get("author"))
     author_last = _safe_template_value(_first_author_from_metadata(primary_creator), 60)
-    raw_multiple = details.get("is_multiple_creators", details.get("is_multiple_authors", False))
-    multiple = raw_multiple if isinstance(raw_multiple, bool) else False
     venue = _safe_template_value(details.get("venue_or_publisher") or details.get("journal"), 80)
     document_type = _normalize_document_type(details.get("document_type"))
     return {
