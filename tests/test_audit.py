@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import tempfile
+import time
 import tkinter as tk
 from unittest.mock import patch, Mock
 import unittest
@@ -14,6 +15,18 @@ from note_organizer.storage import Store, DEFAULT_SETTINGS, entry_sort_key, matc
 from note_organizer.extraction import extract
 from note_organizer.ui import App
 from tests.test_notebook import sample_pdf
+from tests.ui_helpers import settle_library
+
+
+def settle_notes(app, root):
+    """Let the actual asynchronous reader complete before asserting its result."""
+    deadline = time.monotonic() + 3
+    while app.note_count.get() == "Loading notes…" and time.monotonic() < deadline:
+        app.poll()
+        root.update()
+        time.sleep(.005)
+    if app.note_count.get() == "Loading notes…":
+        raise AssertionError("Reader did not finish loading")
 
 
 class AuditTests(unittest.TestCase):
@@ -121,7 +134,7 @@ class AuditTests(unittest.TestCase):
         doc.save(output)
         self.store.mark_dirty(self.pid)
         with self.assertLogs(level="ERROR"):
-            with patch("note_organizer.exporting.os.replace", side_effect=PermissionError("Word lock")):
+            with patch("note_organizer.exporting.publish_staged", side_effect=PermissionError("Word lock")):
                 self.service.export_pending()
                 self.service.export_pending()
         backups = list((self.folder / "Notebook backups").glob("*.docx"))
@@ -135,7 +148,7 @@ class AuditTests(unittest.TestCase):
 
     def test_sync_summary_reports_export_waiting(self):
         with self.assertLogs(level="ERROR"):
-            with patch("note_organizer.exporting.os.replace", side_effect=PermissionError("Word lock")):
+            with patch("note_organizer.exporting.publish_staged", side_effect=PermissionError("Word lock")):
                 self.service.sync()
         messages = []
         while not self.service.messages.empty():
@@ -176,8 +189,9 @@ class AuditTests(unittest.TestCase):
         try:
             with patch.object(Service, "start"):
                 app = App(root, self.store, self.folder)
+                settle_library(app, root)
                 root.update()
-                self.assertEqual([app.tabs.tab(t, "text") for t in app.tabs.tabs()], ["Library", "Notes"])
+                self.assertEqual([app.tabs.tab(t, "text") for t in app.tabs.tabs()], ["Inbox", "Library", "Notes", "reMarkable"])
                 paper = app.papers.get_children()[0]
                 app.papers.selection_set(paper)
                 app.view_notes()
@@ -187,6 +201,7 @@ class AuditTests(unittest.TestCase):
                 app.reader_folder.current(0)
                 app.reader_folder_selected()
                 app.refresh()
+                settle_library(app, root)
                 root.update()
                 self.assertTrue(app.all_projects.get())
                 self.assertEqual(app.reader_folder.current(), 0)
@@ -200,22 +215,28 @@ class AuditTests(unittest.TestCase):
                 app.search_fields = ["ocr"]
                 app.search.set("control experiment")
                 app.refresh_notes()
+                settle_notes(app, root)
                 self.assertEqual(app.entries, [])
                 app.search_fields = ["quote"]
                 app.search.set("stable OR")
                 app.refresh_notes()
+                settle_notes(app, root)
                 self.assertTrue(app.search_error.get())
                 self.assertEqual(app.entries, [])
                 self.assertTrue(app.export_button.instate(["disabled"]))
                 app.search.set("stable OR nonexistent")
                 app.refresh_notes()
+                settle_notes(app, root)
                 self.assertFalse(app.search_error.get())
                 self.assertEqual(len(app.entries), 1)
                 self.assertFalse(app.export_button.instate(["disabled"]))
                 app.entries[0]["label"] = "233"
-                with patch("note_organizer.ui.open_pdf_page", return_value=("Opened", True)) as opener:
+                with patch.object(app.pdf_worker, "materialize", return_value=app.entries[0]["path"]), \
+                        patch("note_organizer.ui.open_pdf_page", return_value=("Opened", True)) as opener:
                     app.open_source()
-                    opener.assert_called_once_with(app.entries[0]["path"], app.entries[0]["page"], app.viewer_preference)
+                    app.pdf_open_future.result(timeout=3)
+                    app.poll()
+                    opener.assert_called_once_with(Path(app.entries[0]["path"]), app.entries[0]["page"], app.viewer_preference)
                 app.toggle_activity()
                 self.assertEqual(app.activity_frame.winfo_manager(), "pack")
                 app.toggle_activity()
@@ -235,11 +256,14 @@ class AuditTests(unittest.TestCase):
         try:
             with patch.object(Service, "start"):
                 app = App(root, self.store, self.folder)
+                settle_library(app, root)
                 root.update()
                 self.assertTrue(app.failed_papers)
                 iid = next(iter(app.failed_papers))
                 app.papers.selection_set(iid)
                 root.update()
+                app.refresh_notes()
+                settle_notes(app, root)
                 self.assertIn("Invalid PDF", app.preview_text.get("1.0", "end"))
                 self.assertEqual(app.style.lookup("TButton", "foreground"), "#DCE4EE")
                 self.assertEqual(app.canvas.cget("background"), "#18191a")

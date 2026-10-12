@@ -153,7 +153,7 @@ class NotebookTests(unittest.TestCase):
     def test_failed_export_stays_pending_and_recovers(self):
         self.scan()
         with self.assertLogs(level="ERROR"):
-            with patch("note_organizer.exporting.os.replace", side_effect=PermissionError("Word holds file open")):
+            with patch("note_organizer.exporting.publish_staged", side_effect=PermissionError("Word holds file open")):
                 self.service.export_pending()
         p = self.store.project(self.project_id)
         self.assertTrue(p["dirty"])
@@ -230,7 +230,8 @@ class NotebookTests(unittest.TestCase):
         with patch("note_organizer.extraction.shutil.which", return_value=None):
             _, _, meta, entries = extract(self.pdf, {**DEFAULT_SETTINGS, "ocr": True})
         self.assertTrue(meta["warnings"])
-        self.assertTrue(all(e["image"] for e in entries))
+        self.assertTrue(all(e["image"] for e in entries if e["kind"] == "drawing"))
+        self.assertFalse(any(e["image"] for e in entries if e["kind"] != "drawing"))
 
     def test_legacy_import_read_only_and_idempotent(self):
         legacy = self.folder / "legacy.db"
@@ -299,7 +300,7 @@ class NotebookTests(unittest.TestCase):
         self.service.sync()
         self.assertTrue(self.store.entries(query="Added while app was closed"))
 
-    def test_scanned_highlight_has_visual_fallback(self):
+    def test_scanned_highlight_points_to_source_without_storing_a_preview(self):
         scanned = self.folder / "scanned.pdf"
         with fitz.open() as doc:
             p = doc.new_page()
@@ -314,8 +315,8 @@ class NotebookTests(unittest.TestCase):
             doc.save(scanned)
         _, _, metadata, entries = extract(scanned, DEFAULT_SETTINGS)
         self.assertEqual(entries[0]["quote"], "")
-        self.assertTrue(entries[0]["image"])
-        self.assertTrue(metadata["warnings"])
+        self.assertFalse(entries[0]["image"])
+        self.assertIn("open the source PDF", " ".join(metadata["warnings"]))
 
     def test_column_highlight_does_not_collect_neighbor_column(self):
         path = self.folder / "columns.pdf"
@@ -335,7 +336,7 @@ class NotebookTests(unittest.TestCase):
         original = digest_file(target)
         self.store.mark_dirty(self.project_id)
         with self.assertLogs(level="ERROR"):
-            with patch("note_organizer.exporting.os.replace", side_effect=PermissionError("Locked")):
+            with patch("note_organizer.exporting.publish_staged", side_effect=PermissionError("Locked")):
                 self.service.export_pending()
         self.assertEqual(digest_file(target), original)
         self.assertEqual(list(self.folder.glob(".pdf-notes-*.docx")), [])

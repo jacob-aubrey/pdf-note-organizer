@@ -1,3 +1,4 @@
 """Local, recoverable PDF annotation notebooks."""
 
-__version__ = "2.1.1"
+APP_NAME = "Notable"
+__version__ = "2.4.1"

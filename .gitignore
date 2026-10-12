@@ -31,6 +31,15 @@ notes_media/
 *.key
 *.pfx
 *.p12
+*.dpapi
+*.rmdoc
+*.rm
 *.lock
 Thumbs.db
 .DS_Store
+
+# Generated private inventories and local reports; retain only the public guide.
+/output/*
+!/output/pdf/
+/output/pdf/*
+!/output/pdf/Notable-README.pdf

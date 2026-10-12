@@ -3,7 +3,6 @@
 Values come from C:/Paper Sorter/src/app.py and CustomTkinter's blue theme.
 No dependency on the other application, its settings, or a new UI toolkit.
 """
-import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageDraw, ImageTk
 
@@ -68,8 +67,12 @@ def apply_theme(root):
         style.map(name, fieldbackground=[("readonly", FIELD), ("disabled", BACKGROUND)],
                   foreground=[("readonly", TEXT), ("disabled", MUTED)], selectbackground=[("!disabled", BLUE)],
                   selectforeground=[("!disabled", TEXT)])
+    style.configure("Card.TFrame", background=SURFACE)
+    style.configure("CardTitle.TLabel", background=SURFACE, foreground=MUTED, font=("Segoe UI", 9, "bold"))
+    style.configure("Quiet.TButton", padding=(9, 6))
+    style.configure("Compact.TButton", padding=(5, 3))
     style.configure("Treeview", background=PANEL, fieldbackground=PANEL, foreground=TEXT,
-                    rowheight=26, borderwidth=0)
+                    rowheight=30, borderwidth=0)
     style.map("Treeview", background=[("selected", BLUE)], foreground=[("selected", "#ffffff")])
     style.configure("Treeview.Heading", background=SURFACE, foreground=TEXT, padding=(8, 8), relief="flat", font=("Segoe UI", 10, "bold"))
     style.map("Treeview.Heading", background=[("active", FIELD)])

@@ -1,0 +1,6 @@
+Closed-hand Windows cursor derived from Lucide grab.svg.
+Source: ../icons/grab.svg
+Revision: f12b0de177fbc2a6795e99be065887e72b237123 (Lucide 0.468.0).
+Attribution and license: ../icons/SOURCE.txt and ../icons/LICENSE.txt.
+Original Lucide closed-fist outline with a white silhouette, black 1.25-unit outline, transparent background, and centered hotspot.
+Native .CUR contains 32px, 48px and 64px BMP frames with 32-bit alpha and AND masks.

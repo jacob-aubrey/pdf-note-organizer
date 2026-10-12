@@ -104,14 +104,14 @@ def open_pdf_page(path, page, preference=None):
     preference = preference or {"viewer": "system"}
     viewer = preference.get("viewer", "system")
     if viewer not in VIEWERS:
-        raise ValueError("Choose a PDF viewer in Notes → More → PDF viewer.")
+        raise ValueError("Choose a PDF viewer in Settings → Preferences.")
     executable = preference.get("path", "") if viewer == "custom" else find_viewer(viewer)
     if viewer == "system" and (not executable or viewer_type(executable) == "custom"):
         # Let Windows honor the complete association (including DDE or app-specific flags).
         open_system_pdf(path)
         return f"Opened in your default viewer. Navigate to PDF page {page}; this viewer's page-jump command is not supported.", False
     if not executable or (viewer == "custom" and not Path(executable).is_file()):
-        raise FileNotFoundError(f"{VIEWERS[viewer]} was not found. Choose another viewer or browse to its application in Notes → More → PDF viewer.")
+        raise FileNotFoundError(f"{VIEWERS[viewer]} was not found. Choose another viewer or browse to its application in Settings → Preferences.")
     subprocess.Popen(viewer_command(executable, path, page), close_fds=True)
     kind = viewer_type(executable)
     if kind == "custom":

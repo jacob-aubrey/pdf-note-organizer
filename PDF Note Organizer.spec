@@ -5,7 +5,7 @@ a = Analysis(
     ['PDF Note Organizer.py'],
     pathex=[],
     binaries=[],
-    datas=[('Note icon.ico', '.')],
+    datas=[('Note icon.ico', '.'), ('note_organizer/assets/icons', 'note_organizer/assets/icons')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
