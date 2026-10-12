@@ -36,7 +36,6 @@ notes_media/
 *.rm
 *.lock
 !requirements.lock
-!requirements-build.lock
 Thumbs.db
 .DS_Store
 

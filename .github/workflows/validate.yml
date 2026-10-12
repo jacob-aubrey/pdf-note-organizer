@@ -1,4 +1,4 @@
-name: Validate and package
+name: Validate Python source
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
@@ -12,12 +12,14 @@ jobs:
         with:
           python-version: '3.13'
           cache: pip
-          cache-dependency-path: requirements-build.lock
-      - run: python -m pip install --require-hashes -r requirements-build.txt
-      - run: python scripts/build_release.py
-      - uses: actions/upload-artifact@v7
-        with:
-          name: Notable-Windows
-          path: |
-            dist/Notable-*.exe
-            dist/Notable-*.manifest.json
+          cache-dependency-path: requirements.lock
+      - run: python -m pip install --require-hashes -r requirements.lock
+      - name: Check Python compilation
+        run: python -m compileall -q note_organizer
+      - name: Run regression suite
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force tmp/test-runtime | Out-Null
+          $env:TEMP = (Resolve-Path tmp/test-runtime).Path
+          $env:TMP = $env:TEMP
+          python -m unittest discover -s tests -q

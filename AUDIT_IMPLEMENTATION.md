@@ -1,6 +1,6 @@
 # Notable 2.5.0 audit implementation
 
-This report covers the complete implementation pass requested after the application audit, including correctness, performance, storage, maintenance, interface consistency, usability and release tooling. Work and destructive-operation tests use disposable synthetic libraries. The normal research library, original papers, preferences and live cloud account were not used as write targets.
+This report covers the implementation pass requested after the application audit, including correctness, performance, storage, maintenance, interface consistency and usability. Development remains Python/VS Code; packaging is explicitly deferred at the user's request. Work and destructive-operation tests use disposable synthetic libraries. The normal research library, original papers, preferences and live cloud account were not used as write targets.
 
 ## Recommendation coverage
 
@@ -22,9 +22,9 @@ This report covers the complete implementation pass requested after the applicat
 | Keyboard and reading accessibility | Workspace/search/settings/research shortcuts, keyboard-operable menus and browser reading snapshots with semantic headings, text search, live result counts, source links, zoom and print. |
 | Research organization functions | Persistent paper tags and collections, combined note/PDF label filtering, saved searches and existing supplement attachment opening. Labels span linked copies. |
 | Optional AI maintenance | Configurable Gemini model and metadata-only connection test; model changes invalidate old naming proposals. Existing saved setups preserve compatibility; new default updated. |
-| Dependency updates | PyMuPDF 1.28.2 and Pillow 12.3.0, tested independently and in the regression suite. Direct pins plus complete Windows runtime/build locks with wheel integrity hashes. |
+| Dependency updates | PyMuPDF 1.28.2 and Pillow 12.3.0, tested independently and in the regression suite. Direct pins plus a complete Windows runtime lock with wheel integrity hashes. |
 | Ghost code and module size | Unused imports/locals removed; undefined names checked. Workspace layouts and new storage, indexing, research, accessibility and cleanup functions isolated in focused modules. Legacy source remains an intentional rollback reference. |
-| Stale executable and release reliability | Versioned 2.5.0 executable, automated builder, packaged native-worker/assets smoke test, digest/source manifest and Windows CI regression/build artifacts. Generated build files are ignored. |
+| Stale executable and development reliability | Source-only Windows CI checks compilation and regression tests using hashed dependencies. README identifies the old executable as outdated. Packaging is deferred by user instruction; newly generated executable/build files and added packaging automation were removed. |
 
 ## Maintenance behavior
 
@@ -32,14 +32,14 @@ New scans use shared image storage. Existing image-bearing records remain readab
 
 Backups contain available registered originals and attachments plus retained private recovery data. Missing external originals cannot be recovered from a backup that never contained them. Settings can include locally encrypted credentials; encryption may be tied to the Windows user/device. A restored library starts remote integrations and Inbox watching paused, and uses recovered files rather than pointing back to the originals. The original active library remains independent.
 
-Existing extra PDFs and raw tablet archives require reviewed cleanup. No bulk deletion of personal research, legacy source, old executable or saved database is part of the upgrade. Disposable build outputs and dependency-download staging can be regenerated from the locks. Generated PDFs and database maintenance are separate from original research files.
+Existing extra PDFs and raw tablet archives require reviewed cleanup. No bulk deletion of personal research, legacy source, old executable or saved database is part of the upgrade. Approximately 101 MB of temporary dependency-download staging and the new packaging outputs were removed. Generated PDFs and database maintenance are separate from original research files.
 
 ## Validation and remaining external checks
 
 The new regression cases exercise image/history fidelity, verified compaction, independent backup recovery, corrupt/unsafe archives, canonical citation selection and undo, query parity including Unicode/negative/short terms, labels, hashing outside write transactions, escaped accessible HTML, queue priority/cancellation and raw-archive cleanup.
 
-The complete application suite covers rendering, margin geometry, exports, service queues, cloud and filing recovery, paper links, storage, search, tooltips, display scaling and UI responsiveness. The release builder adds a packaged executable check against disposable PDF data. Final test totals and executable validation are recorded in the dated audit entry after the run completes.
+The complete application suite passed **851 tests in 557.872 seconds**, covering rendering, margin geometry, exports, service queues, cloud and filing recovery, paper links, storage, search, tooltips, display scaling and UI responsiveness. After the final automatic-sync label shortening, all **19 interface and screen-geometry tests** passed. Dependency checks, unused/undefined-name lint, compilation and whitespace checks passed. The native synthetic demo confirmed that text-only notes fill their preview pane. The earlier full run exposed an outdated Inbox test fixture; it was corrected before the successful complete run. Packaging was stopped/deferred by user instruction, and its generated outputs and added automation were removed.
 
-Runtime packages passed the known-vulnerability audit at implementation time. This is a point-in-time dependency result, not a guarantee about unknown vulnerabilities. Current package/model information was checked against [PyMuPDF on PyPI](https://pypi.org/project/pymupdf/), [Pillow on PyPI](https://pypi.org/project/pillow/) and [Google's Gemini model documentation](https://ai.google.dev/gemini-api/docs/models). CI uses the current documented major versions of GitHub's [checkout](https://github.com/actions/checkout), [Python setup](https://github.com/actions/setup-python) and [artifact upload](https://github.com/actions/upload-artifact) actions.
+Runtime packages passed the known-vulnerability audit at implementation time. This is a point-in-time dependency result, not a guarantee about unknown vulnerabilities. Current package/model information was checked against [PyMuPDF on PyPI](https://pypi.org/project/pymupdf/), [Pillow on PyPI](https://pypi.org/project/pillow/) and [Google's Gemini model documentation](https://ai.google.dev/gemini-api/docs/models). CI uses the current documented major versions of GitHub's [checkout](https://github.com/actions/checkout) and [Python setup](https://github.com/actions/setup-python) actions.
 
 Live Gemini generation, real cloud transfers/tablet firmware, multiple physical monitors and full native screen-reader operation were not exercised. The browser reading view improves access to results; the full Tk shell is not certified for UI Automation or NVDA. Unproven PDF editions, geometry and tablet formats continue to require review. Existing physical-device pilot checks in AUDIT.md remain applicable.

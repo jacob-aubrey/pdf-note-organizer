@@ -53,9 +53,6 @@ def main():
         if should_import_legacy(data, root_dir):
             store.import_legacy([root_dir / "notes_watcher.db", root_dir / "dist" / "notes_watcher.db", root_dir.parent / "notes_watcher.db"])
         app = App(root, store, data)
-        if "--smoke-test" in sys.argv:
-            from .release_smoke import start
-            root.after(150, lambda: start(app))
         root.deiconify()
         root.mainloop()
     except Exception as exc:

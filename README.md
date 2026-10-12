@@ -17,7 +17,7 @@ The current version is **Notable 2.5.0**. This release adds verified backup and 
 
 ### First setup on Windows
 
-Use the versioned **`dist/Notable-2.5.0.exe`** after running the release builder described below, or launch from Python source. Older unversioned executables belong to previous releases. The versioned executable has a matching `.manifest.json` containing its SHA-256 digest and packaged smoke-test result.
+**Development stays in Python and VS Code. Packaging is deferred until explicitly requested.** The older executable in `dist/` belongs to a previous version; use the source launcher or the named VS Code development profile for current behavior.
 
 The project environment is configured for Python 3.13. Install Python 3.13, open PowerShell in the project folder, and run:
 
@@ -54,14 +54,14 @@ PDF text indexing builds as papers are searched. Short terms and negative querie
 
 Optional Gemini naming has a model selector and **Test connection** in Sorting settings. The test checks the selected model with your draft/saved key; it does not send a document or generate text. Existing configured libraries preserve their model compatibility. New setups default to `gemini-3.5-flash-lite`; availability still depends on your account.
 
-### Build and verify the Windows executable
+### Verify the Python source
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-build.txt
-.\.venv\Scripts\python.exe scripts/build_release.py
+.\.venv\Scripts\python.exe -m pip check
+.\.venv\Scripts\python.exe -m unittest discover -s tests -q
 ```
 
-The build lock includes hashed runtime and packaging/test dependencies. The builder checks dependencies and unused/undefined names, runs the complete regression suite, builds `dist/Notable-2.5.0.exe`, and launches a packaged smoke test against a disposable library. It checks native PDF rendering/text extraction and bundled UI assets before producing the SHA-256 manifest. Windows CI runs the same pipeline and uploads the executable and manifest as build artifacts. Generated build directories are disposable; older executables and legacy source are retained as deliberate rollback copies. Existing databases in `dist/` are library data, not build debris.
+Windows CI installs the hashed runtime dependencies, checks Python compilation and runs the source regression suite. It does not build or upload executables. Older executables and legacy source remain deliberate rollback copies. Existing databases in `dist/` are library data, not build debris.
 
 The downloadable README PDF, if present, describes 2.4.1. This Markdown guide and the implementation report document 2.5.0.
 

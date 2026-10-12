@@ -1,13 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
-from note_organizer import __version__
-from PyInstaller.utils.hooks import collect_data_files
 
 
 a = Analysis(
     ['PDF Note Organizer.py'],
     pathex=[],
     binaries=[],
-    datas=[('Note icon.ico', '.'), ('note_organizer/assets', 'note_organizer/assets')] + collect_data_files('tkinterdnd2'),
+    datas=[('Note icon.ico', '.'), ('note_organizer/assets/icons', 'note_organizer/assets/icons')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -24,11 +22,11 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='Notable-' + __version__,
+    name='PDF Note Organizer',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,
+    upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,

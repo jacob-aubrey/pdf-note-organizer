@@ -1,5 +1,7 @@
 # Source audit — 2.2.3
 
+The **2026-10-12 Notable 2.5.0 implementation** is documented in [AUDIT_IMPLEMENTATION.md](AUDIT_IMPLEMENTATION.md), including recommendation coverage, 851 passing regression tests and remaining live-device checks. Development remains Python/VS Code; executable packaging is deferred by user instruction.
+
 The earlier sections record historical findings. The dated **Notable 2.4.1** section at the end describes the latest margin-rendering fix; earlier test totals and library observations are not a fresh inspection of the present user library.
 
 The audit covers the current application modules, launcher, cloud adapter, renderer, storage, search, exports and interface. The legacy folder remains an intentional rollback copy. Tests use temporary synthetic libraries; inspection of the current library and the affected source archive was read-only.
