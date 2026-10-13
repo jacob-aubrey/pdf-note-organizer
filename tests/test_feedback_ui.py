@@ -70,7 +70,7 @@ class FeedbackUITests(unittest.TestCase):
     def test_unpaired_blank_destination_guides_to_primary_connect(self):
         app = self.build_app()
         self.assertIn("Not paired", app.cloud_status.get())
-        self.assertEqual(app.cloud_connect_button.winfo_manager(), "pack")
+        self.assertEqual(app.cloud_connect_button.winfo_manager(), "place")
         self.assertEqual(app.cloud_connect_button.cget("style"), "Primary.TButton")
         self.assertFalse(app.cloud_connect_button.instate(["disabled"]))
         self.assertFalse(app.cloud_sync_button.winfo_manager())
@@ -90,7 +90,7 @@ class FeedbackUITests(unittest.TestCase):
         self.config["pc_root"] = str(destination)
         self.store.set_preference("remarkable", self.config)
         app = self.build_app(paired=True)
-        self.assertEqual(app.cloud_sync_button.winfo_manager(), "pack")
+        self.assertEqual(app.cloud_sync_button.winfo_manager(), "place")
         self.assertEqual(app.cloud_sync_button.cget("style"), "Primary.TButton")
         self.assertFalse(app.cloud_sync_button.instate(["disabled"]))
         self.assertFalse(app.cloud_connect_button.winfo_manager())

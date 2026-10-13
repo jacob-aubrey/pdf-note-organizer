@@ -26,7 +26,7 @@ from .theme import apply_theme, BACKGROUND, PANEL
 from .remarkable_cloud import PAIR_URL
 from .remarkable_sync import scoped_folders, effective_config
 from .icons import Button, menu_action
-from .widgets import Tooltip, PathField, ReadOnlyText, annotate_buttons, fit_dialog, bind_dialog_close, dismiss_tooltips, CellTooltip, SelectionDetails
+from .widgets import Tooltip, PathField, ReadOnlyText, DataTable, WrapToolbar, annotate_buttons, fit_dialog, bind_dialog_close, dismiss_tooltips, CellTooltip, SelectionDetails
 from .dialogs import PreferencesDialog, ProcessingFields
 from .pages import page_description, page_tooltip
 from .view_state import LibraryView, read_view, cloud_destinations
@@ -39,6 +39,7 @@ from .research_ui import CitationWindow, SupplementsWindow
 from .citations import export_citations
 from .workspace_layouts import WorkspaceLayouts
 from .time_display import local_time
+from .branding import apply_app_icon, set_process_identity
 
 
 class App(WorkspaceLayouts):
@@ -97,6 +98,8 @@ class App(WorkspaceLayouts):
         self.last_poll = time.monotonic()
         self.largest_ui_delay = 0
         self.style = apply_theme(root)
+        set_process_identity()
+        apply_app_icon(root)
         root.title(f"{APP_NAME} {__version__}")
         root.geometry(f"{min(1250, root.winfo_screenwidth()-80)}x{min(820, root.winfo_screenheight()-100)}")
         root.minsize(940, 620)
@@ -167,13 +170,13 @@ class App(WorkspaceLayouts):
         enabled = self.cloud_config()["integration_enabled"]
         if enabled:
             self.tabs.add(self.remarkable_tab, text="reMarkable")
-            self.library_send_button.pack(side="left")
+            self.library_send_button.master.set_visible(self.library_send_button, True)
         elif self.tabs.tab(self.remarkable_tab, "state") != "hidden":
             if self.tabs.select() == str(self.remarkable_tab):
                 self.tabs.select(self.library_tab)
             self.tabs.hide(self.remarkable_tab)
         if not enabled:
-            self.library_send_button.pack_forget()
+            self.library_send_button.master.set_visible(self.library_send_button, False)
 
     def review_library(self):
         existing = self.reconciliation_window
@@ -471,35 +474,36 @@ class App(WorkspaceLayouts):
         tab = self.remarkable_tab
         config = self.cloud_config()
         self.cloud_header = header = ttk.LabelFrame(tab, text="Connection & sync", padding=8)
-        header.pack(fill="x", pady=(0, 16))
-        toolbar = ttk.Frame(header)
+        header.pack(fill="x", pady=(0, 8))
+        toolbar = WrapToolbar(header)
         toolbar.pack(fill="x", pady=(0, 8))
         self.cloud_sync_button = Button(toolbar, text="Sync PDFs", command=self.sync_cloud_now, style="Primary.TButton")
-        self.cloud_sync_button.pack(side="left")
+        toolbar.add(self.cloud_sync_button)
         Tooltip(self.cloud_sync_button, lambda: "Choose an existing PC destination for the reMarkable cloud source in Sync setup first." if not self.cloud_pc_root.get() else
                 "A reMarkable cloud check is running; wait for it to finish." if self.service.cloud_busy else
                 "Apply the pending source and PC destination changes, then download changed PDFs and process enabled transfer and folder queues." if self.cloud_routing_values() != self.cloud_saved_routing else
                 "Download changed PDFs, retry PDFs needing attention, and process enabled upload and folder queues beneath the linked roots.")
         self.cloud_browse_button = Button(toolbar, text="Refresh folders", command=lambda: self.service.command("remarkable_browse"))
-        self.cloud_browse_button.pack(side="left", padx=8)
+        toolbar.add(self.cloud_browse_button)
         self.cloud_transfers_button = Button(toolbar, text="Transfer queue…", command=self.transfers)
-        self.cloud_transfers_button.pack(side="left", padx=(0, 8))
+        toolbar.add(self.cloud_transfers_button)
         Tooltip(self.cloud_transfers_button, "Review queued uploads, missing folder links, and completed transfers. Retry paused work after resolving its explanation.")
         Tooltip(self.cloud_browse_button, lambda: "Connect reMarkable before loading the folder catalog." if not self.cloud_paired() else
                 "A reMarkable cloud check is running; wait for it to finish." if self.service.cloud_busy else "Refresh tablet folders without downloading PDFs. If folder mirroring is enabled, this can create PC counterparts and queue new tablet folders.")
         self.cloud_connect_button = Button(toolbar, text="Connect reMarkable…", command=self.pair_remarkable, style="Primary.TButton")
+        toolbar.add(self.cloud_connect_button, visible=False)
         self.cloud_connection_button = self.more_button(toolbar, [("Reconnect…", self.pair_remarkable), ("Disconnect", self.disconnect_cloud)], text="Connection ▾")
-        self.cloud_connection_button.pack(side="left", padx=(8, 0))
+        toolbar.add(self.cloud_connection_button)
         self.cloud_status = tk.StringVar()
         status_row = ttk.Frame(header)
-        status_row.pack(fill="x", pady=(0, 6))
+        status_row.pack(fill="x", pady=(0, 4))
         self.cloud_connection_status = ttk.Label(status_row, textvariable=self.cloud_status, style="Muted.TLabel", wraplength=600)
         self.cloud_connection_status.pack(side="left", fill="x", expand=True, padx=(0, 12))
         self.cloud_connection_status.bind("<Configure>", lambda e: self.cloud_connection_status.configure(wraplength=max(100, e.width)))
         self.build_feedback(header, "cloud")
         self.cloud_error = tk.StringVar()
         self.cloud_error_row = error_row = ttk.Frame(header)
-        self.cloud_error_label = ttk.Label(error_row, textvariable=self.cloud_error, foreground="#FFB4AB", wraplength=800)
+        self.cloud_error_label = ttk.Label(error_row, textvariable=self.cloud_error, style="Error.TLabel", wraplength=800)
         self.cloud_error_label.pack(side="left", fill="x", expand=True)
         self.cloud_error_label.bind("<Configure>", lambda e: self.cloud_error_label.configure(wraplength=max(100, e.width)))
         self.cloud_dismiss_button = Button(error_row, text="Dismiss", command=self.dismiss_cloud_error)
@@ -508,17 +512,17 @@ class App(WorkspaceLayouts):
         self.cloud_pending_enabled = None
         self.cloud_scope_ids = [""]
         self.cloud_setup_frame = setup = ttk.Frame(header)
-        setup.pack(fill="x", pady=(0, 6))
+        setup.pack(fill="x")
         self.cloud_route_summary = tk.StringVar()
         self.cloud_summary_row = summary_row = ttk.Frame(setup)
         summary_row.pack(fill="x")
         summary = ttk.Label(summary_row, textvariable=self.cloud_route_summary)
         summary.pack(side="left", fill="x", expand=True)
         summary.bind("<Configure>", lambda e: summary.configure(wraplength=max(100, e.width)))
-        Tooltip(summary, lambda: f"reMarkable cloud source: {self.cloud_scope_path() or 'Choose a source'}\nPC destination: {self.cloud_pc_root.get() or 'Choose an existing folder'}\n\nEdit setup to inspect or copy either complete location.")
+        Tooltip(summary, lambda: f"reMarkable cloud source: {self.cloud_scope_path() or 'Choose a source'}\nPC destination: {self.cloud_pc_root.get() or 'Choose an existing folder'}\n\nOnly this source and its descendants are downloaded. Missing PC paths go to review. Edit setup to inspect or copy either complete location.")
         self.cloud_setup_button = Button(toolbar, text="Edit setup", command=self.toggle_cloud_setup)
-        self.cloud_setup_button.pack(side="left", padx=8)
-        self.cloud_setup_panel = routing = ttk.LabelFrame(setup, text="Sync setup", padding=6)
+        toolbar.add(self.cloud_setup_button)
+        self.cloud_setup_panel = routing = ttk.Frame(setup)
         self.cloud_setup_expanded = not bool(config["pc_root"] and config.get("source_folder_id"))
         if self.cloud_setup_expanded:
             summary_row.pack_forget()
@@ -526,7 +530,7 @@ class App(WorkspaceLayouts):
         ttk.Label(routing, text="Cloud source").grid(row=0, column=0, sticky="w", padx=(0, 12))
         cloud_scope_row = ttk.Frame(routing)
         cloud_scope_row.grid(row=0, column=1, sticky="ew", pady=(0, 4))
-        self.cloud_scope = ttk.Combobox(cloud_scope_row, state="readonly", width=20, values=["Find Literature automatically"])
+        self.cloud_scope = ttk.Combobox(cloud_scope_row, state="readonly", width=1, values=["Find Literature automatically"])
         self.cloud_scope.current(0)
         self.cloud_scope.pack(side="left", fill="x", expand=True)
         self.cloud_scope_path_access = PathField(self.cloud_scope, "Only this source and its descendants are downloaded to this PC. Automatic selection requires exactly one Literature folder.", value=self.cloud_scope_path)
@@ -536,7 +540,7 @@ class App(WorkspaceLayouts):
         self.cloud_pc_root = tk.StringVar(value=config["pc_root"])
         cloud_pc_row = ttk.Frame(routing)
         cloud_pc_row.grid(row=0, column=3, sticky="ew")
-        self.cloud_pc_entry = ttk.Entry(cloud_pc_row, textvariable=self.cloud_pc_root, width=26)
+        self.cloud_pc_entry = ttk.Entry(cloud_pc_row, textvariable=self.cloud_pc_root, width=1)
         self.cloud_pc_entry.pack(side="left", fill="x", expand=True)
         self.cloud_pc_path_access = PathField(self.cloud_pc_entry, "The selected reMarkable cloud source maps directly here. Existing descendant paths must match or be mapped separately.")
         self.cloud_pc_copy = self.cloud_pc_path_access.add_copy_button(cloud_pc_row)
@@ -549,18 +553,24 @@ class App(WorkspaceLayouts):
         Tooltip(self.cloud_apply_button, lambda: "The visible reMarkable cloud source and PC destination are already saved. Change either to apply edits." if self.cloud_routing_values() == self.cloud_saved_routing else "Save the reMarkable cloud source and PC destination. Automatic checks use the saved routing.")
         self.cloud_routing_pending = None
         self.cloud_apply_status = tk.StringVar()
-        ttk.Label(routing, textvariable=self.cloud_apply_status, style="Muted.TLabel").grid(row=1, column=4, sticky="w", padx=8)
+        apply_status = ttk.Label(routing, textvariable=self.cloud_apply_status, style="Muted.TLabel")
+        apply_status.grid(row=1, column=4, sticky="w", padx=8)
+        def arrange_routing(event):
+            compact = event.width < 1000
+            self.cloud_apply_button.configure(compound="image" if compact else "left")
+            self.cloud_apply_button.grid_configure(row=0 if compact else 1, column=5 if compact else 1,
+                                                   columnspan=1 if compact else 3, padx=(8, 0) if compact else 0,
+                                                   pady=0 if compact else (4, 0))
+            apply_status.grid_configure(row=0 if compact else 1, column=6 if compact else 4)
+        routing.bind("<Configure>", arrange_routing)
         routing.columnconfigure(1, weight=1)
         routing.columnconfigure(3, weight=2)
         self.cloud_enabled = tk.BooleanVar(value=config["enabled"])
         self.cloud_auto = auto = ttk.Checkbutton(toolbar, text="Automatic checks", variable=self.cloud_enabled, command=self.toggle_cloud_sync)
-        auto.pack(side="left", padx=(12, 0))
+        toolbar.add(auto)
         Tooltip(auto, lambda: "Connect reMarkable before enabling automatic checks." if not self.cloud_paired() else
                 "Choose and apply a PC destination for the reMarkable cloud source before enabling automatic checks." if not self.cloud_config()["pc_root"] else
                 "Download changed tablet PDFs every five minutes while this app is open. Applies immediately to future checks. Enabled folder mirroring and queued uploads run separately; turn off cloud services in Connections to pause all cloud activity.")
-        self.cloud_routing_note = tk.StringVar()
-        self.cloud_routing_label = note = ttk.Label(header, textvariable=self.cloud_routing_note, style="Muted.TLabel", wraplength=900)
-        note.bind("<Configure>", lambda e: note.configure(wraplength=max(100, e.width)))
         self.cloud_scope.bind("<<ComboboxSelected>>", self.cloud_routing_changed)
         self.cloud_pc_root.trace_add("write", self.cloud_routing_changed)
         self.cloud_pane = pane = ttk.Panedwindow(tab, orient="horizontal")
@@ -574,10 +584,12 @@ class App(WorkspaceLayouts):
         self.cloud_map_button.grid(row=0, column=0, sticky="w")
         self.cloud_unmap_button = Button(buttons, text="Unlink folder…", command=self.unmap_cloud_folder)
         self.cloud_unmap_button.grid(row=0, column=1, sticky="w", padx=(8, 0))
+        mapping_width = self.cloud_map_button.winfo_reqwidth() + self.cloud_unmap_button.winfo_reqwidth() + 8
         def arrange_mapping_actions(event):
-            fits = event.width >= self.cloud_map_button.winfo_reqwidth() + self.cloud_unmap_button.winfo_reqwidth() + 8
-            self.cloud_unmap_button.grid_configure(row=0 if fits else 1, column=1 if fits else 0,
-                                                  padx=(8, 0) if fits else 0, pady=0 if fits else (4, 0))
+            compact = event.width < mapping_width
+            for button in (self.cloud_map_button, self.cloud_unmap_button):
+                button.configure(compound="image" if compact else "left")
+            self.cloud_unmap_button.grid_configure(row=0, column=1, padx=(8, 0), pady=0)
         buttons.bind("<Configure>", arrange_mapping_actions)
         Tooltip(self.cloud_map_button, lambda: "Choose an existing PC counterpart, save this folder link and sync enabled transfers." if self.cloud_folders.selection() else "Select a reMarkable cloud folder first. Refresh folders if none are listed.")
         Tooltip(self.cloud_unmap_button, self.cloud_unmap_help)
@@ -890,13 +902,13 @@ class App(WorkspaceLayouts):
         else:
             self.cloud_error_row.pack_forget()
         if paired:
-            self.cloud_connect_button.pack_forget()
-            self.cloud_connection_button.pack(side="left", padx=(8, 0), before=self.cloud_setup_button)
-            self.cloud_sync_button.pack(side="left", before=self.cloud_browse_button)
+            self.cloud_connect_button.master.set_visible(self.cloud_connect_button, False)
+            self.cloud_connection_button.master.set_visible(self.cloud_connection_button, True)
+            self.cloud_sync_button.master.set_visible(self.cloud_sync_button, True)
         else:
-            self.cloud_connection_button.pack_forget()
-            self.cloud_sync_button.pack_forget()
-            self.cloud_connect_button.pack(side="left", before=self.cloud_browse_button)
+            self.cloud_connection_button.master.set_visible(self.cloud_connection_button, False)
+            self.cloud_sync_button.master.set_visible(self.cloud_sync_button, False)
+            self.cloud_connect_button.master.set_visible(self.cloud_connect_button, True)
         self.cloud_browse_button.configure(state="normal" if paired and not self.service.cloud_busy else "disabled")
 
     def refresh_cloud_folders(self):
@@ -918,12 +930,6 @@ class App(WorkspaceLayouts):
         valid_root = root in self.view.directories if root == config["pc_root"] else self.cloud_root_available and path_key == getattr(self, "cloud_paths_key", None)
         self.cloud_sync_button.configure(text="Apply & sync PDFs" if draft else "Sync PDFs",
             state="normal" if self.cloud_paired() and valid_root and not self.service.cloud_busy else "disabled")
-        self.cloud_routing_note.set("Only this source is downloaded. Missing PC paths go to review." if root else
-            "Choose your existing PC library folder in Sync setup. Other saved libraries are listed in Settings → Library & diagnostics.")
-        if self.cloud_setup_expanded:
-            self.cloud_routing_label.pack_forget()
-        else:
-            self.cloud_routing_label.pack(fill="x", pady=(8, 0))
         if not catalog:
             empty = "Connect reMarkable, then refresh folders." if not self.cloud_paired() else "No folder catalog loaded. Click Refresh folders to find Literature."
         elif not source_id:
@@ -1001,10 +1007,11 @@ class App(WorkspaceLayouts):
         else:
             self.cloud_review_empty_label.pack_forget()
 
-    def tree(self, parent, columns, height=8, content_columns=None):
+    def tree(self, parent, columns, height=8, content_columns=None, empty_text="No items to show", pack=True):
         frame = ttk.Frame(parent)
-        frame.pack(fill="both", expand=True)
-        tree = ttk.Treeview(frame, columns=[c[0] for c in columns], show="headings",
+        if pack:
+            frame.pack(fill="both", expand=True)
+        tree = DataTable(frame, empty_text=empty_text, columns=[c[0] for c in columns], show="headings",
                             height=height, selectmode="browse")
         heading_face = ttk.Style(tree).lookup("Treeview.Heading", "font") or "TkDefaultFont"
         measure_heading = font.Font(root=tree, font=heading_face).measure
@@ -1077,6 +1084,7 @@ class App(WorkspaceLayouts):
             for frame in pane.winfo_children():
                 for details in frame.winfo_children():
                     if isinstance(details, SelectionDetails):
+                        details.set_compact(event.height < 380)
                         height = 3 if event.height > 380 else 2 if event.height > 230 else 1
                         if int(details.text.cget("height")) != height:
                             details.text.configure(height=height)
@@ -1084,8 +1092,7 @@ class App(WorkspaceLayouts):
 
     def more_button(self, parent, actions, text="Actions ▾"):
         button = Button(parent, text=text)
-        menu = tk.Menu(button, tearoff=False, background=PANEL, foreground="#DCE4EE",
-                       activebackground="#1B629B", activeforeground="white", borderwidth=0)
+        menu = tk.Menu(button, tearoff=False)
         for label, action in actions:
             menu_action(menu, label, action)
         button.action_menu = menu
@@ -1126,7 +1133,7 @@ class App(WorkspaceLayouts):
             self.activity_toggle.configure(text="Show sync details")
         else:
             self.refresh_activity_paths()
-            self.activity_frame.pack(fill="x", pady=(10, 0))
+            self.activity_frame.pack(fill="x", pady=(8, 0))
             self.activity_toggle.configure(text="Hide sync details")
 
     def refresh_activity_paths(self):
@@ -1536,7 +1543,7 @@ class App(WorkspaceLayouts):
         values = json.loads(project["settings"])
         fields = ProcessingFields(frame, values)
         ttk.Label(frame, text="These changes apply only to this folder. Changed extraction options re-read its PDFs.",
-                  style="Muted.TLabel", wraplength=510).grid(row=6, column=0, columnspan=2, sticky="w", pady=(12, 8))
+                  style="Muted.TLabel", wraplength=510).grid(row=8, column=0, columnspan=2, sticky="w", pady=(12, 8))
         def save():
             settings = fields.values(window)
             if settings is None:
@@ -1544,7 +1551,7 @@ class App(WorkspaceLayouts):
             self.service.command("settings", project["id"], {**values, **settings})
             window.destroy()
         actions = ttk.Frame(frame)
-        actions.grid(row=7, column=0, columnspan=2, sticky="ew")
+        actions.grid(row=9, column=0, columnspan=2, sticky="ew")
         apply = Button(actions, text="Apply changes", command=save, style="Primary.TButton")
         apply.pack(side="right")
         cancel = Button(actions, text="Cancel", command=window.destroy)
@@ -1828,7 +1835,8 @@ class App(WorkspaceLayouts):
                 self.notes.selection_set(target)
                 self.notes.see(target)
             pdf_count = sum(e.get("kind") == "pdf" for e in entries)
-            count = f"{len(entries)} results" if self.search_scope.get() != "Notes" else f"{len(entries)} notes"
+            noun = "result" if self.search_scope.get() != "Notes" else "note"
+            count = f"{len(entries)} {noun}{'' if len(entries) == 1 else 's'}"
             self.note_count.set("Check search" if self.search_error.get() else count)
             self.export_button.configure(state="normal" if len(entries) > pdf_count else "disabled")
             self.preview()
@@ -1866,6 +1874,8 @@ class App(WorkspaceLayouts):
                     lines.append("Nearby text: " + e["context"])
                 lines.extend(e.get("metadata", {}).get("warnings", []))
             self.preview_text.insert("1.0", "\n\n".join(lines))
+            self.preview_text.tag_add("paper_title", "1.0", "1.end")
+            self.preview_text.tag_add("page_info", "3.0", "3.end")
             if e["kind"] == "drawing":
                 # Fetch/decode only the selected drawing on the query worker.
                 # A late preview is ignored if the reader has selected another.

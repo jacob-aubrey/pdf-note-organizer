@@ -17,7 +17,7 @@ BUTTON_ICONS = {
     "Accessible reading view…": "book-open", "Test connection": "plug",
     "Open attached file": "external-link", "Open restored library": "folder-open",
     "Review recovery archives…": "history", "Back up & remove duplicates…": "files",
-    "Copy image": "copy", "Citation details…": "book-open", "Export citations…": "download",
+    "Copy image": "copy", "Copy all text": "copy", "Citation details…": "book-open", "Export citations…": "download",
     "Find supplementary files…": "folder-search", "Look up DOI": "search", "Copy citation": "copy",
     "Save citation": "save", "Find files": "search", "Download selected…": "download",
     "Open selected link": "external-link", "Add file…": "files", "Use existing file": "files",
@@ -61,7 +61,7 @@ BUTTON_ICONS = {
     "Remove saved key": "trash-2",
     "Undo removal": "rotate-ccw",
 }
-ICON_ONLY = {"Settings", "Help", "Copy full path", "More ▾", "Dismiss"}
+ICON_ONLY = {"Settings", "Help", "Copy full path", "More ▾", "Dismiss", "Transfer queue…", "Connection ▾"}
 
 
 def icon(master, name, disabled=False):

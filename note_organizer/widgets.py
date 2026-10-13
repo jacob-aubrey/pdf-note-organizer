@@ -2,8 +2,9 @@
 import tkinter as tk
 from tkinter import ttk, font
 from weakref import WeakSet
-from .icons import Button
+from .icons import Button, menu_action
 from .screens import work_area, popup_position
+from .theme import BACKGROUND, SURFACE, text_options
 
 
 BUTTON_HELP = {
@@ -53,40 +54,137 @@ BUTTON_HELP = {
 }
 
 
+class DataTable(ttk.Treeview):
+    """A table with a quiet empty state that never becomes a selectable row."""
+
+    def __init__(self, parent, empty_text="No items to show", **kwargs):
+        super().__init__(parent, **kwargs)
+        self.empty_label = ttk.Label(self, text=empty_text, style="Empty.TLabel", anchor="center", justify="center")
+        self.bind("<Configure>", self.update_empty, add="+")
+
+    def update_empty(self, event=None):
+        if self.get_children():
+            self.empty_label.place_forget()
+        elif self.winfo_height() > 80:
+            self.empty_label.configure(wraplength=max(60, self.winfo_width() - 40))
+            self.empty_label.place(relx=.5, rely=.5, y=12, anchor="center")
+        else:
+            self.empty_label.place_forget()
+
+    def insert(self, *args, **kwargs):
+        row = super().insert(*args, **kwargs)
+        self.empty_label.place_forget()
+        return row
+
+    def delete(self, *items):
+        super().delete(*items)
+        self.update_empty()
+
+
+class ScrollFrame(ttk.Frame):
+    """A width-fitting form with scrolling and keyboard focus kept in view."""
+
+    def __init__(self, parent, height=440, width=540, padding=14):
+        super().__init__(parent)
+        self.canvas = tk.Canvas(self, height=height, width=width, background=BACKGROUND,
+                                highlightthickness=0, takefocus=False, yscrollincrement=20)
+        self.scroll = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.scroll.pack(side="right", fill="y")
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.canvas.configure(yscrollcommand=self.scroll.set)
+        self.content = ttk.Frame(self.canvas, padding=padding)
+        self.content_id = self.canvas.create_window(0, 0, window=self.content, anchor="nw")
+        self.content.bind("<Configure>", self.update_region)
+        self.canvas.bind("<Configure>", self.resize)
+
+    def update_region(self, event=None):
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def resize(self, event):
+        self.canvas.itemconfigure(self.content_id, width=event.width)
+        self.wrap_labels(self.content, max(80, event.width - 28))
+
+    def wrap_labels(self, parent, width):
+        for widget in parent.winfo_children():
+            if isinstance(widget, ttk.Label) and int(widget.cget("wraplength") or 0):
+                widget.configure(wraplength=width)
+            self.wrap_labels(widget, width)
+
+    def bind_content(self):
+        def wheel(event):
+            if self.canvas.bbox("all")[3] > self.canvas.winfo_height():
+                self.canvas.yview_scroll(-int(event.delta / 120) or (-1 if event.delta > 0 else 1), "units")
+            return "break"
+
+        def reveal(event):
+            widget = event.widget
+            self.update_idletasks()
+            top = widget.winfo_rooty() - self.content.winfo_rooty()
+            bottom = top + widget.winfo_height()
+            visible = self.canvas.canvasy(0)
+            height = self.canvas.winfo_height()
+            total = max(1, self.content.winfo_height())
+            if top < visible:
+                self.canvas.yview_moveto(max(0, top - 8) / total)
+            elif bottom > visible + height:
+                self.canvas.yview_moveto((bottom - height + 8) / total)
+
+        def bind(parent):
+            parent.bind("<FocusIn>", reveal, add="+")
+            if not isinstance(parent, (ttk.Combobox, ttk.Spinbox, tk.Text, tk.Listbox)):
+                parent.bind("<MouseWheel>", wheel, add="+")
+            for child in parent.winfo_children():
+                bind(child)
+        bind(self.content)
+        self.canvas.bind("<MouseWheel>", wheel)
+
+
 class WrapToolbar(ttk.Frame):
     """Flow controls into as many rows as their measured widths require."""
     def __init__(self, parent, gap=8, **kwargs):
         super().__init__(parent, width=1, **kwargs)
         self.gap, self.controls, self.pending, self.layout = gap, [], None, None
+        self.hidden = set()
         self.grid_propagate(False)
         self.bind("<Configure>", self.schedule)
         self.bind("<Destroy>", self.cancel, add="+")
 
-    def add(self, control):
+    def add(self, control, visible=True):
         self.controls.append(control)
+        if not visible:
+            self.hidden.add(control)
         control.bind("<Configure>", self.schedule, add="+")
         self.schedule()
         return control
 
+    def set_visible(self, control, visible):
+        if visible:
+            self.hidden.discard(control)
+        else:
+            self.hidden.add(control)
+            control.place_forget()
+        self.schedule()
+
     def schedule(self, event=None):
         if self.pending is None:
-            self.pending = self.after_idle(self.reflow)
+            self.pending = self._root().after_idle(self.reflow)
 
     def cancel(self, event=None):
         if event is None or event.widget is self:
             if self.pending is not None:
-                self.after_cancel(self.pending)
+                self._root().after_cancel(self.pending)
                 self.pending = None
 
     def reflow(self):
         self.pending = None
-        widths = tuple(control.winfo_reqwidth() for control in self.controls)
-        signature = (self.winfo_width(), widths)
+        controls = [control for control in self.controls if control not in self.hidden]
+        widths = tuple(control.winfo_reqwidth() for control in controls)
+        signature = (self.winfo_width(), tuple(zip(controls, widths)))
         if signature == self.layout:
             return
         self.layout = signature
         column = used = height = row_height = 0
-        for control, width in zip(self.controls, widths):
+        for control, width in zip(controls, widths):
             if column and used + self.gap + width > signature[0]:
                 height += row_height + self.gap
                 column, used, row_height = 0, 0, 0
@@ -211,7 +309,7 @@ class Tooltip:
         maximum_width = max(80, right - left - 16)
         maximum_height = max(40, bottom - top - 16)
         width = min(356, maximum_width)
-        label = ttk.Label(window, text=text, padding=8, wraplength=max(32, width-16), relief="solid")
+        label = ttk.Label(window, text=text, padding=8, wraplength=max(32, width-16), relief="solid", style="Tooltip.TLabel")
         label.pack()
         window.update_idletasks()
         # A long path can need a wider tooltip to remain inside this monitor.
@@ -377,9 +475,7 @@ class ReadOnlyText(ttk.Frame):
         super().__init__(parent)
         self.value = None
         self.text = tk.Text(self, height=height, width=width, wrap="word", state="disabled",
-                            background="#2b2b2b", foreground="#DCE4EE", selectbackground="#1B629B",
-                            selectforeground="white", relief="flat", borderwidth=0,
-                            font=("Segoe UI", 9), padx=6, pady=5, cursor="xterm")
+                            cursor="xterm", **text_options(background=SURFACE, compact=True))
         self.scroll = ttk.Scrollbar(self, orient="vertical", command=self.text.yview)
         self.scroll.pack(side="right", fill="y")
         self.text.pack(fill="both", expand=True)
@@ -387,7 +483,7 @@ class ReadOnlyText(ttk.Frame):
         self.text.bind("<Control-a>", self.select_all)
         self.path_tooltip = PathTextTooltip(self.text)
         self.menu = tk.Menu(self, tearoff=False)
-        self.menu.add_command(label="Copy all text", command=self.copy)
+        menu_action(self.menu, "Copy all text", self.copy)
         self.text.bind("<Button-3>", self.popup)
         self.text.bind("<Shift-F10>", self.popup)
         self.set(textvariable.get() if textvariable is not None else value)
@@ -517,9 +613,12 @@ class SelectionDetails(ttk.Frame):
         super().__init__(parent, padding=(8, 6), style="Card.TFrame")
         self.value = ""
         self.paths = {}
-        header = ttk.Frame(self, style="Card.TFrame")
+        self.compact = False
+        header = self.header = ttk.Frame(self, style="Card.TFrame")
         header.pack(fill="x")
-        ttk.Label(header, text=title, style="CardTitle.TLabel").pack(side="left")
+        title_label = ttk.Label(header, text=title, style="CardTitle.TLabel", width=1)
+        title_label.pack(side="left", fill="x", expand=True)
+        title_label.bind("<Configure>", lambda event: title_label.configure(wraplength=max(40, event.width)))
         self.copy_button = Button(header, text="Copy details", command=self.copy, style="Compact.TButton", state="disabled")
         self.copy_button.pack(side="right")
         Tooltip(self.copy_button, "Copy the complete selected item details, including its paths.")
@@ -532,9 +631,8 @@ class SelectionDetails(ttk.Frame):
         body = self.body = ttk.Frame(self, style="Card.TFrame")
         body.pack(fill="both", expand=True)
         self.text = tk.Text(body, height=height, width=1, wrap="word", state="disabled",
-                            background="#2b2b2b", foreground="#DCE4EE", selectbackground="#1B629B",
-                            selectforeground="white", relief="flat", borderwidth=0,
-                            font=("Segoe UI", 9), padx=0, pady=3, cursor="arrow")
+                            cursor="xterm", **text_options(background=SURFACE, compact=True))
+        self.text.configure(padx=0, pady=3)
         scroll = self.scroll = ttk.Scrollbar(body, orient="vertical", command=self.text.yview)
         scroll.pack(side="right", fill="y")
         self.text.pack(fill="both", expand=True)
@@ -544,6 +642,22 @@ class SelectionDetails(ttk.Frame):
 
     def selected_path(self):
         return self.paths.get(self.path_selector.get(), ("", ""))[0]
+
+    def set_compact(self, compact):
+        if self.compact != compact:
+            self.compact = compact
+            self.arrange()
+
+    def arrange(self):
+        self.header.pack_forget()
+        self.path_row.pack_forget()
+        self.body.pack_forget()
+        if not self.compact:
+            self.header.pack(fill="x")
+        if self.paths:
+            self.path_row.pack(fill="x", pady=(0 if self.compact else 4, 2))
+        if not self.compact or not self.paths:
+            self.body.pack(fill="both", expand=True)
 
     def selected_path_help(self):
         return self.paths.get(self.path_selector.get(), ("", "Choose a location to copy its complete path."))[1]
@@ -563,10 +677,7 @@ class SelectionDetails(ttk.Frame):
         previous = self.path_selector.get()
         self.path_selector.configure(values=list(self.paths))
         self.path_selector.set(previous if previous in self.paths else next(iter(self.paths), ""))
-        if self.paths:
-            self.path_row.pack(fill="x", pady=(4, 2), before=self.body)
-        else:
-            self.path_row.pack_forget()
+        self.arrange()
         self.path_access.refresh()
         self.path_tooltip.set_paths(self.paths)
         self.copy_button.configure(state="normal" if self.value else "disabled")

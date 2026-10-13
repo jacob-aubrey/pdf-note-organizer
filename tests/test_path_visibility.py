@@ -226,7 +226,9 @@ class WorkflowPathVisibilityTests(unittest.TestCase):
         path = str(self.folder / "Research" / "A longer research paper filename with extra details.pdf")
         self.app.inbox_view.original.set(path)
         self.root.update()
-        pane = source.master.master.master
+        pane = source.master
+        while pane is not None and not isinstance(pane, ttk.Panedwindow):
+            pane = pane.master
         self.assertIsInstance(pane, ttk.Panedwindow)
         pane.sashpos(0, pane.winfo_width() - 280)
         self.root.update()

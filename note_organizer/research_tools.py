@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 from .icons import Button
 from .theme import BACKGROUND
-from .widgets import bind_dialog_close, fit_dialog, Tooltip, annotate_buttons
+from .widgets import bind_dialog_close, fit_dialog, Tooltip, annotate_buttons, WrapToolbar
 from .workflow_ui import background
 
 
@@ -85,8 +85,13 @@ def open_labels(app):
             app.refresh_label_choices()
             window.destroy()
         background(app, lambda: save_labels(app.store, paper[0], draft), completed, failed)
-    save = Button(frame, text="Save labels", command=save, state="disabled", style="Primary.TButton")
-    save.pack(anchor="e")
+    actions = ttk.Frame(frame)
+    actions.pack(fill="x")
+    save = Button(actions, text="Save labels", command=save, state="disabled", style="Primary.TButton")
+    save.pack(side="right")
+    cancel = Button(actions, text="Cancel", command=close)
+    cancel.pack(side="right", padx=(0, 8))
+    Tooltip(cancel, "Close without saving changes to this paper's tags and collections.")
     annotate_buttons(window)
     bind_dialog_close(window, close)
     window.protocol("WM_DELETE_WINDOW", close)
@@ -120,8 +125,14 @@ def _window(app, title):
 def open_saved_searches(app):
     window, frame = _window(app, "Saved searches")
     ttk.Label(frame, text="Save search text, fields, note type and collection filter. Searches apply to the folder and paper currently selected.", wraplength=600).pack(anchor="w")
-    listing = tk.Listbox(frame, height=8, exportselection=False)
-    listing.pack(fill="both", expand=True, pady=12)
+    list_frame = ttk.Frame(frame)
+    list_frame.pack(fill="both", expand=True, pady=12)
+    listing = tk.Listbox(list_frame, height=8, exportselection=False)
+    scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=listing.yview)
+    scrollbar.pack(side="right", fill="y")
+    listing.pack(side="left", fill="both", expand=True)
+    listing.configure(yscrollcommand=scrollbar.set)
+    Tooltip(listing, "Select a saved search to apply it, update it with the current search, or delete it.")
     name = tk.StringVar()
     ttk.Label(frame, text="Search name").pack(anchor="w")
     name_entry = ttk.Entry(frame, textvariable=name, width=65)
@@ -138,15 +149,27 @@ def open_saved_searches(app):
         listing.delete(0, "end")
         for key in sorted(records, key=str.casefold):
             listing.insert("end", key)
+        if name.get() in records:
+            index = listing.get(0, "end").index(name.get())
+            listing.selection_set(index)
+            listing.see(index)
         busy[0] = False
-        status.set(f"{len(records)} saved searches")
+        status.set(f"{len(records)} saved search{'' if len(records) == 1 else 'es'}")
+        update_controls()
     def selected():
         return listing.get(listing.curselection()[0]) if listing.curselection() else ""
-    listing.bind("<<ListboxSelect>>", lambda _: name.set(selected()))
+    def update_controls(event=None):
+        if event is not None:
+            name.set(selected())
+        save_button.configure(state="disabled" if busy[0] else "normal")
+        for button in (apply_button, delete_button):
+            button.configure(state="normal" if selected() and not busy[0] else "disabled")
+    listing.bind("<<ListboxSelect>>", update_controls)
     def failed(error):
         busy[0] = False
         if window.winfo_exists():
             status.set(str(error))
+            update_controls()
     def persist(remove=False):
         if busy[0]:
             return
@@ -157,6 +180,7 @@ def open_saved_searches(app):
         draft = {"query": app.search.get(), "mode": app.search_mode, "fields": app.search_fields,
                  "note_type": app.note_type, "scope": app.search_scope.get(), "label": app.label_filter.get()}
         busy[0] = True
+        update_controls()
         def write():
             # Merge at execution time, preserving changes from another window.
             with app.store.connect() as db:
@@ -171,6 +195,8 @@ def open_saved_searches(app):
             return saved
         background(app, write, render, failed)
     def apply():
+        if busy[0]:
+            return
         value = records.get(selected())
         if value is None:
             status.set("Select a saved search first.")
@@ -184,10 +210,14 @@ def open_saved_searches(app):
         app.query_signature = None
         app.refresh_notes()
         window.destroy()
-    controls = ttk.Frame(frame)
+    controls = WrapToolbar(frame)
     controls.pack(fill="x")
-    for title, action in (("Save current search", persist), ("Apply saved search", apply), ("Delete saved search", lambda: persist(True))):
-        Button(controls, text=title, command=action).pack(side="left", padx=(0, 8))
+    save_button = controls.add(Button(controls, text="Save current search", command=persist, state="disabled"))
+    apply_button = controls.add(Button(controls, text="Apply saved search", command=apply, state="disabled", style="Primary.TButton"))
+    delete_button = controls.add(Button(controls, text="Delete saved search", command=lambda: persist(True), state="disabled"))
+    close = Button(frame, text="Close", command=window.destroy)
+    close.pack(anchor="e", pady=(12, 0))
+    Tooltip(close, "Close this window. Saved searches and the current Notes filters stay unchanged.")
     background(app, lambda: app.store.preference("saved_searches", {}), render, failed)
     annotate_buttons(window)
     fit_dialog(window, app.root)

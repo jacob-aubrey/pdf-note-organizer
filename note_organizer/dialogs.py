@@ -8,7 +8,7 @@ from .library_paths import library_diagnostics
 from .theme import BACKGROUND
 from .viewers import VIEWERS, find_viewer
 from .icons import Button
-from .widgets import Tooltip, PathField, SelectionDetails, annotate_buttons, bind_dialog_close, fit_dialog
+from .widgets import Tooltip, PathField, SelectionDetails, ScrollFrame, WrapToolbar, annotate_buttons, bind_dialog_close, fit_dialog
 
 
 class ProcessingFields:
@@ -113,37 +113,22 @@ class PreferencesDialog:
         frame.pack(fill="both", expand=True)
         self.tabs = tabs = ttk.Notebook(frame)
         tabs.pack(fill="both", expand=True)
-        general = ttk.Frame(tabs, padding=14)
-        library = ttk.Frame(tabs, padding=14)
-        tabs.add(general, text="Preferences")
-        tabs.add(library, text="Library & diagnostics")
+        self.form_pages = []
+        def page(title):
+            form = ScrollFrame(tabs)
+            tabs.add(form, text=title)
+            self.form_pages.append(form)
+            return form.content
+        general = page("Preferences")
+        library = page("Library & diagnostics")
         self.sorting = self.integration = None
         if hasattr(app, "inbox"):
             from .workflow_ui import SortingFields, IntegrationFields
-            self.sorting_tab = sorting_tab = ttk.Frame(tabs)
-            connections_tab = ttk.Frame(tabs, padding=14)
-            tabs.add(sorting_tab, text="Sorting")
-            tabs.add(connections_tab, text="Connections")
-            self.sorting_canvas = canvas = tk.Canvas(sorting_tab, height=min(500, max(280, window.winfo_screenheight()-260)),
-                                                     width=540, background=BACKGROUND, highlightthickness=0)
-            scrollbar = ttk.Scrollbar(sorting_tab, orient="vertical", command=canvas.yview)
-            scrollbar.pack(side="right", fill="y")
-            canvas.pack(side="left", fill="both", expand=True)
-            canvas.configure(yscrollcommand=scrollbar.set)
-            sorting_content = ttk.Frame(canvas, padding=14)
-            content_id = canvas.create_window(0, 0, window=sorting_content, anchor="nw")
-            sorting_content.bind("<Configure>", lambda event: canvas.configure(scrollregion=canvas.bbox("all")))
-            canvas.bind("<Configure>", lambda event: canvas.itemconfigure(content_id, width=event.width))
+            sorting_content = page("Sorting")
+            self.sorting_tab = self.form_pages[-1]
+            self.sorting_canvas = self.sorting_tab.canvas
+            connections_tab = page("Connections")
             self.sorting = SortingFields(app, sorting_content)
-            def wheel(event):
-                canvas.yview_scroll(-int(event.delta / 120), "units")
-                return "break"
-            def bind_wheel(widget):
-                if not isinstance(widget, ttk.Combobox):
-                    widget.bind("<MouseWheel>", wheel, add="+")
-                for child in widget.winfo_children():
-                    bind_wheel(child)
-            bind_wheel(canvas)
             self.integration = IntegrationFields(app, connections_tab)
         Tooltip(tabs, "Preferences sets the PDF viewer and defaults for future folders. Sorting configures filing and optional naming services; Connections enables optional reMarkable features. Library & diagnostics identifies saved libraries.")
         ttk.Label(general, text="PDF viewer", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
@@ -154,13 +139,13 @@ class PreferencesDialog:
         self.viewer_path = tk.StringVar(value=app.viewer_preference.get("path", ""))
         row = ttk.Frame(general)
         row.pack(fill="x", pady=8)
-        self.path_entry = ttk.Entry(row, textvariable=self.viewer_path, width=43)
-        self.path_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.path_entry = ttk.Entry(row, textvariable=self.viewer_path, width=1)
         self.browse_button = Button(row, text="Browse…", command=self.browse_viewer)
-        self.browse_button.pack(side="left")
+        self.browse_button.pack(side="right")
         self.viewer_path_access = PathField(self.path_entry, "For Other application, enter the full path to its .exe file.")
         self.viewer_path_copy = self.viewer_path_access.add_copy_button(row)
-        self.viewer_path_copy.pack(side="left", padx=(0, 8), before=self.browse_button)
+        self.viewer_path_copy.pack(side="right", padx=(0, 8))
+        self.path_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
         Tooltip(self.browse_button, "Choose Other application first, then select its PDF viewer executable.")
         self.viewer_help = tk.StringVar()
         ttk.Label(general, textvariable=self.viewer_help, wraplength=510, style="Muted.TLabel").pack(anchor="w", pady=(0, 14))
@@ -175,7 +160,7 @@ class PreferencesDialog:
         ttk.Label(library, text="Active library", style="Section.TLabel").pack(anchor="w")
         library_path_row = ttk.Frame(library)
         library_path_row.pack(fill="x", pady=8)
-        self.library_path_entry = ttk.Entry(library_path_row, width=65)
+        self.library_path_entry = ttk.Entry(library_path_row, width=1)
         self.library_path_entry.insert(0, str(app.data_dir.resolve()))
         self.library_path_entry.configure(state="readonly")
         self.library_path_entry.pack(side="left", fill="x", expand=True)
@@ -183,15 +168,14 @@ class PreferencesDialog:
             "This window reads and writes this library. Launching a different library preserves its separate notes and settings.")
         self.library_path_copy = self.library_path_access.add_copy_button(library_path_row)
         self.library_path_copy.pack(side="left", padx=(8, 0))
-        actions = ttk.Frame(library)
+        actions = WrapToolbar(library)
         actions.pack(fill="x", pady=(0, 12))
         for label, action, help_text in [
             ("Open data folder", lambda: app.open_path(app.data_dir), "Open the active library's database, cache and log directory."),
             ("Library storage & backups…", lambda: app.storage_maintenance(), "Create or restore a verified backup and reclaim database storage while preserving history."),
             ("Show sync details", app.show_sync_details, "Open the latest processing log in Library."),
         ]:
-            button = Button(actions, text=label, command=action)
-            button.pack(side="left", padx=(0, 8))
+            button = actions.add(Button(actions, text=label, command=action))
             Tooltip(button, help_text)
         self.diagnostics = tk.StringVar(value="Checking saved libraries…")
         self.diagnostic_paths = {}
@@ -209,14 +193,17 @@ class PreferencesDialog:
         buttons = ttk.Frame(frame)
         # Reserve the actions before the expanding notebook on shorter screens.
         buttons.pack(side="bottom", fill="x", pady=(14, 0), before=status)
-        Button(buttons, text="Cancel", command=self.cancel).pack(side="right")
+        cancel = Button(buttons, text="Cancel", command=self.cancel)
         self.save_button = apply = Button(buttons, text="Save preferences", command=self.save, style="Primary.TButton")
-        apply.pack(side="right", padx=8)
+        apply.pack(side="right")
+        cancel.pack(side="right", padx=(0, 8))
         Tooltip(apply, "Save the edited preferences, Sorting settings and Connections switches. Pending Gemini key removal becomes permanent and turns Gemini off. Existing watched folders keep their processing settings.")
         Tooltip(buttons.winfo_children()[0], "Close without saving draft edits, including pending Gemini key removal. Your saved key stays unchanged. Preferences already being saved must finish first.")
         annotate_buttons(window)
+        for form in self.form_pages:
+            form.bind_content()
         fit_dialog(window, app.root)
-        window.resizable(False, False)
+        window.minsize(window.winfo_width(), min(400, window.winfo_height()))
 
     def browse_viewer(self):
         path = filedialog.askopenfilename(parent=self.window, title="Choose PDF viewer application", filetypes=[("Windows application", "*.exe")])

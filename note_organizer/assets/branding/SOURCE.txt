@@ -1,0 +1,13 @@
+Notable application icon
+
+Lucide notebook-pen, ISC licensed.
+https://lucide.dev/icons/notebook-pen
+https://github.com/lucide-icons/lucide
+Pinned revision: f12b0de177fbc2a6795e99be065887e72b237123
+Original: ../icons/notebook-pen.svg
+License and copyright notices: ../icons/LICENSE.txt
+
+Adaptation: white glyph on a solid Notable blue rounded tile.
+Reproduce from the project root: .venv/Scripts/python.exe scripts/build_app_icon.py
+Outputs: notable.png (256px), notable-64.png (64px), and ../../../Note icon.ico
+ICO sizes: 16, 20, 24, 32, 40, 48, 64, 128, 256 pixels.

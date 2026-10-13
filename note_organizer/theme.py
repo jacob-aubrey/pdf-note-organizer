@@ -1,9 +1,5 @@
-"""Paper Sorter's dark charcoal / CustomTkinter blue palette, on native ttk.
-
-Values come from C:/Paper Sorter/src/app.py and CustomTkinter's blue theme.
-No dependency on the other application, its settings, or a new UI toolkit.
-"""
-from tkinter import ttk
+"""Shared colors, typography and interaction states for Notable's Tk UI."""
+from tkinter import ttk, font
 from PIL import Image, ImageDraw, ImageTk
 
 BACKGROUND = "#242424"
@@ -16,29 +12,51 @@ BLUE = "#1B629B"
 HOVER = "#144870"
 PRESSED = "#103B5C"
 BORDER = "#565B5E"
+FOCUS = "#87C5F5"
+ERROR = "#FFB4AB"
+SUCCESS = "#A8D5BA"
+FONT = ("Segoe UI", 10)
+SMALL_FONT = ("Segoe UI", 9)
 
 
 def apply_theme(root):
     root.configure(background=BACKGROUND)
+    for pattern, value in {
+        "*Menu.background": SURFACE, "*Menu.foreground": TEXT,
+        "*Menu.activeBackground": BLUE, "*Menu.activeForeground": "white",
+        "*Menu.disabledForeground": MUTED, "*Menu.selectColor": TEXT,
+        "*Menu.font": FONT, "*Menu.borderWidth": 0, "*Menu.activeBorderWidth": 0,
+        "*Listbox.background": PANEL, "*Listbox.foreground": TEXT,
+        "*Listbox.selectBackground": BLUE, "*Listbox.selectForeground": "white",
+        "*Listbox.font": FONT, "*Listbox.borderWidth": 0,
+        "*Listbox.highlightBackground": BORDER, "*Listbox.highlightColor": FOCUS,
+        "*Listbox.highlightThickness": 1,
+    }.items():
+        root.option_add(pattern, value)
     root.option_add("*TCombobox*Listbox.background", FIELD)
     root.option_add("*TCombobox*Listbox.foreground", TEXT)
     root.option_add("*TCombobox*Listbox.selectBackground", BLUE)
     root.option_add("*TCombobox*Listbox.selectForeground", TEXT)
     style = ttk.Style(root)
     style.theme_use("clam")
-    style.configure(".", background=BACKGROUND, foreground=TEXT, font=("Segoe UI", 10), bordercolor=BORDER,
+    style.configure(".", background=BACKGROUND, foreground=TEXT, font=FONT, bordercolor=BORDER,
                     darkcolor=BACKGROUND, lightcolor=BACKGROUND, troughcolor=PANEL)
     style.configure("TFrame", background=BACKGROUND)
     style.configure("TLabelframe", background=BACKGROUND, bordercolor=BORDER, relief="flat")
     style.configure("TLabelframe.Label", background=BACKGROUND, foreground=MUTED, font=("Segoe UI", 10, "bold"))
     style.configure("TLabel", background=BACKGROUND, foreground=TEXT)
     style.configure("Muted.TLabel", foreground=MUTED)
+    style.configure("Error.TLabel", foreground=ERROR)
+    style.configure("Success.TLabel", foreground=SUCCESS)
+    style.configure("Empty.TLabel", background=PANEL, foreground=MUTED)
+    style.configure("Tooltip.TLabel", background=SURFACE, foreground=TEXT, bordercolor=BORDER, font=SMALL_FONT)
     style.configure("Title.TLabel", font=("Segoe UI", 18, "bold"))
     style.configure("Section.TLabel", font=("Segoe UI", 12, "bold"))
     style.configure("TButton", background=BACKGROUND, foreground=TEXT, padding=(12, 7), width=0,
                     borderwidth=0, focusthickness=1, focuscolor=TEXT)
     style.map("TButton", background=[("disabled", BACKGROUND), ("pressed", BACKGROUND), ("active", BACKGROUND)],
               foreground=[("disabled", MUTED)])
+    style.configure("Primary.TButton", foreground="white", focuscolor="white")
     # Nine-slice images retain rounded corners while buttons grow with their labels.
     root._button_images = []
     for color in (FIELD, BORDER, SURFACE, SURFACE, BLUE, HOVER, PRESSED, SURFACE):
@@ -64,33 +82,49 @@ def apply_theme(root):
     for name in ("TEntry", "TCombobox", "TSpinbox"):
         style.configure(name, fieldbackground=FIELD, foreground=TEXT, insertcolor=TEXT,
                         background=FIELD, bordercolor=BORDER, arrowcolor=TEXT, padding=5)
-        style.map(name, fieldbackground=[("readonly", FIELD), ("disabled", BACKGROUND)],
-                  foreground=[("readonly", TEXT), ("disabled", MUTED)], selectbackground=[("!disabled", BLUE)],
-                  selectforeground=[("!disabled", TEXT)])
+        style.map(name, fieldbackground=[("disabled", BACKGROUND), ("readonly", FIELD)],
+                  foreground=[("disabled", MUTED), ("readonly", TEXT)], selectbackground=[("!disabled", BLUE)],
+                  selectforeground=[("!disabled", "white")],
+                  bordercolor=[("disabled", SURFACE), ("focus", FOCUS), ("!focus", BORDER)],
+                  lightcolor=[("focus", FOCUS), ("!focus", FIELD)],
+                  darkcolor=[("focus", FOCUS), ("!focus", FIELD)],
+                  arrowcolor=[("disabled", MUTED), ("!disabled", TEXT)])
     style.configure("Card.TFrame", background=SURFACE)
     style.configure("CardTitle.TLabel", background=SURFACE, foreground=MUTED, font=("Segoe UI", 9, "bold"))
     style.configure("Quiet.TButton", padding=(9, 6))
-    style.configure("Compact.TButton", padding=(5, 3))
+    style.configure("Compact.TButton", padding=(6, 5))
+    line_height = font.Font(root=root, font=FONT).metrics("linespace")
+    style.configure("TPanedwindow", background=BACKGROUND)
+    style.configure("Sash", sashthickness=6, gripcount=0)
     style.configure("Treeview", background=PANEL, fieldbackground=PANEL, foreground=TEXT,
-                    rowheight=30, borderwidth=0)
-    style.map("Treeview", background=[("selected", BLUE)], foreground=[("selected", "#ffffff")])
+                    rowheight=max(30, line_height + 12), borderwidth=0)
+    style.map("Treeview", background=[("selected", BLUE)], foreground=[("selected", "white")],
+              bordercolor=[("focus", FOCUS), ("!focus", BORDER)])
     style.configure("Treeview.Heading", background=SURFACE, foreground=TEXT, padding=(8, 8), relief="flat", font=("Segoe UI", 10, "bold"))
     style.map("Treeview.Heading", background=[("active", FIELD)])
     style.configure("TNotebook", background=BACKGROUND, borderwidth=0)
     style.configure("TNotebook.Tab", background=SURFACE, foreground=MUTED, padding=(16, 8))
-    style.map("TNotebook.Tab", background=[("selected", BLUE), ("active", FIELD)], foreground=[("selected", TEXT)],
+    style.map("TNotebook.Tab", background=[("selected", BLUE), ("active", FIELD)], foreground=[("selected", "white")],
               padding=[("selected", (16, 8))], expand=[("selected", (0, 0, 0, 0))],
               lightcolor=[("selected", BLUE), ("!selected", SURFACE)],
               bordercolor=[("selected", BLUE), ("!selected", SURFACE)])
-    style.configure("TCheckbutton", background=BACKGROUND, foreground=TEXT, indicatorbackground=FIELD, indicatorforeground=TEXT)
-    style.map("TCheckbutton", background=[("active", BACKGROUND)], indicatorbackground=[("selected", BLUE)])
+    for name in ("TCheckbutton", "TRadiobutton"):
+        style.configure(name, background=BACKGROUND, foreground=TEXT, indicatorbackground=FIELD,
+                        indicatorforeground="white", focuscolor=FOCUS, padding=(0, 3))
+        style.map(name, background=[("active", BACKGROUND)], foreground=[("disabled", MUTED)],
+                  indicatorbackground=[("disabled", SURFACE), ("selected", BLUE), ("active", BORDER)],
+                  indicatorforeground=[("disabled", MUTED), ("!disabled", "white")])
+    for name in ("Horizontal.TProgressbar", "Vertical.TProgressbar"):
+        style.configure(name, background=BLUE, troughcolor=PANEL, borderwidth=0, lightcolor=BLUE, darkcolor=BLUE)
+    style.configure("TSeparator", background=BORDER)
     for name in ("Vertical.TScrollbar", "Horizontal.TScrollbar"):
         style.configure(name, background=BORDER, arrowcolor=TEXT, borderwidth=0, troughcolor=PANEL)
         style.map(name, background=[("active", MUTED)])
     return style
 
 
-def text_options():
-    return dict(background=PANEL, foreground=TEXT, insertbackground=TEXT,
+def text_options(*, background=PANEL, compact=False):
+    return dict(background=background, foreground=TEXT, insertbackground=TEXT,
                 selectbackground=BLUE, selectforeground="white", relief="flat", borderwidth=0,
-                padx=12, pady=10, font=("Segoe UI", 10))
+                padx=6 if compact else 12, pady=5 if compact else 10,
+                font=SMALL_FONT if compact else FONT)

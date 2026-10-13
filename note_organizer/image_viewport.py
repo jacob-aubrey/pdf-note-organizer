@@ -6,6 +6,7 @@ import sys
 
 from PIL import Image, ImageTk
 from .clipboard import copy_image
+from .icons import menu_action
 
 
 class ImageCanvas(tk.Canvas):
@@ -20,7 +21,7 @@ class ImageCanvas(tk.Canvas):
         self.pan_cursor = self.grabbing_cursor()
         self.status = status
         self.copy_menu = tk.Menu(self, tearoff=False)
-        self.copy_menu.add_command(label="Copy image", command=self.copy_original)
+        menu_action(self.copy_menu, "Copy image", self.copy_original)
         self.bind("<<Copy>>", self.copy_original)
         self.bind("<Button-3>", self.show_copy_menu)
         self.bind("<Shift-F10>", self.show_copy_menu)
@@ -95,7 +96,7 @@ class ImageCanvas(tk.Canvas):
         width, height = max(1, round(image.width * self.zoom)), max(1, round(image.height * self.zoom))
         if getattr(self, "display_size", None) != (width, height):
             fitted = image if image.size == (width, height) else image.resize((width, height), Image.Resampling.LANCZOS)
-            self.image = ImageTk.PhotoImage(fitted)
+            self.image = ImageTk.PhotoImage(fitted, master=self)
             if self.image_item is None:
                 self.image_item = self.create_image(0, 0, image=self.image, anchor="nw")
             else:

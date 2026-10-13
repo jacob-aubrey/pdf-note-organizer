@@ -14,6 +14,27 @@ class ResponsivePreviewTests(unittest.TestCase):
     setUp = test_ui_audit.UIAuditTests.setUp
     tearDown = test_ui_audit.UIAuditTests.tearDown
 
+    def test_hidden_toolbar_actions_reflow_and_cancel_cleanly_at_shutdown(self):
+        window = tk.Toplevel(self.root)
+        toolbar = WrapToolbar(window)
+        toolbar.pack(fill="x")
+        first = toolbar.add(ttk.Button(toolbar, text="First action"))
+        second = toolbar.add(ttk.Button(toolbar, text="Second action"), visible=False)
+        self.root.update()
+        self.assertTrue(first.winfo_manager())
+        self.assertFalse(second.winfo_manager())
+        toolbar.set_visible(second, True)
+        self.root.update()
+        self.assertTrue(second.winfo_manager())
+        toolbar.set_visible(first, False)
+        self.root.update()
+        self.assertFalse(first.winfo_manager())
+        self.assertEqual(second.winfo_x(), 0)
+        toolbar.schedule()
+        self.root.after_cancel(toolbar.pending)
+        window.destroy()
+        self.assertFalse(self.errors)
+
     def test_image_follows_complete_text_and_shares_its_scrollbar(self):
         app = self.app
         app.query_cancel.set()

@@ -8,11 +8,13 @@ from tkinter import messagebox
 from . import APP_NAME
 from .library_paths import resolve_data_directory, should_import_legacy
 from .storage import Store
+from .branding import set_process_identity, apply_app_icon
 
 
 def main():
     from multiprocessing import freeze_support
     freeze_support()
+    set_process_identity()
     root_dir = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent
     data = resolve_data_directory(root_dir)
     data.mkdir(parents=True, exist_ok=True)
@@ -30,6 +32,7 @@ def main():
     except OSError:
         root = tk.Tk()
         root.withdraw()
+        apply_app_icon(root)
         messagebox.showinfo(APP_NAME, f"{APP_NAME} is already running.")
         root.destroy()
         lock.close()
@@ -46,9 +49,6 @@ def main():
     app = None
     try:
         from .ui import App
-        icon = Path(getattr(sys, "_MEIPASS", root_dir)) / "Note icon.ico"
-        if icon.exists():
-            root.iconbitmap(str(icon))
         store = Store(data / "library.sqlite3")
         if should_import_legacy(data, root_dir):
             store.import_legacy([root_dir / "notes_watcher.db", root_dir / "dist" / "notes_watcher.db", root_dir.parent / "notes_watcher.db"])

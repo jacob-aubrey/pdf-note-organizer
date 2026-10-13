@@ -392,7 +392,8 @@ class UIPolishTests(unittest.TestCase):
         app.cloud_selection_changed()
         self.root.update()
         self.assertTrue(app.mapping_details.winfo_ismapped())
-        self.assertGreater(app.mapping_details.text.winfo_height(), 15)
+        detail_control = app.mapping_details.path_selector if app.mapping_details.compact else app.mapping_details.text
+        self.assertGreater(detail_control.winfo_height(), 15)
         self.assertGreater(app.cloud_folders.winfo_height(), 40)
         self.show(app.library_tab)
         for button in app.library_actions:

@@ -13,6 +13,8 @@ This README starts with setup and ordinary use. The [existing-library cleanup wa
 
 The current version is **Notable 2.5.0**. This release adds verified backup and recovery, history-preserving storage compaction, indexed PDF search, tags and research collections, saved searches, an accessible reading view, explicit citation conflict review and faster background PDF scheduling. The [implementation report](AUDIT_IMPLEMENTATION.md) maps the audit recommendations to the changes and verification.
 
+The [October 13 interface audit](UI_AUDIT_2026-10-13.md) documents the consistency and layout polish, scrollable Settings and Inbox forms, responsive action rows, readable tables and the new open-source notebook-and-pen app icon. Short Library panes condense details to their path controls; enlarge the pane to restore the full explanation and Copy details action.
+
 ## Set up and open the source app
 
 ### First setup on Windows

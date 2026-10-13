@@ -6,7 +6,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from .icons import Button, icon
 from .theme import BACKGROUND
-from .widgets import Tooltip, PathField, ReadOnlyText, annotate_buttons, bind_dialog_close
+from .widgets import Tooltip, PathField, ReadOnlyText, ScrollFrame, WrapToolbar, annotate_buttons, bind_dialog_close
 
 
 def background(app, function, success, error=None):
@@ -49,50 +49,67 @@ class InboxView:
         self.proposal = ""
         self.retry_available = False
         self.generation = 0
-        toolbar = ttk.Frame(parent)
+        ttk.Label(parent, text="Incoming documents", style="Section.TLabel").pack(anchor="w", pady=(0, 10))
+        toolbar = WrapToolbar(parent)
         toolbar.pack(fill="x", pady=(0, 12))
         setup = Button(toolbar, text="Set up Inbox…", command=lambda: app.setup_inbox())
-        setup.pack(side="right")
         Tooltip(setup, "Choose incoming documents and library folders directly in Sorting settings.")
-        app.more_button(toolbar, [("Filing recovery…", app.filing_recovery), ("Review library…", app.review_library)]).pack(side="right", padx=(0, 8))
+        more = app.more_button(toolbar, [("Filing recovery…", app.filing_recovery), ("Review library…", app.review_library)])
         for label, action in (("Add documents…", self.add_documents),
                               ("Refresh inbox", self.refresh),
                               ("Open inbox", lambda: self.open_folder("watch_folder"))):
             button = Button(toolbar, text=label, command=action)
-            button.pack(side="left", padx=(0, 8))
+            toolbar.add(button)
             Tooltip(button, {"Add documents…": "Copy PDF, Word (.docx), or PowerPoint (.ppt/.pptx) documents into your inbox for review. The source files stay where they are. Dropping documents onto the list also copies them.",
                              "Refresh inbox": "Check for finished downloads and changes to documents in the inbox. A file must stop changing before it can be reviewed. This check does not name, file, or upload documents.",
                              "Open inbox": "Open the configured incoming-document folder.",
                              "Filing recovery…": "Inspect copies retained after interrupted filing. Open both locations before deciding how to organize the copies.",
                              "Review library…": "Find duplicate papers and compare PC and saved tablet information without changing files."}[label])
+        toolbar.add(more)
+        toolbar.add(setup)
         self.summary = tk.StringVar(value="Choose an inbox and library in Settings → Sorting, or import your sorter settings.")
         summary = ttk.Label(parent, textvariable=self.summary, style="Muted.TLabel", wraplength=900)
         summary.pack(fill="x", pady=(0, 12))
         summary.bind("<Configure>", lambda event: summary.configure(wraplength=max(120, event.width)))
         Tooltip(summary, lambda: self.summary.get())
+        locations = ttk.Frame(parent)
+        locations.pack(fill="x", pady=(0, 10))
+        self.location_variables = {}
+        for index, (key, label) in enumerate((("watch_folder", "Inbox"), ("library_root", "Library"))):
+            column = index * 3
+            ttk.Label(locations, text=label).grid(row=0, column=column, padx=(0 if index == 0 else 16, 8))
+            variable = self.location_variables[key] = tk.StringVar()
+            entry = ttk.Entry(locations, textvariable=variable, state="readonly", width=1)
+            entry.grid(row=0, column=column+1, sticky="ew")
+            locations.columnconfigure(column+1, weight=1)
+            access = PathField(entry, "Incoming documents wait here for review." if key == "watch_folder" else "Reviewed documents are filed inside this library root.")
+            access.add_copy_button(locations).grid(row=0, column=column+2, padx=(6, 0))
         pane = ttk.Panedwindow(parent, orient="horizontal")
         pane.pack(fill="both", expand=True)
         listing = ttk.Frame(pane, width=440)
         pane.add(listing, weight=1)
-        controls = ttk.Frame(listing)
+        controls = WrapToolbar(listing)
         controls.pack(fill="x", pady=(0, 8))
         self.review_button = Button(controls, text="Review selected", command=self.review, style="Primary.TButton")
-        self.review_button.pack(side="left")
+        controls.add(self.review_button)
         Tooltip(self.review_button, "Identify the selected finished document using your naming settings, then suggest an editable filename. Review the name and destination before filing; this action does not move or upload the document.")
         self.skip_button = Button(controls, text="Skip", command=self.skip)
-        self.skip_button.pack(side="left", padx=8)
+        controls.add(self.skip_button)
         Tooltip(self.skip_button, "Leave this document in the inbox and set it aside until its contents change.")
         self.retry_button = Button(controls, text="Retry lookup", command=lambda: self.review(force=True))
-        self.retry_button.pack(side="left")
+        controls.add(self.retry_button)
         Tooltip(self.retry_button, "Available after a Gemini identification failure. Try the lookup again using your current naming permissions. A filename you edited is kept; the new metadata appears below.")
-        self.tree = app.tree(listing, [("name", "Document", 265), ("state", "Status", 150)], content_columns=())
+        self.tree = app.tree(listing, [("name", "Document", 265), ("state", "Status", 150)], content_columns=(), empty_text="No incoming documents")
         self.tree.bind("<<TreeviewSelect>>", self.selected)
         self.tree.bind("<Double-1>", lambda _: self.review())
         self.tree.tooltip.value = lambda row, column: row if column == "name" else self.tree.set(row, column)
         self.tree.tooltip.extra = self.item_help
-        editor = ttk.Frame(pane, padding=(16, 0, 0, 0), width=490)
-        pane.add(editor, weight=1)
-        ttk.Label(editor, text="Review filename & destination", style="Section.TLabel").pack(anchor="w", pady=(0, 12))
+        self.editor_form = ScrollFrame(pane, width=490, height=1, padding=(16, 0, 0, 0))
+        editor = self.editor_form.content
+        pane.add(self.editor_form, weight=1)
+        editor_heading = ttk.Label(editor, text="Review filename & destination", style="Section.TLabel")
+        editor_heading.pack(fill="x", pady=(0, 12))
+        editor_heading.bind("<Configure>", lambda event: editor_heading.configure(wraplength=max(100, event.width)))
         self.original = tk.StringVar(value="Select a document in the inbox.")
         original_row = ttk.Frame(editor)
         original_row.pack(fill="x", pady=(0, 12))
@@ -130,6 +147,7 @@ class InboxView:
         self.details_display = ReadOnlyText(editor, height=12)
         self.details_display.pack(fill="both", expand=True)
         self.details = self.details_display.text
+        self.editor_form.bind_content()
         app.initial_split(pane, .48)
         self.update_controls()
         if hasattr(app.root, "drop_target_register"):
@@ -165,8 +183,10 @@ class InboxView:
         self.app.update_rows(self.tree, [(row["path"], (row.get("name", Path(row["path"]).name),
                              row.get("status", "Waiting for review").replace("_", " ").capitalize())) for row in rows])
         config = self.config()
+        for key, variable in self.location_variables.items():
+            variable.set(config.get(key, ""))
         if config.get("watch_folder"):
-            self.summary.set(f"{len(rows)} documents · Inbox: {config['watch_folder']}\nLibrary: {config.get('library_root', '')} · "
+            self.summary.set(f"{len(rows)} document{'' if len(rows) == 1 else 's'} · "
                              + ("Automatic inbox checks on" if config.get("enabled") else "Automatic inbox checks off; Refresh inbox checks on demand"))
         self.selected()
 
@@ -339,7 +359,7 @@ class SortingFields:
             ttk.Label(parent, text=label).pack(anchor="w")
             row = ttk.Frame(parent)
             row.pack(fill="x", pady=(4, 10))
-            entry = self.folder_entries[label] = ttk.Entry(row, textvariable=variable, width=60)
+            entry = self.folder_entries[label] = ttk.Entry(row, textvariable=variable, width=1)
             entry.pack(side="left", fill="x", expand=True)
             path_access = PathField(entry, "Folder where new downloads wait for naming and filing. The app checks documents directly in this folder, not its subfolders. Keep it separate from the library root." if variable is self.watch else
                     "Top folder containing your sorted documents. Choose a destination beneath this root for each document. Keep it separate from the incoming folder; neither folder may contain the other.")

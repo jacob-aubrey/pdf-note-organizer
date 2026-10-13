@@ -58,7 +58,7 @@ class SearchLabelTests(unittest.TestCase):
         self.app.refresh()
         settle_library(self.app, self.root)
         self.app.search.set("cobalt")
-        self.wait(lambda: self.app.note_count.get() == "1 notes")
+        self.wait(lambda: self.app.note_count.get() == "1 note")
         self.assertEqual([entry["key"] for entry in self.app.entries], ["one"])
         self.app.search.set("")
         self.wait(lambda: self.app.note_count.get() == "2 notes")

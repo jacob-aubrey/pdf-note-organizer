@@ -75,10 +75,10 @@ class ResearchUITests(unittest.TestCase):
             app.open_source()
         opened.assert_called_once_with(app.entries[1]["path"], 1)
         app.search_scope.set("PDFs")
-        self.wait(lambda: app.note_count.get() == "1 results")
+        self.wait(lambda: app.note_count.get() == "1 result")
         self.assertTrue(app.export_button.instate(["disabled"]))
         app.search_scope.set("Notes")
-        self.wait(lambda: app.note_count.get() == "1 notes")
+        self.wait(lambda: app.note_count.get() == "1 note")
 
     def test_citation_draft_cancel_and_save_are_separate(self):
         _, document_id = self.paper()

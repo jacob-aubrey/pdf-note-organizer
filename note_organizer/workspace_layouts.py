@@ -13,24 +13,20 @@ class WorkspaceLayouts:
     def build_library(self):
         tab = self.library_tab
         heading = ttk.Frame(tab)
-        heading.pack(fill="x", pady=(0, 12))
+        heading.pack(fill="x", pady=(0, 8))
         ttk.Label(heading, text="Your PDF library", style="Section.TLabel").pack(side="left")
         Button(heading, text="Add folder…", command=self.add).pack(side="right")
         self.more_button(heading, [("Library storage & backups…", self.storage_maintenance)]).pack(side="right", padx=8)
         review_library = Button(heading, text="Review library…", command=self.review_library)
         review_library.pack(side="right", padx=8)
         Tooltip(review_library, "Find duplicate papers and folder differences using local files and saved tablet information. Review proposed links before changing anything.")
-        guidance = ttk.Label(tab, text="Combining existing libraries? Review library checks duplicate papers and folder differences before you enable transfers.",
-                             style="Muted.TLabel", wraplength=900)
-        guidance.pack(fill="x", pady=(0, 10))
-        guidance.bind("<Configure>", lambda event: guidance.configure(wraplength=max(100, event.width)))
         self.build_feedback(tab, "library")
         self.library_actions = []
         self.local_sync_summary = tk.StringVar()
         self.location = tk.StringVar()
         # Sync status and its expandable log stay together below the workspace.
-        self.library_sync = ttk.Frame(tab, padding=(10, 8), style="Card.TFrame")
-        self.library_sync.pack(side="bottom", fill="x", pady=(12, 0))
+        self.library_sync = ttk.Frame(tab, padding=(10, 6), style="Card.TFrame")
+        self.library_sync.pack(side="bottom", fill="x", pady=(8, 0))
         sync_row = ttk.Frame(self.library_sync, style="Card.TFrame")
         sync_row.pack(fill="x")
         Button(sync_row, text="Sync PDFs", command=self.service.request_sync).pack(side="right")
@@ -54,18 +50,22 @@ class WorkspaceLayouts:
         log_body = ttk.Frame(self.activity_frame)
         log_body.pack(fill="both", expand=True)
         self.activity = tk.Text(log_body, height=5, wrap="word", state="disabled", **text_options())
+        self.activity.configure(pady=4)
         self.activity_path_tooltip = PathTextTooltip(self.activity)
         log_scroll = ttk.Scrollbar(log_body, orient="vertical", command=self.activity.yview)
         log_scroll.pack(side="right", fill="y")
         self.activity.pack(fill="both", expand=True)
         self.activity.configure(yscrollcommand=log_scroll.set)
+        def size_activity(event):
+            self.activity.configure(height=1 if event.height < 600 else 5)
+        tab.bind("<Configure>", size_activity, add="+")
         self.library_pane = ttk.Panedwindow(tab, orient="horizontal")
         self.library_pane.pack(fill="both", expand=True)
         folders = ttk.Frame(self.library_pane, width=280, height=300, padding=(0, 0, 14, 0))
         folders.pack_propagate(False)
         ttk.Label(folders, text="Watched folders", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
         folder_actions = ttk.Frame(folders)
-        folder_actions.pack(fill="x", pady=(0, 10))
+        folder_actions.pack(fill="x", pady=(0, 8))
         self.folder_actions_button = settings = self.more_button(folder_actions, [("Folder settings", self.settings),
             ("Locate moved folder…", self.locate_folder), ("Rebuild notebook…", self.rebuild),
             ("Remove folder…", self.remove)], text="Folder actions ▾")
@@ -74,17 +74,23 @@ class WorkspaceLayouts:
         self.library_actions.append(settings)
         self.library_folder_button = Button(folder_actions, text="Open folder", command=self.open_selected_folder, state="disabled")
         self.library_folder_button.grid(row=1, column=0, sticky="w", pady=(8, 0))
+        folder_action_width = settings.winfo_reqwidth() + self.library_folder_button.winfo_reqwidth() + 8
+        def arrange_folder_actions(event):
+            compact = event.width < folder_action_width
+            self.library_folder_button.configure(compound="image" if compact else "left",
+                                                  style="Compact.TButton" if compact else "TButton")
+            self.library_folder_button.grid_configure(row=0, column=1, padx=(8, 0), pady=0)
+        folder_actions.bind("<Configure>", arrange_folder_actions)
         Tooltip(self.library_folder_button, lambda: f"{self.selected_project()['root']}\n\nOpen the selected watched folder in File Explorer." if not self.library_folder_button.instate(["disabled"]) and self.selected_project() else
                 "Select an available watched folder. For a moved folder, right-click it and choose Locate moved folder.")
         self.folder_details = SelectionDetails(folders, "Watched folder", height=2)
-        self.folder_details.pack(side="bottom", fill="x", pady=(10, 0))
-        self.projects = self.tree(folders, [("name", "Folder", 170), ("state", "Status", 145)])
+        self.folder_details.pack(side="bottom", fill="x", pady=(8, 0))
+        self.projects = self.tree(folders, [("name", "Folder", 170), ("state", "Status", 145)], empty_text="No watched folders")
         self.projects.tooltip.value = lambda row, column: self.watched_folder_path(row) if column == "name" else self.projects.set(row, column)
         self.projects.tooltip.extra = lambda row, column: "Select this watched folder to inspect and copy its full path." if column == "name" else ""
         self.projects.tooltip.full_with_help = True
         self.projects.bind("<<TreeviewSelect>>", self.project_selected)
-        self.folder_menu = tk.Menu(self.projects, tearoff=False, background=PANEL, foreground="#DCE4EE",
-                                   activebackground="#1B629B", activeforeground="white", borderwidth=0)
+        self.folder_menu = tk.Menu(self.projects, tearoff=False)
         menu_action(self.folder_menu, "Rebuild notebook…", self.rebuild)
         menu_action(self.folder_menu, "Remove folder…", self.remove)
         menu_action(self.folder_menu, "Locate moved folder…", self.locate_folder)
@@ -99,24 +105,30 @@ class WorkspaceLayouts:
         paper_heading.pack(fill="x", pady=(0, 8))
         paper_heading.bind("<Configure>", lambda e: paper_heading.configure(wraplength=max(100, e.width)))
         Tooltip(paper_heading, lambda: self.paper_heading.get())
-        paper_actions = ttk.Frame(papers)
-        paper_actions.pack(fill="x", pady=(0, 10))
+        paper_actions = WrapToolbar(papers)
+        paper_actions.pack(fill="x", pady=(0, 8))
         view = Button(paper_actions, text="View notes", command=self.view_notes, style="Primary.TButton")
-        view.pack(side="left")
+        paper_actions.add(view)
         self.library_actions.append(view)
         Tooltip(view, lambda: "Read notes from the selected folder and paper." if self.selected_project() else "Select a watched folder first.")
         self.library_source_button = Button(paper_actions, text="Open PDF", command=self.open_paper, state="disabled")
-        self.library_source_button.pack(side="left", padx=8)
+        paper_actions.add(self.library_source_button)
         Tooltip(self.library_source_button, lambda: f"{self.library_paper_path(self.papers.selection()[0])}\n\nOpen the selected paper with its combined PC and tablet notes. Uncertain versions need review first." if self.papers.selection() else "Select a paper to open its PDF and saved notes.")
-        self.more_button(paper_actions, [("Export annotated PDF…", self.export_paper_pdf),
+        paper_actions.add(self.more_button(paper_actions, [("Export annotated PDF…", self.export_paper_pdf),
             ("Citation details…", self.citation_details), ("Export citations…", self.export_citation_selection),
             ("Find supplementary files…", self.supplementary_files),
-            ("Review extra PDFs…", self.review_extra_pdfs)]).pack(side="left", padx=(0, 8))
+            ("Review extra PDFs…", self.review_extra_pdfs)]))
         self.library_send_button = Button(paper_actions, text="Send selected PDF…", command=self.send_paper, state="disabled")
+        paper_actions.add(self.library_send_button, visible=False)
+        send_width = self.library_send_button.winfo_reqwidth()
+        def arrange_paper_actions(event):
+            width = sum(control.winfo_reqwidth() for control in paper_actions.controls[:-1]) + send_width + 3 * paper_actions.gap
+            self.library_send_button.configure(compound="image" if event.width < width else "left")
+        paper_actions.bind("<Configure>", arrange_paper_actions, add="+")
         Tooltip(self.library_send_button, "Send a selected existing original PDF after reviewing duplicates and enabling PDF transfers in Settings → Connections.")
         self.paper_details = SelectionDetails(papers, "Selected paper", height=2)
-        self.paper_details.pack(side="bottom", fill="x", pady=(10, 0))
-        self.papers = self.tree(papers, [("name", "Paper", 320), ("count", "Notes", 65), ("state", "Status", 115)])
+        self.paper_details.pack(side="bottom", fill="x", pady=(8, 0))
+        self.papers = self.tree(papers, [("name", "Paper", 320), ("count", "Notes", 65), ("state", "Status", 115)], empty_text="No papers in this folder")
         self.papers.tooltip.value = lambda row, column: self.library_paper_path(row) if column == "name" else self.papers.set(row, column)
         self.papers.tooltip.extra = lambda row, column: "Select this PDF to inspect and copy its full path." if column == "name" else ""
         self.papers.tooltip.full_with_help = True
@@ -130,23 +142,24 @@ class WorkspaceLayouts:
         tab = self.notes_tab
         toolbar = ttk.Frame(tab)
         toolbar.pack(fill="x", pady=(0, 14))
-        ttk.Label(toolbar, text="Read your notes", style="Section.TLabel").pack(side="left")
-        self.more_button(toolbar, [("Save editable copy…", self.editable_copy),
+        ttk.Label(toolbar, text="Read your notes", style="Section.TLabel").pack(side="left", anchor="n", pady=7)
+        header_actions = WrapToolbar(toolbar)
+        header_actions.pack(side="left", fill="x", expand=True, padx=(16, 0))
+        more = self.more_button(header_actions, [("Save editable copy…", self.editable_copy),
                                    ("Export annotated PDF…", self.export_note_pdf),
                                    ("Citation details…", self.citation_details),
                                    ("Export citations…", self.export_citation_selection),
                                    ("Find supplementary files…", self.supplementary_files),
                                    ("Change history", self.history), ("Tags & collections…", self.organize_paper),
                                    ("Saved searches…", self.saved_searches),
-                                   ("Accessible reading view…", self.accessible_reader)]).pack(side="right")
-        self.notebook_button = Button(toolbar, text="Open notebook", command=self.open_notebook, style="Primary.TButton")
-        self.notebook_button.pack(side="right", padx=8)
-        self.export_button = Button(toolbar, text="Export view…", command=self.export_view)
-        self.export_button.pack(side="right")
+                                   ("Accessible reading view…", self.accessible_reader)])
+        self.notebook_button = Button(header_actions, text="Open notebook", command=self.open_notebook, style="Primary.TButton")
+        self.export_button = Button(header_actions, text="Export view…", command=self.export_view)
         Tooltip(self.export_button, lambda: "Export the notes currently shown to a separate Word document." if self.entries else "Choose a folder or search with matching notes before exporting.")
         Tooltip(self.notebook_button, lambda: "Open this folder's generated Word notebook." if not self.notebook_button.instate(["disabled"]) else "Select one folder instead of All folders to open its notebook.")
-        self.notes_folder_button = Button(toolbar, text="Open folder", command=lambda: self.open_selected_folder(notes=True), state="disabled")
-        self.notes_folder_button.pack(side="left", padx=(16, 0))
+        self.notes_folder_button = Button(header_actions, text="Open folder", command=lambda: self.open_selected_folder(notes=True), state="disabled")
+        for button in (self.notes_folder_button, self.export_button, self.notebook_button, more):
+            header_actions.add(button)
         Tooltip(self.notes_folder_button, lambda: f"{self.reader_folder_path()}\n\nOpen the PC folder selected below in File Explorer." if not self.notes_folder_button.instate(["disabled"]) else
                 "Select one available folder instead of All folders.")
         self.build_feedback(tab, "notes")
@@ -193,30 +206,30 @@ class WorkspaceLayouts:
         self.search_mode = "Words / Boolean"
         self.note_type = "All notes"
         self.search_entry = ttk.Entry(searchbar, textvariable=self.search, width=52)
-        self.search_entry.pack(side="left", fill="x", expand=True)
         Tooltip(self.search_entry, 'Search notes, printed PDF text, or both in the chosen folder and paper. Spaces mean AND; uppercase AND, OR, NOT, quotes and parentheses are supported. PDF results match within one page; scanned pages need a text layer.')
         self.search_scope = tk.StringVar(value="Notes")
         self.search_scope_control = ttk.Combobox(searchbar, textvariable=self.search_scope, values=SCOPES,
                                                 state="readonly", width=7)
-        self.search_scope_control.pack(side="left", padx=(8, 0))
         Tooltip(self.search_scope_control, "Notes searches saved annotations. PDFs searches printed text on every page, including papers without notes. All combines both. Enter a query to search PDFs; the first search builds a local text cache. Search in… fields and note types apply to note results.")
         self.search_scope.trace_add("write", self.search_changed)
         self.search_options_button = Button(searchbar, text="Search in…", command=self.search_options)
-        self.search_options_button.pack(side="left", padx=(8, 0))
         self.search.trace_add("write", self.search_changed)
         self.note_count = tk.StringVar()
         ttk.Label(searchbar, textvariable=self.note_count, style="Muted.TLabel", width=12, anchor="e").pack(side="right")
+        self.search_options_button.pack(side="right", padx=(8, 0))
+        self.search_scope_control.pack(side="right", padx=(8, 0))
+        self.search_entry.pack(side="left", fill="x", expand=True)
         self.search_summary = tk.StringVar()
         self.search_summary_label = ttk.Label(tab, textvariable=self.search_summary, style="Muted.TLabel")
         self.search_error = tk.StringVar()
-        self.search_error_label = ttk.Label(tab, textvariable=self.search_error, foreground="#FFB4AB", wraplength=800)
+        self.search_error_label = ttk.Label(tab, textvariable=self.search_error, style="Error.TLabel", wraplength=800)
         self.search_warning = tk.StringVar()
         self.search_warning_label = ttk.Label(tab, style="Muted.TLabel", wraplength=800)
         Tooltip(self.search_warning_label, lambda: self.search_warning.get())
         self.reader_pane = ttk.Panedwindow(tab, orient="horizontal")
         self.reader_pane.pack(fill="both", expand=True)
         left = ttk.Frame(self.reader_pane, width=280, padding=(0, 0, 16, 0))
-        self.notes = self.tree(left, [("page", "PDF page", 78), ("kind", "Type", 70), ("text", "Note", 210)])
+        self.notes = self.tree(left, [("page", "PDF page", 78), ("kind", "Type", 70), ("text", "Note", 210)], empty_text="No matching notes")
         self.notes.configure(displaycolumns=("page", "text"))
         self.notes.bind("<<TreeviewSelect>>", self.preview)
         self.notes.bind("<Double-1>", lambda event: self.open_source())
@@ -243,6 +256,9 @@ class WorkspaceLayouts:
         text_frame = ttk.Frame(right)
         text_frame.pack(fill="both", expand=True)
         self.preview_text = tk.Text(text_frame, height=9, width=35, wrap="word", state="disabled", **text_options())
+        self.preview_text.configure(spacing1=3, spacing3=3)
+        self.preview_text.tag_configure("paper_title", font=("Segoe UI", 12, "bold"))
+        self.preview_text.tag_configure("page_info", font=("Segoe UI", 9), foreground=self.style.lookup("Muted.TLabel", "foreground"))
         scroll = ttk.Scrollbar(text_frame, orient="vertical", command=self.preview_text.yview)
         scroll.pack(side="right", fill="y")
         self.preview_text.pack(fill="both", expand=True)
