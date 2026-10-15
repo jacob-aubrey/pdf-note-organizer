@@ -6,7 +6,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from .icons import Button, icon
 from .theme import BACKGROUND
-from .widgets import Tooltip, PathField, ReadOnlyText, ScrollFrame, WrapToolbar, annotate_buttons, bind_dialog_close
+from .widgets import Tooltip, PathField, ReadOnlyText, ScrollFrame, WrapToolbar, EntryPlaceholder, annotate_buttons, bind_dialog_close
 
 
 def background(app, function, success, error=None):
@@ -49,6 +49,11 @@ class InboxView:
         self.proposal = ""
         self.retry_available = False
         self.generation = 0
+        pane = ttk.Panedwindow(parent, orient="horizontal")
+        pane.pack(fill="both", expand=True)
+        listing = ttk.Frame(pane, width=440)
+        pane.add(listing, weight=1)
+        parent = listing
         ttk.Label(parent, text="Incoming documents", style="Section.TLabel").pack(anchor="w", pady=(0, 10))
         toolbar = WrapToolbar(parent)
         toolbar.pack(fill="x", pady=(0, 12))
@@ -76,70 +81,77 @@ class InboxView:
         locations.pack(fill="x", pady=(0, 10))
         self.location_variables = {}
         for index, (key, label) in enumerate((("watch_folder", "Inbox"), ("library_root", "Library"))):
-            column = index * 3
-            ttk.Label(locations, text=label).grid(row=0, column=column, padx=(0 if index == 0 else 16, 8))
+            ttk.Label(locations, text=label).grid(row=index, column=0, sticky="w", padx=(0, 8), pady=3)
             variable = self.location_variables[key] = tk.StringVar()
             entry = ttk.Entry(locations, textvariable=variable, state="readonly", width=1)
-            entry.grid(row=0, column=column+1, sticky="ew")
-            locations.columnconfigure(column+1, weight=1)
+            entry.grid(row=index, column=1, sticky="ew", pady=3)
+            locations.columnconfigure(1, weight=1)
             access = PathField(entry, "Incoming documents wait here for review." if key == "watch_folder" else "Reviewed documents are filed inside this library root.")
-            access.add_copy_button(locations).grid(row=0, column=column+2, padx=(6, 0))
-        pane = ttk.Panedwindow(parent, orient="horizontal")
-        pane.pack(fill="both", expand=True)
-        listing = ttk.Frame(pane, width=440)
-        pane.add(listing, weight=1)
+            access.add_copy_button(locations).grid(row=index, column=2, padx=(6, 0), pady=3)
         controls = WrapToolbar(listing)
         controls.pack(fill="x", pady=(0, 8))
         self.review_button = Button(controls, text="Review selected", command=self.review, style="Primary.TButton")
         controls.add(self.review_button)
-        Tooltip(self.review_button, "Identify the selected finished document using your naming settings, then suggest an editable filename. Review the name and destination before filing; this action does not move or upload the document.")
+        Tooltip(self.review_button, lambda: "Wait for the current inbox operation to finish." if self.busy else
+                "Select an incoming document first." if not self.tree.selection() else
+                "Identify the selected finished document using your naming settings, then suggest an editable filename. Review the name and destination before filing; this action does not move or upload the document.")
         self.skip_button = Button(controls, text="Skip", command=self.skip)
         controls.add(self.skip_button)
-        Tooltip(self.skip_button, "Leave this document in the inbox and set it aside until its contents change.")
+        Tooltip(self.skip_button, lambda: "Wait for the current inbox operation to finish." if self.busy else
+                "Select an incoming document first." if not self.tree.selection() else
+                "Leave this document in the inbox and set it aside until its contents change. Review selected can bring it back at any time.")
         self.retry_button = Button(controls, text="Retry lookup", command=lambda: self.review(force=True))
         controls.add(self.retry_button)
-        Tooltip(self.retry_button, "Available after a Gemini identification failure. Try the lookup again using your current naming permissions. A filename you edited is kept; the new metadata appears below.")
+        Tooltip(self.retry_button, lambda: "Wait for the current inbox operation to finish." if self.busy else
+                "Review a document with a retryable identification failure first." if not self.review_path or not self.retry_available else
+                "Try identification again using your current naming permissions. A filename you edited is kept; the new metadata appears below.")
         self.tree = app.tree(listing, [("name", "Document", 265), ("state", "Status", 150)], content_columns=(), empty_text="No incoming documents")
         self.tree.bind("<<TreeviewSelect>>", self.selected)
         self.tree.bind("<Double-1>", lambda _: self.review())
         self.tree.tooltip.value = lambda row, column: row if column == "name" else self.tree.set(row, column)
         self.tree.tooltip.extra = self.item_help
-        self.editor_form = ScrollFrame(pane, width=490, height=1, padding=(16, 0, 0, 0))
+        self.editor_form = ScrollFrame(pane, width=490, height=1, padding=(16, 0, 16, 0), stretch=True)
         editor = self.editor_form.content
         pane.add(self.editor_form, weight=1)
         editor_heading = ttk.Label(editor, text="Review filename & destination", style="Section.TLabel")
         editor_heading.pack(fill="x", pady=(0, 12))
         editor_heading.bind("<Configure>", lambda event: editor_heading.configure(wraplength=max(100, event.width)))
         self.original = tk.StringVar(value="Select a document in the inbox.")
+        self.original_name = tk.StringVar(value=self.original.get())
         original_row = ttk.Frame(editor)
         original_row.pack(fill="x", pady=(0, 12))
-        self.original_label = original_label = ttk.Label(original_row, textvariable=self.original, width=1)
+        ttk.Label(original_row, text="Original file").pack(side="left", padx=(0, 10))
+        self.original_label = original_label = ttk.Label(original_row, textvariable=self.original_name, width=1)
         original_label.pack(side="left", fill="x", expand=True)
         original_access = PathField(original_label, "This is the original document in the inbox. Naming and filing keep its document type.",
             value=lambda: self.original.get() if self.original.get() != "Select a document in the inbox." else "")
         self.original_path_copy = original_access.add_copy_button(original_row)
-        self.original_path_copy.pack(side="left", padx=(8, 0))
-        ttk.Label(editor, text="Filename").pack(anchor="w")
+        Tooltip(self.original_path_copy, lambda: "\n\n".join(part for part in (original_access.value(),
+            "Copy the original document's full path. This does not copy the proposed filename below.") if part))
+        fields = ttk.Frame(editor)
+        fields.pack(fill="x", pady=(0, 12))
+        fields.columnconfigure(1, weight=1)
+        ttk.Label(fields, text="Filename").grid(row=0, column=0, sticky="w", padx=(0, 10), pady=(0, 10))
         self.filename = tk.StringVar()
-        self.name_entry = ttk.Entry(editor, textvariable=self.filename)
-        self.name_entry.pack(fill="x", pady=(4, 10))
+        self.name_entry = ttk.Entry(fields, textvariable=self.filename, width=1)
+        self.name_entry.grid(row=0, column=1, columnspan=3, sticky="ew", pady=(0, 10))
         Tooltip(self.name_entry, lambda: (self.filename.get() + "\n\n" if self.filename.get() else "") +
             "Edit the filename only, without a folder path. The source .pdf, .docx, .ppt, or .pptx extension is kept and added if omitted. Existing destination files are never overwritten.")
-        ttk.Label(editor, text="Destination folder").pack(anchor="w")
-        destination = ttk.Frame(editor)
-        destination.pack(fill="x", pady=(4, 12))
+        ttk.Label(fields, text="Destination folder").grid(row=1, column=0, sticky="w", padx=(0, 10))
         self.destination = tk.StringVar()
-        self.destination_entry = ttk.Entry(destination, textvariable=self.destination)
-        self.destination_entry.pack(side="left", fill="x", expand=True)
+        self.destination_entry = ttk.Entry(fields, textvariable=self.destination, width=1)
+        self.destination_entry.grid(row=1, column=1, sticky="ew")
         destination_access = PathField(self.destination_entry, "Choose a destination inside your library root. You can type a new subfolder path; it is created only when you file the document. The destination must be outside the inbox and app cache areas.")
-        self.destination_path_copy = destination_access.add_copy_button(destination)
-        self.destination_path_copy.pack(side="left", padx=(8, 0))
-        destination_browse = Button(destination, text="Browse…", command=self.choose_destination)
-        destination_browse.pack(side="left", padx=(8, 0))
+        self.destination_path_copy = destination_access.add_copy_button(fields)
+        self.destination_path_copy.grid(row=1, column=2, padx=(8, 0))
+        destination_browse = Button(fields, text="Browse…", command=self.choose_destination)
+        destination_browse.grid(row=1, column=3, padx=(8, 0))
         Tooltip(destination_browse, "Choose the destination folder for the reviewed document.")
         self.file_button = Button(editor, text="File document", command=self.file_document, style="Primary.TButton")
         self.file_button.pack(anchor="w", pady=(0, 10))
-        Tooltip(self.file_button, "Confirm the name and destination, then move this document from the inbox into your library. Existing files are never overwritten. Only PDFs enter note analysis or an enabled tablet upload queue; Word and PowerPoint stay local.")
+        Tooltip(self.file_button, lambda: "Wait for the current inbox operation to finish." if self.busy else
+                "Choose Review selected and check the proposed filename and destination first." if not self.review_path else
+                "Confirm the name and destination, then move this document from the inbox into your library. Existing files are never overwritten. Only PDFs enter note analysis or an enabled tablet upload queue; Word and PowerPoint stay local.")
         self.feedback = tk.StringVar()
         feedback = ttk.Label(editor, textvariable=self.feedback, wraplength=440, style="Muted.TLabel")
         feedback.pack(fill="x", pady=(0, 8))
@@ -150,6 +162,7 @@ class InboxView:
         self.editor_form.bind_content()
         app.initial_split(pane, .48)
         self.update_controls()
+        self.original.trace_add("write", lambda *_: self.update_controls())
         if hasattr(app.root, "drop_target_register"):
             from tkinterdnd2 import DND_FILES
             self.tree.drop_target_register(DND_FILES)
@@ -173,6 +186,12 @@ class InboxView:
 
     def update_controls(self):
         selected = bool(self.tree.selection())
+        source = self.original_label.path_access.value()
+        self.original_name.set(Path(source).name if source else self.original.get())
+        if source:
+            self.original_path_copy.pack(side="left", padx=(8, 0))
+        else:
+            self.original_path_copy.pack_forget()
         self.review_button.configure(state="normal" if selected and not self.busy else "disabled")
         self.skip_button.configure(state="normal" if selected and not self.busy else "disabled")
         self.file_button.configure(state="normal" if self.review_path and not self.busy else "disabled")
@@ -220,7 +239,7 @@ class InboxView:
         path = selection[0] if selection else None
         row = self.rows.get(path, {})
         invalid = self.review_path and (row.get("signature") != self.review_signature or row.get("status") not in {"review", "error"})
-        if path != self.review_path or invalid:
+        if path != self.review_path or invalid or (not path and self.original_label.path_access.value()):
             self.generation += 1
             self.review_path = None
             self.review_signature = None
@@ -616,14 +635,16 @@ class ReconciliationWindow:
         window.transient(app.root)
         bind_dialog_close(window, self.close)
         self.scope = tk.StringVar(value=app.cloud_config().get("pc_root") or app.inbox.config().get("library_root", ""))
-        frame = ttk.Frame(window, padding=18)
+        frame = self.review_frame = ttk.Frame(window, padding=18)
         frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text="Compare your library before changing it", style="Section.TLabel").pack(anchor="w")
-        introduction = ttk.Label(frame, text="Find duplicates and differences using local files and the last downloaded tablet information. Different notes and files stay preserved.",
+        heading = ttk.Label(frame, text="Compare your library before changing it", style="Section.TLabel")
+        heading.pack(anchor="w")
+        introduction = self.review_introduction = ttk.Label(frame, text="Find duplicates and differences using local files and the last downloaded tablet information. Different notes and files stay preserved.",
                   wraplength=900, style="Muted.TLabel")
         introduction.pack(fill="x", pady=(8, 12))
         introduction.bind("<Configure>", lambda event: introduction.configure(wraplength=max(80, event.width)))
-        scope = ttk.Frame(frame)
+        Tooltip(heading, lambda: introduction.cget("text"))
+        scope = self.review_scope_row = ttk.Frame(frame)
         scope.pack(fill="x", pady=(0, 10))
         ttk.Label(scope, text="PC folder").pack(side="left", padx=(0, 8))
         self.scope_entry = ttk.Entry(scope, textvariable=self.scope)
@@ -653,34 +674,51 @@ class ReconciliationWindow:
         self.search_label = ttk.Label(filters, text="Search", image=icon(filters, "search"), compound="left")
         self.search_label.pack(side="left", padx=(0, 8))
         self.search_entry = search = ttk.Entry(filters, textvariable=self.search, width=20)
+        EntryPlaceholder(search, "Search papers, folders, or file paths…", self.search)
         search.pack(side="left", fill="x", expand=True)
         Tooltip(self.type_filter, "Show one kind of finding, such as identical local copies or folder differences.")
         Tooltip(state, "Separate items still needing a decision from existing links and copies you chose to keep separate.")
         Tooltip(search, "Search paper names, explanations and file locations in these findings.")
         for variable in (self.finding_type, self.review_state, self.search):
             variable.trace_add("write", lambda *_: self.render())
+        # Reserve actions and the copy picker before giving the findings table
+        # its remaining height, so long lists cannot push Delete/Close offscreen.
+        footer = self.review_footer = ttk.Frame(frame)
+        footer.pack(side="bottom", fill="x")
         self.tree = app.tree(frame, [("kind", "Finding", 180), ("name", "Paper / folder", 290), ("reason", "Explanation", 450)], content_columns=())
         for column in ("kind", "name", "reason"):
             self.tree.heading(column, command=lambda key=column: self.sort(key))
         self.tree.bind("<<TreeviewSelect>>", self.selected)
-        self.details_display = ReadOnlyText(frame, height=7)
+        self.details_display = ReadOnlyText(footer, height=3)
         self.details_display.pack(fill="x", pady=10)
         self.details = self.details_display.text
-        actions = ttk.Frame(frame)
+        ttk.Label(footer, text="Local copies · select a file to inspect or delete", style="Muted.TLabel").pack(anchor="w", pady=(0, 4))
+        self.local_copies = app.tree(footer, [("name", "File / folder", 270), ("local", "Location", 510),
+                                            ("state", "Status", 110)], height=4, content_columns=(),
+                                     empty_text="This finding has no local files", pack=False)
+        self.local_copies.master.pack(fill="x", pady=(0, 8))
+        self.copy_paths = {}
+        self.local_copies.bind("<<TreeviewSelect>>", self.copy_selected)
+        self.local_copies.bind("<Double-Button-1>", lambda event: self.open_pdf()
+                               if self.local_copies.identify_region(event.x, event.y) == "cell" else None, add="+")
+        self.local_copies.tooltip.value = lambda row, _column: self.copy_paths.get(row, "")
+        self.local_copies.tooltip.extra = lambda row, _column: "Select this local copy to open it, copy its full path, or confirm moving its PDF to Recycle Bin."
+        self.local_copies.tooltip.full_with_help = True
+        actions = WrapToolbar(footer)
         actions.pack(fill="x")
-        self.paths = ttk.Combobox(actions, state="disabled")
-        self.paths.pack(side="left", fill="x", expand=True)
-        self.paths.bind("<<ComboboxSelected>>", lambda _: self.open_actions())
-        self.open_pdf_button = Button(actions, text="Open PDF", command=self.open_pdf, state="disabled")
-        self.open_pdf_button.pack(side="left", padx=8)
-        self.open_folder_button = Button(actions, text="Open containing folder", command=self.open_folder, state="disabled")
-        self.open_folder_button.pack(side="left")
-        local_path_access = PathField(self.paths, "Choose the local copy you want to inspect. Linking copies does not remove these files.")
-        self.local_path_copy = local_path_access.add_copy_button(actions)
-        self.local_path_copy.pack(side="left", padx=(8, 0), before=self.open_pdf_button)
-        Tooltip(self.open_pdf_button, "Open the chosen local PDF to inspect its contents and annotations.")
-        Tooltip(self.open_folder_button, "Open the folder containing the chosen copy in File Explorer.")
-        actions = ttk.Frame(frame)
+        self.open_pdf_button = actions.add(Button(actions, text="Open PDF", command=self.open_pdf, state="disabled"))
+        self.open_folder_button = actions.add(Button(actions, text="Open containing folder", command=self.open_folder, state="disabled"))
+        self.local_path_copy = actions.add(Button(actions, text="Copy full path", command=self.copy_path, state="disabled"))
+        self.delete_pdf_button = actions.add(Button(actions, text="Delete selected PDF…", command=self.delete_pdf, state="disabled"))
+        Tooltip(self.local_path_copy, lambda: "Copy the selected local file's complete path.\n\n" + self.selected_path()
+                if self.selected_path() else "Select a local file in the list above to copy its full path.")
+        Tooltip(self.open_pdf_button, lambda: "Select a finding and an available local PDF above first." if self.open_pdf_button.instate(["disabled"]) else
+                "Open the selected local PDF to inspect its contents and annotations.\n\n" + self.selected_path())
+        Tooltip(self.open_folder_button, lambda: "Select a finding and a local copy above first." if self.open_folder_button.instate(["disabled"]) else
+                "Open the folder containing the selected copy in File Explorer.\n\n" + self.selected_path())
+        Tooltip(self.delete_pdf_button, lambda: "Confirm moving this selected local PDF to Windows Recycle Bin. Saved notes, history and tablet sources stay preserved.\n\n" + self.selected_path()
+                if not self.delete_pdf_button.instate(["disabled"]) else "Select an available local PDF inside the checked folder first. Wait for any current check or review action to finish.")
+        actions = ttk.Frame(footer)
         actions.pack(fill="x", pady=(8, 0))
         self.link_button = Button(actions, text="Link selected copies…", command=self.link, state="disabled")
         self.link_button.pack(side="left")
@@ -691,7 +729,7 @@ class ReconciliationWindow:
         self.send_button = Button(actions, text="Send selected PDF…", command=self.send, state="disabled")
         self.send_button.pack(side="left")
         Tooltip(self.send_button, "Review an explicit transfer of this existing PDF. Enable reMarkable PDF transfers in Connections first.")
-        decisions = ttk.Frame(frame)
+        decisions = ttk.Frame(footer)
         decisions.pack(fill="x", pady=(8, 0))
         self.keep_button = Button(decisions, text="Keep separate", command=lambda: self.save_choice(True), state="disabled")
         self.keep_button.pack(side="left")
@@ -708,6 +746,67 @@ class ReconciliationWindow:
         Tooltip(close, "Close this review and cancel its unfinished scan. Confirmed links remain saved.")
         window.protocol("WM_DELETE_WINDOW", self.close)
         annotate_buttons(window)
+        self.layout_after = None
+        window.bind("<Configure>", self.schedule_layout, add="+")
+        self.schedule_layout()
+
+    def schedule_layout(self, event=None):
+        if self.layout_after is None and self.window.winfo_exists():
+            self.layout_after = self.window.after_idle(self.fit_review_tables)
+
+    def fit_review_tables(self):
+        """Give both tables visible rows before allocating extra detail space.
+
+        Footer actions keep their normal size. High DPI and shorter windows
+        reduce the copy/detail requests instead of squeezing the findings
+        table out of existence; scrolling retains the rest of each list.
+        """
+        self.layout_after = None
+        if not self.window.winfo_exists() or self.review_frame.winfo_height() <= 1:
+            return
+        from tkinter import font
+        frame, footer = self.review_frame, self.review_footer
+        parts = lambda value: (value,) if isinstance(value, (int, float)) else frame.tk.splitlist(value)
+        pixels = lambda value: sum(frame.winfo_pixels(part) for part in parts(value))
+        padding = parts(frame.cget("padding"))
+        vertical = (2 * frame.winfo_pixels(padding[0]) if len(padding) == 1 else
+                    2 * frame.winfo_pixels(padding[1]) if len(padding) == 2 else
+                    frame.winfo_pixels(padding[1]) + frame.winfo_pixels(padding[-1])) if padding else 0
+        header = 0
+        for child in frame.pack_slaves():
+            if child in (footer, self.tree.master, self.review_introduction):
+                continue
+            info = child.pack_info()
+            pady = parts(info.get("pady", 0))
+            header += child.winfo_reqheight() + (2 * frame.winfo_pixels(pady[0]) if len(pady) == 1 else pixels(pady))
+        style = ttk.Style(self.tree)
+        row_height = int(style.lookup("Treeview", "rowheight") or 24)
+        tree_rows = int(self.tree.cget("height"))
+        finding_chrome = self.tree.master.winfo_reqheight() - tree_rows * row_height
+        finding_minimum = finding_chrome + 2 * row_height
+        detail_lines = int(self.details.cget("height"))
+        line_height = font.Font(root=self.window, font=self.details.cget("font")).metrics("linespace")
+        detail_chrome = self.details_display.winfo_reqheight() - detail_lines * line_height
+        copy_rows = int(self.local_copies.cget("height"))
+        copy_chrome = self.local_copies.master.winfo_reqheight() - copy_rows * row_height
+        fixed_footer = footer.winfo_reqheight() - self.details_display.winfo_reqheight() - self.local_copies.master.winfo_reqheight()
+        room = frame.winfo_height() - vertical - header - finding_minimum - fixed_footer
+        introduction_height = self.review_introduction.winfo_reqheight() + 20
+        minimum_lists = detail_chrome + line_height + copy_chrome + row_height
+        show_introduction = room >= minimum_lists + introduction_height
+        if show_introduction:
+            if not self.review_introduction.winfo_manager():
+                self.review_introduction.pack(fill="x", pady=(8, 12), before=self.review_scope_row)
+            room -= introduction_height
+        elif self.review_introduction.winfo_manager():
+            self.review_introduction.pack_forget()
+        choices = ((3, 4), (3, 3), (2, 3), (2, 2), (1, 2), (1, 1))
+        desired = next(((lines, rows) for lines, rows in choices
+                        if detail_chrome + lines * line_height + copy_chrome + rows * row_height <= room), (1, 1))
+        if detail_lines != desired[0]:
+            self.details.configure(height=desired[0])
+        if copy_rows != desired[1]:
+            self.local_copies.configure(height=desired[1])
 
     def load_review_state(self):
         from .paper_registry import Registry
@@ -759,18 +858,91 @@ class ReconciliationWindow:
             self.feedback.set(f"{len(visible)} shown · {counts['Needs review']} need review · {counts['Already linked']} already linked · {counts['Kept separate']} kept separate. Comparisons use saved tablet information; no files were changed by the check.")
 
     def open_pdf(self):
-        if self.paths.get():
-            self.app.open_path(self.paths.get())
+        path = self.selected_path()
+        if path and Path(path).is_file() and Path(path).suffix.casefold() == ".pdf":
+            self.app.open_path(path)
 
     def open_folder(self):
-        if self.paths.get():
-            path = Path(self.paths.get())
+        if self.selected_path():
+            path = Path(self.selected_path())
             self.app.open_path(str(path.parent if path.suffix.casefold() == ".pdf" else path))
 
+    def selected_path(self):
+        selection = self.local_copies.selection()
+        return self.copy_paths.get(selection[0], "") if selection else ""
+
+    def copy_path(self):
+        path = self.selected_path()
+        if path:
+            self.local_copies.clipboard_clear()
+            self.local_copies.clipboard_append(path)
+
+    def copy_selected(self, event=None):
+        selection = self.tree.selection()
+        row = self.rows.get(selection[0], {}) if selection else {}
+        text = row.get("reason", "")
+        if self.selected_path():
+            text += "\n\nSelected local copy: " + self.selected_path()
+        cloud_ids = row.get("cloud_ids", [])
+        if cloud_ids:
+            text += "\n" + "\n".join("Tablet ID: " + cloud_id for cloud_id in cloud_ids)
+        self.details_display.set(text or "Select a finding to inspect its files.", paths={"Selected local copy": (
+            self.selected_path(), "This selected file belongs to the finding above. Only an explicitly confirmed Delete moves it to Recycle Bin.")}
+            if self.selected_path() else {})
+        self.open_actions()
+
     def open_actions(self):
-        path = self.paths.get()
-        self.open_pdf_button.configure(state="normal" if path and Path(path).suffix.casefold() == ".pdf" else "disabled")
-        self.open_folder_button.configure(state="normal" if path else "disabled")
+        path = self.selected_path()
+        available_pdf = bool(path and Path(path).is_file() and Path(path).suffix.casefold() == ".pdf")
+        self.open_pdf_button.configure(state="normal" if available_pdf and not self.busy else "disabled")
+        self.open_folder_button.configure(state="normal" if path and not self.busy else "disabled")
+        self.local_path_copy.configure(state="normal" if path else "disabled")
+        root = getattr(self, "checked_scope", "")
+        in_scope = bool(root and path and Path(path).resolve().is_relative_to(Path(root).resolve()))
+        self.delete_pdf_button.configure(state="normal" if available_pdf and in_scope and not self.busy
+                                         and not self.check_button.instate(["disabled"]) else "disabled")
+
+    def delete_pdf(self):
+        from .library_files import reviewed_pdf
+        path = self.selected_path()
+        if self.busy or self.delete_pdf_button.instate(["disabled"]) or not path:
+            return
+        selection = self.tree.selection()
+        row = self.rows.get(selection[0], {}) if selection else {}
+        source = next((source for source in row.get("sources", []) if source.get("path")
+                       and Path(source["path"]).resolve() == Path(path).resolve()), {})
+        root = getattr(self, "checked_scope", "")
+        if not root:
+            return
+        self.busy = True
+        self.selected()
+        self.feedback.set("Checking the selected PDF before deletion…")
+        def failed(error):
+            self.busy = False
+            if self.window.winfo_exists():
+                self.feedback.set(str(error))
+                self.selected()
+        def checked(proof):
+            if not self.window.winfo_exists():
+                self.busy = False
+                return
+            if not messagebox.askokcancel("Delete selected local PDF", "Move this exact file to Windows Recycle Bin?\n\n"
+                    + proof["path"] + "\n\nSaved annotations and history remain in this library. Other copies and tablet documents are kept. "
+                    "Restore the file from Recycle Bin to its original location if needed.", parent=self.window, icon="warning"):
+                self.busy = False
+                self.feedback.set("Deletion cancelled. The local PDF was kept.")
+                self.selected()
+                return
+            self.feedback.set("Moving the selected PDF to Recycle Bin…")
+            def complete(deleted):
+                self.busy = False
+                self.app.service.command("export_pending")
+                self.app.refresh()
+                if self.window.winfo_exists():
+                    self.check()
+                    self.feedback.set("Moved to Recycle Bin: " + Path(deleted).name + ". Saved notes and history were retained; refreshing findings…")
+            background(self.app, lambda: self.app.service.storage_action("recycle_pdf", proof), complete, failed)
+        background(self.app, lambda: reviewed_pdf(path, root, source.get("digest", "")), checked, failed)
 
     def save_choice(self, separate):
         selection = self.tree.selection()
@@ -825,6 +997,9 @@ class ReconciliationWindow:
 
     def close(self):
         self.cancelled.set()
+        if getattr(self, "layout_after", None) is not None:
+            self.window.after_cancel(self.layout_after)
+            self.layout_after = None
         self.window.destroy()
 
     def browse(self):
@@ -834,11 +1009,14 @@ class ReconciliationWindow:
 
     def check(self):
         from .reconciliation import scan_reconciliation
+        if self.busy:
+            return
         root = self.scope.get().strip()
         if not root:
             self.feedback.set("Choose the PC folder to compare.")
             return
         self.check_button.configure(state="disabled")
+        self.open_actions()
         self.scan_generation += 1
         generation = self.scan_generation
         self.feedback.set("Comparing papers and saved tablet sources…")
@@ -853,28 +1031,30 @@ class ReconciliationWindow:
             if not rows:
                 self.feedback.set("No findings in this check. Saved tablet information may be incomplete.")
             self.check_button.configure(state="normal")
+            self.open_actions()
         def failed(exc):
             if self.window.winfo_exists() and generation == self.scan_generation:
                 self.feedback.set(str(exc))
                 self.check_button.configure(state="normal")
+                self.open_actions()
         background(self.app, lambda: scan_reconciliation(self.app.store, config, self.cancelled.is_set, local_root=root,
                    inspect_pdf=self.app.pdf_worker.inspect), scanned, failed)
 
     def selected(self, event=None):
         selection = self.tree.selection()
         row = self.rows.get(selection[0], {}) if selection else {}
-        text = row.get("reason", "") + "\n\n" + "\n".join(row.get("local_paths", []))
-        text += "\n" + "\n".join("Tablet ID: " + cloud_id for cloud_id in row.get("cloud_ids", []))
-        self.details_display.set(text, paths={f"Local copy {number}": (path,
-            "This local copy is part of the selected finding. Linking copies does not remove it.")
-            for number, path in enumerate(row.get("local_paths", []), start=1)})
         sources = row.get("sources", [])
         paths = row.get("local_paths", [])
-        previous = self.paths.get()
-        self.paths.configure(values=paths, state="readonly" if paths else "disabled")
-        self.paths.set(previous if previous in paths else paths[0] if paths else "")
-        self.paths.path_access.refresh()
-        self.open_actions()
+        previous = self.selected_path()
+        self.copy_paths = {str(number): path for number, path in enumerate(paths)}
+        self.app.update_rows(self.local_copies, [(key, (Path(path).name, str(Path(path).parent),
+                              "Available" if Path(path).is_file() else "Folder" if Path(path).is_dir() else "Missing"))
+                              for key, path in self.copy_paths.items()])
+        if paths:
+            selected = next((key for key, path in self.copy_paths.items() if path == previous), "0")
+            self.local_copies.selection_set(selected)
+            self.local_copies.focus(selected)
+        self.copy_selected()
         self.keep_button.configure(state="normal" if row and self.state(row) == "Needs review" and not self.busy else "disabled")
         self.again_button.configure(state="normal" if row and self.state(row) == "Kept separate" and not self.busy else "disabled")
         self.link_button.configure(state="normal" if len(sources) >= 2 and "link_papers" in row.get("actions", []) and self.state(row) == "Needs review" and not self.busy else "disabled")

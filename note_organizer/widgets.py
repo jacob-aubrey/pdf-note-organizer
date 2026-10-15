@@ -4,7 +4,7 @@ from tkinter import ttk, font
 from weakref import WeakSet
 from .icons import Button, menu_action
 from .screens import work_area, popup_position
-from .theme import BACKGROUND, SURFACE, text_options
+from .theme import BACKGROUND, SURFACE, FIELD, MUTED, text_options
 
 
 BUTTON_HELP = {
@@ -15,7 +15,7 @@ BUTTON_HELP = {
     "Open restored library": "Open this restored library in a separate app window with its own data and recovered original files.",
     "Save labels": "Save tags and research collections for the selected paper and all its linked copies.",
     "Save current search": "Save the current query, search fields, note type and collection filter under the entered name.",
-    "Apply saved search": "Run the selected saved search within the folder and paper currently selected in Notes.",
+    "Apply saved search": "Run the selected saved search within the folder and paper currently selected in Reader.",
     "Delete saved search": "Remove the selected saved search from this library. Notes and papers stay preserved.",
     "Open attached file": "Open the selected supplementary file in its default application.",
     "Use citation and link": "Use the reviewed citation for the linked paper while preserving independent source files and note history.",
@@ -28,9 +28,19 @@ BUTTON_HELP = {
     "View notes": "Read the notes from the selected folder or paper.",
     "Export view…": "Save the notes currently displayed by your folder, paper and search filters to a separate Word file.",
     "Open notebook": "Open the selected folder's generated Word notebook.",
-    "Enlarge image": "View the selected drawing or handwriting preview at its original size.",
-    "Details": "Show annotation metadata and nearby printed text in the note preview.",
+    "Enlarge image": "Inspect the selected drawing close-up. Fit its width or height; Ctrl+drag pans, Ctrl+wheel zooms, and Ctrl+double-click resets the opening view.",
+    "Document details…": "Inspect the selected paper's identity, source path and extraction diagnostics, including general reMarkable conversion information.",
     "Search in…": "Choose searchable fields, matching rules and the types of notes to show.",
+    "Search options…": "Choose searchable note fields, matching rules and the types of notes to show. Use the dropdown beside Search to choose Notes, PDFs, or All.",
+    "Search filters…": "Choose searchable note fields, matching rules and the types of notes to show. Use the dropdown beside Search to choose Notes, PDFs, or All.",
+    "Clear search": "Clear search terms and keep the current folder, paper, collection/tag and search filters. Escape does this while typing in Search.",
+    "Give feedback…": "Prepare and review a feedback report, then open an email draft in your configured mail application. You choose when to send it.",
+    "Check for updates…": "Check GitHub for a newer published version. Downloads open only when you choose them; the app does not install or replace itself.",
+    "Copy report": "Copy this reviewed feedback report to the clipboard.",
+    "Previous match": "Move to the previous actual main-search hit in reading order. Reset to 125% in Reading mode or Fit width normally, keeping the page centered.",
+    "Next match": "Move to the next actual main-search hit in reading order. Reset to 125% in Reading mode or Fit width normally, keeping the page centered.",
+    "Show all matches": "Expand all excerpts for this result. Every occurrence remains available through Previous and Next match.",
+    "Show fewer matches": "Show the first three additional excerpts and the active occurrence; collapse the rest.",
     "Show sync details": "Expand the processing log, including unavailable folders and PDF read errors.",
     "Hide sync details": "Collapse the processing log.",
     "Show details": "Open Library's sync details and the latest issue summary.",
@@ -44,14 +54,101 @@ BUTTON_HELP = {
     "Connection ▾": "Reconnect your reMarkable account or disconnect this PC. Downloaded PDFs remain on disk.",
     "Open review folder": "Open the PC holding folder for reMarkable PDFs needing attention. Its PDFs are excluded from note analysis.",
     "Open PDF": "Open the selected retained reMarkable review PDF on this PC; unsupported files keep their raw source data.",
-    "Reset all": "Select every search field and restore the default matching and note-type filters.",
+    "Reset all": "Restore the default note fields, matching and note-type filters. Surrounding printed text remains off.",
     "Clear fields": "Deselect the search fields so you can choose just the fields you need.",
     "Apply": "Apply the options in this dialog.",
     "Apply changes": "Save these settings and update the selected folder's PDFs.",
     "Open reMarkable pairing page": "Open reMarkable's sign-in page to generate an eight-character pairing code.",
     "Connect": "Use the one-time code to pair this PC; your account password stays with reMarkable.",
     "Dismiss": "Hide this action message. Its details remain in the sync log.",
+    "Close": "Close this window and return to the application.",
+    "Cancel": "Close this dialog without applying its pending changes.",
 }
+
+
+class EntryPlaceholder:
+    """Show a hint over an empty entry without ever changing its query value.
+
+    The label stays outside keyboard navigation and disappears when the entry
+    receives focus. Keep the caller's StringVar so programmatic changes and
+    clearing behave exactly like typing, without synthetic search events.
+    ``text`` can be a callable when the hint depends on the search scope.
+    """
+
+    def __init__(self, entry, text, variable):
+        self.entry, self.text, self.variable = entry, text, variable
+        self.closed = False
+        self.label = tk.Label(entry, borderwidth=0, highlightthickness=0,
+                              padx=0, pady=0, anchor="w", takefocus=False)
+        self.label.bind("<Button-1>", self.focus)
+        self.label.bind("<Enter>", self.refresh)
+        self.label.bind("<Enter>", self.help_enter, add="+")
+        self.label.bind("<Leave>", self.help_leave, add="+")
+        self.bindings = [(sequence, entry.bind(sequence, self.refresh, add="+"))
+                         for sequence in ("<FocusIn>", "<FocusOut>", "<Configure>",
+                                          "<Map>", "<<ThemeChanged>>")]
+        self.bindings.append(("<Destroy>", entry.bind("<Destroy>", self.destroy, add="+")))
+        self.trace = variable.trace_add("write", self.refresh)
+        entry.placeholder = self
+        self.refresh()
+
+    def refresh(self, *_):
+        if self.closed:
+            return
+        try:
+            style = ttk.Style(self.entry)
+            name = self.entry.cget("style") or "TEntry"
+            background = style.lookup(name, "fieldbackground", self.entry.state()) or FIELD
+            self.label.configure(text=self.text() if callable(self.text) else self.text,
+                                 background=background, foreground=MUTED,
+                                 font=self.entry.cget("font"), cursor=self.entry.cget("cursor"))
+            try:
+                focused = self.entry.focus_get() == self.entry
+            except KeyError:
+                # ttk's combobox popdown is a Tcl-owned window, so tkinter
+                # cannot resolve it through the Python widget hierarchy.
+                focused = str(self.entry.tk.call("focus", "-displayof", self.entry._w)) == str(self.entry)
+            if not self.variable.get() and not focused:
+                # A child overlay cannot change the entry's requested size.
+                # Clip long hints within the field at narrow window widths.
+                self.label.place(x=7, rely=.5, anchor="w", relwidth=1, width=-14)
+                self.label.lift()
+            else:
+                self.label.place_forget()
+        except tk.TclError:
+            # Parent teardown may reach the variable trace before Destroy.
+            pass
+
+    def focus(self, _event=None):
+        if not self.closed and not self.entry.instate(["disabled"]):
+            self.label.place_forget()
+            self.entry.focus_set()
+            self.entry.icursor(0)
+        # Let the toplevel's native-reader focus handoff run after the entry
+        # receives focus. The overlay label has no default click action.
+        return None
+
+    def help_enter(self, _event=None):
+        tooltip = getattr(self.entry, "tooltip", None)
+        if tooltip:
+            tooltip.schedule()
+
+    def help_leave(self, _event=None):
+        tooltip = getattr(self.entry, "tooltip", None)
+        if tooltip and not tooltip.pointer_over():
+            tooltip.hide()
+
+    def destroy(self, event=None):
+        if self.closed or (event is not None and event.widget is not self.entry):
+            return
+        self.closed = True
+        try:
+            self.variable.trace_remove("write", self.trace)
+            for sequence, callback in self.bindings:
+                self.entry.unbind(sequence, callback)
+            self.label.destroy()
+        except tk.TclError:
+            pass
 
 
 class DataTable(ttk.Treeview):
@@ -84,8 +181,9 @@ class DataTable(ttk.Treeview):
 class ScrollFrame(ttk.Frame):
     """A width-fitting form with scrolling and keyboard focus kept in view."""
 
-    def __init__(self, parent, height=440, width=540, padding=14):
+    def __init__(self, parent, height=440, width=540, padding=14, stretch=False):
         super().__init__(parent)
+        self.stretch = stretch
         self.canvas = tk.Canvas(self, height=height, width=width, background=BACKGROUND,
                                 highlightthickness=0, takefocus=False, yscrollincrement=20)
         self.scroll = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
@@ -98,11 +196,16 @@ class ScrollFrame(ttk.Frame):
         self.canvas.bind("<Configure>", self.resize)
 
     def update_region(self, event=None):
+        if self.stretch:
+            height = max(self.content.winfo_reqheight(), self.canvas.winfo_height())
+            if int(float(self.canvas.itemcget(self.content_id, "height") or 0)) != height:
+                self.canvas.itemconfigure(self.content_id, height=height)
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def resize(self, event):
         self.canvas.itemconfigure(self.content_id, width=event.width)
         self.wrap_labels(self.content, max(80, event.width - 28))
+        self.update_region()
 
     def wrap_labels(self, parent, width):
         for widget in parent.winfo_children():
@@ -139,8 +242,116 @@ class ScrollFrame(ttk.Frame):
         self.canvas.bind("<MouseWheel>", wheel)
 
 
+def _compact_buttons(controls, available, extra=0):
+    """Choose from measured label/icon widths; never use the last layout size."""
+    buttons = [control for control in controls if isinstance(control, Button)]
+    widths = {control: (control.measured_width(False) if isinstance(control, Button)
+                        else control.winfo_reqwidth()) for control in controls}
+    compact = extra + sum(widths.values()) > available
+    for control in buttons:
+        if compact and not control.retain_label:
+            widths[control] = control.measured_width(True)
+    critical_compact = extra + sum(widths.values()) > available
+    for control in buttons:
+        control.set_compact(compact and (not control.retain_label or critical_compact))
+        widths[control] = control.measured_width(control.compact)
+    return [widths[control] for control in controls]
+
+
+class ResponsiveButtons:
+    """Collapse labels in a packed or gridded row only when it needs room.
+
+    Existing geometry managers keep control of placement, tab order and stretch.
+    Sibling labels, view tabs and fields count toward the row's width. Flexible
+    fields retain their requested width (at least 96 pixels), rather than losing
+    all space to button labels. WrapToolbar handles its own row and is excluded.
+    Explicit callers can reserve additional pixels with an int or callable.
+    """
+
+    def __new__(cls, parent, reserve=0):
+        existing = getattr(parent, "_responsive_buttons", None)
+        return existing if existing is not None else super().__new__(cls)
+
+    def __init__(self, parent, reserve=0):
+        if getattr(self, "parent", None) is not None:
+            if reserve:
+                self.reserve = reserve
+            self.schedule()
+            return
+        self.parent, self.reserve, self.pending = parent, reserve, None
+        self.bound_children = WeakSet()
+        parent._responsive_buttons = self
+        parent.bind("<Configure>", self.schedule, add="+")
+        parent.bind("<Map>", self.schedule, add="+")
+        parent.bind("<Destroy>", self.cancel, add="+")
+        self.schedule()
+
+    @classmethod
+    def attach(cls, parent):
+        if not isinstance(parent, WrapToolbar):
+            return cls(parent)
+
+    def schedule(self, event=None):
+        if self.pending is None:
+            self.pending = self.parent._root().after_idle(self.reflow)
+
+    def cancel(self, event=None):
+        if (event is None or event.widget is self.parent) and self.pending is not None:
+            self.parent._root().after_cancel(self.pending)
+            self.pending = None
+
+    def pixels(self, value):
+        parts = (value,) if isinstance(value, (int, float)) else (
+            value if isinstance(value, (tuple, list)) else self.parent.tk.splitlist(value))
+        return [self.parent.winfo_pixels(part) for part in parts]
+
+    def horizontal_padding(self, value):
+        parts = self.pixels(value)
+        return (parts[0] * 2 if len(parts) < 3 else parts[0] + parts[2]) if parts else 0
+
+    def outside_padding(self, value):
+        parts = self.pixels(value)
+        return sum(parts) if len(parts) > 1 else parts[0] * 2 if parts else 0
+
+    def reflow(self):
+        self.pending = None
+        if not self.parent.winfo_exists() or self.parent.winfo_width() <= 1:
+            return
+        for child in self.parent.winfo_children():
+            if child not in self.bound_children:
+                self.bound_children.add(child)
+                for event in ("<Configure>", "<Map>", "<Unmap>"):
+                    child.bind(event, self.schedule, add="+")
+        available = self.parent.winfo_width() - (self.reserve() if callable(self.reserve) else self.reserve)
+        try:
+            available -= self.horizontal_padding(self.parent.cget("padding"))
+        except tk.TclError:
+            pass
+        packed = self.parent.pack_slaves()
+        horizontal = [child for child in packed if child.pack_info()["side"] in ("left", "right")]
+        groups = [(horizontal, "pack")]
+        groups.extend(([child], "pack") for child in packed
+                      if child not in horizontal and isinstance(child, Button))
+        rows = {}
+        for child in self.parent.grid_slaves():
+            rows.setdefault(child.grid_info()["row"], []).append(child)
+        groups.extend((children, "grid") for children in rows.values())
+        for children, manager in groups:
+            if not any(isinstance(child, Button) for child in children):
+                continue
+            extra = 0
+            for child in children:
+                info = child.pack_info() if manager == "pack" else child.grid_info()
+                extra += self.outside_padding(info.get("padx", 0)) + 2 * int(info.get("ipadx", 0))
+                if isinstance(child, (ttk.Entry, ttk.Combobox, ttk.Spinbox)):
+                    # The field's actual width may already have been squeezed by
+                    # labels. Reserve a usable field before compacting actions.
+                    extra += max(0, 96 - child.winfo_reqwidth())
+            _compact_buttons(children, max(1, available), extra)
+
+
 class WrapToolbar(ttk.Frame):
-    """Flow controls into as many rows as their measured widths require."""
+    """Keep a compact icon row when narrow; wrap only if icons do not fit."""
     def __init__(self, parent, gap=8, **kwargs):
         super().__init__(parent, width=1, **kwargs)
         self.gap, self.controls, self.pending, self.layout = gap, [], None, None
@@ -177,8 +388,10 @@ class WrapToolbar(ttk.Frame):
 
     def reflow(self):
         self.pending = None
-        controls = [control for control in self.controls if control not in self.hidden]
-        widths = tuple(control.winfo_reqwidth() for control in controls)
+        controls = [control for control in self.controls if control not in self.hidden
+                    and control.winfo_exists()]
+        widths = tuple(_compact_buttons(controls, self.winfo_width(),
+                                       self.gap * max(0, len(controls) - 1)))
         signature = (self.winfo_width(), tuple(zip(controls, widths)))
         if signature == self.layout:
             return
@@ -276,10 +489,16 @@ class Tooltip:
                 return False
             owner = self.widget.winfo_toplevel()
             focused = owner.focus_displayof()
-            if focused is None or focused.winfo_toplevel() != owner:
+            native_foreground = focused is None and any(
+                native.owner_is_foreground() for native in getattr(owner, "_native_reader_children", ()))
+            if not native_foreground and (focused is None or focused.winfo_toplevel() != owner):
                 return False
             x, y = self.widget.winfo_pointerxy()
-            if self.widget.winfo_containing(x, y) != self.widget:
+            under_pointer = self.widget.winfo_containing(x, y)
+            placeholder = getattr(self.widget, "placeholder", None)
+            over_hint = (placeholder is not None and not placeholder.closed
+                         and under_pointer == placeholder.label and bool(placeholder.label.winfo_manager()))
+            if under_pointer != self.widget and not over_hint:
                 return False
             if isinstance(self.widget, ttk.Treeview):
                 local_x, local_y = x - self.widget.winfo_rootx(), y - self.widget.winfo_rooty()

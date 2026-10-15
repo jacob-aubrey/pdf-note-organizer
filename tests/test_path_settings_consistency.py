@@ -144,10 +144,12 @@ class WorkflowPathConsistencyTests(unittest.TestCase):
                 review.scope_path_copy.invoke()
             copied.assert_called_once_with(scope)
             for path in local_paths:
-                review.paths.set(path)
+                key = next(key for key, value in review.copy_paths.items() if value == path)
+                review.local_copies.selection_set(key)
+                review.copy_selected()
                 self.root.update()
-                self.assertIn(path, review.paths.tooltip.text())
-                with patch.object(review.paths, "clipboard_clear"), patch.object(review.paths, "clipboard_append") as copied:
+                self.assertIn(path, review.local_path_copy.tooltip.text())
+                with patch.object(review.local_copies, "clipboard_clear"), patch.object(review.local_copies, "clipboard_append") as copied:
                     review.local_path_copy.invoke()
                 copied.assert_called_once_with(path)
             opened.assert_not_called()

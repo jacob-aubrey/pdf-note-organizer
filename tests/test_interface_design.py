@@ -83,9 +83,16 @@ class InterfaceDesignTests(unittest.TestCase):
                             "kind": "highlight", "quote": "A highlighted passage", "page": 1,
                             "page_count": 12, "label": "233", "pdf_label": "233"}])
         app.finish_query(app.query_generation, None, future)
-        self.assertEqual(app.notes.heading("page", "text"), "PDF page")
-        self.assertEqual(app.notes.item("0", "values")[0], "1")
-        self.assertIn("PDF page 1 of 12 · PDF label 233", app.preview_text.get("1.0", "end"))
+        self.assertTrue(app.notes.heading("page", "text").startswith("Page"))
+        self.assertEqual(app.notes.set("0", "page"), "1")
+        self.assertNotIn("PDF page 1 of 12", app.preview_text.get("1.0", "end"))
+        details = app.reader_document_details()
+        try:
+            from note_organizer.widgets import ReadOnlyText
+            details_text = next(w for w in details.winfo_children()[0].winfo_children() if isinstance(w, ReadOnlyText))
+            self.assertIn("PDF page 1 of 12 · PDF label 233", details_text.text.get("1.0", "end"))
+        finally:
+            details.destroy()
         self.assertFalse(app.show_details.get())
         with patch.object(app, "open_pdf") as open_pdf:
             app.open_source()
@@ -113,7 +120,8 @@ class InterfaceDesignTests(unittest.TestCase):
         self.root.deiconify()
         self.root.update()
         self.assertGreater(self.app.search_entry.winfo_width(), self.app.notes_tab.winfo_width() * .65)
-        self.assertLess(self.app.reader_folder.winfo_width(), self.app.reader_paper.winfo_width())
+        self.assertLessEqual(abs(self.app.reader_folder.winfo_width() - self.app.reader_paper.winfo_width()), 1)
+        self.assertLessEqual(abs(self.app.reader_folder.winfo_width() - self.app.label_picker.winfo_width()), 1)
         self.assertEqual(len(self.app.tabs.tabs()), 4)
         self.root.withdraw()
 

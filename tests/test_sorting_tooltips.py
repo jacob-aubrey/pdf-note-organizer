@@ -94,7 +94,10 @@ class SortingTooltipTests(unittest.TestCase):
                 self.assertTrue(hasattr(control, "tooltip"))
         self.assertIn(".pptx", view.name_entry.tooltip.text())
         self.assertIn("new subfolder", view.destination_entry.tooltip.text())
-        self.assertIn("Only PDFs", view.file_button.tooltip.text)
+        self.assertIn("Review selected", view.file_button.tooltip.text())
+        view.review_path = "synthetic.pdf"
+        self.assertIn("Only PDFs", view.file_button.tooltip.text())
+        view.review_path = None
         view.rows["synthetic.pdf"] = {"status": "waiting"}
         self.assertIn("Refresh inbox", view.item_help("synthetic.pdf", "state"))
         view.rows["synthetic.pdf"] = {"status": "skipped"}

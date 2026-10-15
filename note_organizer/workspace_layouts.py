@@ -1,24 +1,23 @@
 """Main workspace layouts, kept separate from application coordination."""
 import tkinter as tk
 from tkinter import ttk
-from .storage import SEARCH_FIELDS
-from .research_search import SCOPES
+from .storage import SEARCH_FIELDS, DEFAULT_SEARCH_FIELDS
 from .theme import PANEL, text_options
 from .icons import Button, icon, menu_action
-from .widgets import Tooltip, PathField, PathTextTooltip, SelectionDetails, WrapToolbar
-from .pages import page_description
+from .widgets import Tooltip, PathField, PathTextTooltip, SelectionDetails, WrapToolbar, EntryPlaceholder
+from .pdf_reader import PDFReader
+from .reader_title import DocumentTitle
 
 
 class WorkspaceLayouts:
     def build_library(self):
         tab = self.library_tab
-        heading = ttk.Frame(tab)
+        heading = WrapToolbar(tab)
         heading.pack(fill="x", pady=(0, 8))
-        ttk.Label(heading, text="Your PDF library", style="Section.TLabel").pack(side="left")
-        Button(heading, text="Add folder…", command=self.add).pack(side="right")
-        self.more_button(heading, [("Library storage & backups…", self.storage_maintenance)]).pack(side="right", padx=8)
+        heading.add(Button(heading, text="Add folder…", command=self.add))
         review_library = Button(heading, text="Review library…", command=self.review_library)
-        review_library.pack(side="right", padx=8)
+        heading.add(review_library)
+        heading.add(self.more_button(heading, [("Library storage & backups…", self.storage_maintenance)], text="Library actions ▾"))
         Tooltip(review_library, "Find duplicate papers and folder differences using local files and saved tablet information. Review proposed links before changing anything.")
         self.build_feedback(tab, "library")
         self.library_actions = []
@@ -140,9 +139,11 @@ class WorkspaceLayouts:
 
     def build_reader(self):
         tab = self.notes_tab
-        toolbar = ttk.Frame(tab)
+        controls = self.reader_controls = ttk.Frame(tab)
+        controls.pack(fill="x")
+        toolbar = ttk.Frame(controls)
         toolbar.pack(fill="x", pady=(0, 14))
-        ttk.Label(toolbar, text="Read your notes", style="Section.TLabel").pack(side="left", anchor="n", pady=7)
+        ttk.Label(toolbar, text="Papers & notes", style="Section.TLabel").pack(side="left", anchor="n", pady=7)
         header_actions = WrapToolbar(toolbar)
         header_actions.pack(side="left", fill="x", expand=True, padx=(16, 0))
         more = self.more_button(header_actions, [("Save editable copy…", self.editable_copy),
@@ -151,6 +152,7 @@ class WorkspaceLayouts:
                                    ("Export citations…", self.export_citation_selection),
                                    ("Find supplementary files…", self.supplementary_files),
                                    ("Change history", self.history), ("Tags & collections…", self.organize_paper),
+                                   ("Document details…", self.reader_document_details),
                                    ("Saved searches…", self.saved_searches),
                                    ("Accessible reading view…", self.accessible_reader)])
         self.notebook_button = Button(header_actions, text="Open notebook", command=self.open_notebook, style="Primary.TButton")
@@ -162,103 +164,161 @@ class WorkspaceLayouts:
             header_actions.add(button)
         Tooltip(self.notes_folder_button, lambda: f"{self.reader_folder_path()}\n\nOpen the PC folder selected below in File Explorer." if not self.notes_folder_button.instate(["disabled"]) else
                 "Select one available folder instead of All folders.")
-        self.build_feedback(tab, "notes")
-        filters = ttk.Frame(tab)
+        self.build_feedback(controls, "notes")
+        filters = ttk.Frame(controls)
         filters.pack(fill="x", pady=(0, 10))
-        filters.columnconfigure(3, weight=1)
+        for column in (1, 4, 7):
+            filters.columnconfigure(column, weight=1, uniform="reader_filter_choices")
         ttk.Label(filters, text="Folder").grid(row=0, column=0, padx=(0, 8))
-        folder_filter = ttk.Frame(filters)
-        folder_filter.grid(row=0, column=1, sticky="ew")
-        self.reader_folder = ttk.Combobox(folder_filter, state="readonly", width=24)
-        self.reader_folder.pack(side="left", fill="x", expand=True)
+        self.reader_folder = ttk.Combobox(filters, state="readonly", width=1)
+        self.reader_folder.grid(row=0, column=1, sticky="ew")
         self.reader_folder.bind("<<ComboboxSelected>>", self.reader_folder_selected)
-        ttk.Label(filters, text="Paper").grid(row=0, column=2, padx=(16, 8))
-        paper_filter = ttk.Frame(filters)
-        paper_filter.grid(row=0, column=3, sticky="ew")
-        self.reader_paper = ttk.Combobox(paper_filter, state="readonly", width=25)
-        self.reader_paper.pack(side="left", fill="x", expand=True)
+        ttk.Label(filters, text="Paper").grid(row=0, column=3, padx=(16, 8))
+        self.reader_paper = ttk.Combobox(filters, state="readonly", width=1)
+        self.reader_paper.grid(row=0, column=4, sticky="ew")
         self.reader_paper.bind("<<ComboboxSelected>>", self.reader_paper_selected)
         self.reader_folder_path_access = PathField(self.reader_folder, "Choose All folders to search across the whole active library.", value=self.reader_folder_path)
-        self.reader_folder_copy = self.reader_folder_path_access.add_copy_button(folder_filter)
-        self.reader_folder_copy.pack(side="right", padx=(6, 0))
+        self.reader_folder_copy = self.reader_folder_path_access.add_copy_button(filters)
+        self.reader_folder_copy.grid(row=0, column=2, padx=(6, 0))
         self.reader_paper_path_access = PathField(self.reader_paper,
             lambda: "Select one folder to choose its paper. Copy full path uses the selected note's source PDF." if self.all_projects.get() else "Choose All papers to read every paper in the selected folder. With All papers selected, Copy full path uses the selected note's source PDF.",
             value=self.reader_paper_path)
-        self.reader_paper_copy = self.reader_paper_path_access.add_copy_button(paper_filter)
-        self.reader_paper_copy.pack(side="right", padx=(6, 0))
+        self.reader_paper_copy = self.reader_paper_path_access.add_copy_button(filters)
+        self.reader_paper_copy.grid(row=0, column=5, padx=(6, 0))
         self.reader_project_ids = []
         self.reader_paper_ids = []
         self.active_project_id = None
         self.all_projects = tk.BooleanVar(value=False)
-        ttk.Label(filters, text="Collection or tag").grid(row=1, column=0, sticky="w", pady=(8, 0), padx=(0, 8))
+        ttk.Label(filters, text="Collection or tag").grid(row=0, column=6, sticky="w", padx=(16, 8))
         self.label_filter = tk.StringVar(value="All papers")
-        self.label_picker = ttk.Combobox(filters, textvariable=self.label_filter, values=["All papers"], state="readonly")
-        self.label_picker.grid(row=1, column=1, columnspan=3, sticky="ew", pady=(8, 0))
+        self.label_picker = ttk.Combobox(filters, textvariable=self.label_filter, values=["All papers"], state="readonly", width=1)
+        self.label_picker.grid(row=0, column=7, sticky="ew")
         Tooltip(self.label_picker, "Show papers in a research collection or with a tag. Tags & collections in Actions edits the selected paper; All papers clears this filter.")
         self.label_filter.trace_add("write", self.search_changed)
         self.refresh_label_choices()
-        searchbar = ttk.Frame(tab)
+        searchbar = ttk.Frame(controls)
         searchbar.pack(fill="x", pady=(0, 16))
         self.search_label = ttk.Label(searchbar, text="Search", image=icon(searchbar, "search"), compound="left")
         self.search_label.pack(side="left", padx=(0, 8))
+        self.search_scope = tk.StringVar(value="Notes")
+        self.search_scope_control = ttk.Combobox(searchbar, textvariable=self.search_scope,
+                                                values=("Notes", "PDFs", "All"), state="readonly", width=7)
+        self.search_scope_control.pack(side="left", padx=(0, 8))
+        Tooltip(self.search_scope_control, "Browse or search Notes, PDFs, or All in the selected folder, paper, and collection.")
         self.search = tk.StringVar()
-        self.search_fields = list(SEARCH_FIELDS)
+        self.search_fields = list(DEFAULT_SEARCH_FIELDS)
         self.search_mode = "Words / Boolean"
         self.note_type = "All notes"
         self.search_entry = ttk.Entry(searchbar, textvariable=self.search, width=52)
-        Tooltip(self.search_entry, 'Search notes, printed PDF text, or both in the chosen folder and paper. Spaces mean AND; uppercase AND, OR, NOT, quotes and parentheses are supported. PDF results match within one page; scanned pages need a text layer.')
-        self.search_scope = tk.StringVar(value="Notes")
-        self.search_scope_control = ttk.Combobox(searchbar, textvariable=self.search_scope, values=SCOPES,
-                                                state="readonly", width=7)
-        Tooltip(self.search_scope_control, "Notes searches saved annotations. PDFs searches printed text on every page, including papers without notes. All combines both. Enter a query to search PDFs; the first search builds a local text cache. Search in… fields and note types apply to note results.")
-        self.search_scope.trace_add("write", self.search_changed)
-        self.search_options_button = Button(searchbar, text="Search in…", command=self.search_options)
+        EntryPlaceholder(self.search_entry, lambda: {"Notes": "Search notes…", "PDFs": "Search PDF text…",
+            "All": "Search notes and PDF text…"}.get(self.search_scope.get(), "Search notes and PDF text…"), self.search)
+        self.search_scope.trace_add("write", self.search_entry.placeholder.refresh)
+        Tooltip(self.search_entry, 'Search within the chosen folder, paper, and collection or tag. Spaces mean AND; uppercase AND, OR, NOT, quotes and parentheses are supported. Surrounding note text is off by default in Search filters. PDF results match within one page; scanned pages need a text layer.')
+        self.search_scope.trace_add("write", self.search_scope_changed)
+        self.search_options_button = Button(searchbar, text="Search filters…", command=self.search_options)
         self.search.trace_add("write", self.search_changed)
         self.note_count = tk.StringVar()
-        ttk.Label(searchbar, textvariable=self.note_count, style="Muted.TLabel", width=12, anchor="e").pack(side="right")
+        self.note_count_label = ttk.Label(searchbar, textvariable=self.note_count, style="Muted.TLabel", anchor="e")
+        self.note_count_label.pack(side="right", padx=(10, 0))
+        self.search_progress = ttk.Progressbar(searchbar, mode="indeterminate", length=42)
+        Tooltip(self.note_count_label, lambda: "Searching the selected scope. The previous results remain visible until the new search finishes." if getattr(self, "reader_search_busy", False) else self.note_count.get())
         self.search_options_button.pack(side="right", padx=(8, 0))
-        self.search_scope_control.pack(side="right", padx=(8, 0))
+        self.clear_search_button = Button(searchbar, text="Clear search", command=self.clear_search, style="Compact.TButton", state="disabled")
+        self.clear_search_button.pack(side="right", padx=(8, 0))
         self.search_entry.pack(side="left", fill="x", expand=True)
+        self.search_entry.bind("<Escape>", self.clear_search)
         self.search_summary = tk.StringVar()
-        self.search_summary_label = ttk.Label(tab, textvariable=self.search_summary, style="Muted.TLabel")
+        self.search_summary_label = ttk.Label(controls, textvariable=self.search_summary, style="Muted.TLabel")
         self.search_error = tk.StringVar()
-        self.search_error_label = ttk.Label(tab, textvariable=self.search_error, style="Error.TLabel", wraplength=800)
+        self.search_error_label = ttk.Label(controls, textvariable=self.search_error, style="Error.TLabel", wraplength=800)
         self.search_warning = tk.StringVar()
-        self.search_warning_label = ttk.Label(tab, style="Muted.TLabel", wraplength=800)
+        self.search_warning_label = ttk.Label(controls, style="Muted.TLabel", wraplength=800)
         Tooltip(self.search_warning_label, lambda: self.search_warning.get())
         self.reader_pane = ttk.Panedwindow(tab, orient="horizontal")
         self.reader_pane.pack(fill="both", expand=True)
         left = ttk.Frame(self.reader_pane, width=280, padding=(0, 0, 16, 0))
-        self.notes = self.tree(left, [("page", "PDF page", 78), ("kind", "Type", 70), ("text", "Note", 210)], empty_text="No matching notes")
-        self.notes.configure(displaycolumns=("page", "text"))
+        left.pack_propagate(False)
+        self.notes = self.tree(left, [("paper", "Paper", 230), ("page", "Page", 55), ("kind", "Type", 80),
+                                     ("text", "Match", 210)], empty_text="No matching results")
+        self.notes.heading("paper", command=lambda: self.sort_reader("paper"))
+        self.notes.heading("kind", command=lambda: self.sort_reader("kind"))
+        self.notes.heading("page", command=lambda: self.sort_reader("page"))
         self.notes.bind("<<TreeviewSelect>>", self.preview)
+        self.notes.bind("<ButtonRelease-1>", self.activate_reader_result, add="+")
         self.notes.bind("<Double-1>", lambda event: self.open_source())
         self.notes.bind("<Return>", lambda event: self.open_source())
-        self.notes.tooltip.extra = lambda row, column: self.note_help() if column == "page" else ""
+        self.notes.tooltip.extra = self.note_tooltip_help
         self.notes.tooltip.value = self.note_cell_value
+        self.notes.tooltip.full_with_help = True
         self.reader_pane.add(left, weight=1)
+        self.reader_results_pane = left
+        self.reader_expanded = False
         right = ttk.Frame(self.reader_pane)
-        buttons = ttk.Frame(right)
-        buttons.pack(fill="x", pady=(0, 10))
+        buttons = self.reader_header = ttk.Frame(right)
+        buttons.pack(fill="x", pady=(0, 6))
         self.show_details = tk.BooleanVar(value=False)
-        ttk.Checkbutton(buttons, text="Details", variable=self.show_details, command=self.preview).pack(side="right", anchor="n", padx=(12, 0))
-        self.preview_actions = actions = WrapToolbar(buttons)
-        actions.pack(side="left", fill="x", expand=True)
-        self.source_button = actions.add(Button(actions, text="Open PDF", command=self.open_source))
+        self.style.layout("ReaderContent.TNotebook.Tab", [])
+        self.style.layout("ReaderView.TRadiobutton", self.style.layout("TNotebook.Tab"))
+        self.style.configure("ReaderView.TRadiobutton", padding=(10, 6), background="#2b2b2b", foreground="#AAB0B5")
+        self.style.map("ReaderView.TRadiobutton", background=[("selected", "#1B629B"), ("active", "#343638")],
+                       foreground=[("selected", "white")])
+        view_choices = ttk.Frame(buttons)
+        view_choices.pack(side="left", padx=(0, 8))
+        self.reader_view = tk.StringVar(value="pdf")
+        self.note_view_button = ttk.Radiobutton(view_choices, text="Note view", variable=self.reader_view, value="note",
+            style="ReaderView.TRadiobutton", command=lambda: self.reader_views.select(self.note_details))
+        self.pdf_view_button = ttk.Radiobutton(view_choices, text="PDF view", variable=self.reader_view, value="pdf",
+            style="ReaderView.TRadiobutton", command=lambda: self.reader_views.select(self.pdf_reader))
+        self.note_view_button.pack(side="left")
+        self.pdf_view_button.pack(side="left")
+        Tooltip(self.note_view_button, "Read the selected note's text, comments, handwriting transcription and drawing close-up. The main search and PDF position stay the same.")
+        Tooltip(self.pdf_view_button, "Read the full PDF at the selected result. Switching views keeps the PDF zoom, position and current search.")
+        self.source_button = Button(buttons, text="Open externally", command=self.open_source_external)
+        self.source_button.pack(side="left", padx=(0, 6))
+        self.reader_expand_button = Button(buttons, text="Reading mode", command=self.toggle_reader_expanded)
+        self.reader_expand_button.pack(side="left", padx=(0, 6))
+        Tooltip(self.reader_expand_button, lambda: "Exit reading mode and restore the previous view, layout and zoom while keeping your current PDF reading position." if self.reader_expanded else
+                "Give the PDF the full Reader area at 125% zoom. Main-match arrows and Ctrl+double-click reset to 125% here; normal mode resets to Fit width. Exit restores your previous view and zoom.")
+        self.match_toolbar = buttons
+        self.match_count = tk.StringVar()
+        self.match_display = tk.StringVar(value="No results")
+        self.match_count_label = ttk.Label(buttons, textvariable=self.match_display, style="Muted.TLabel")
+        self.match_count_label.pack(side="right", padx=(6, 0))
+        Tooltip(self.match_count_label, lambda: self.match_count.get() + ". The arrows follow the main result list, separately from Find in PDF.")
+        self.match_actions = buttons
+        self.next_match_button = Button(buttons, text="Next match", command=lambda: self.navigate_match(1), state="disabled")
+        self.previous_match_button = Button(buttons, text="Previous match", command=lambda: self.navigate_match(-1), state="disabled")
+        self.next_match_button.pack(side="right", padx=(4, 0))
+        self.previous_match_button.pack(side="right", padx=(4, 0))
+        for button in (self.previous_match_button, self.next_match_button):
+            Tooltip(button, lambda current=button: ("Only one main-search match or result is available. " if current.instate(["disabled"]) and self.entries else
+                "Choose a result first. " if not self.entries else "") +
+                "Move through actual main-search hits in reading order, across occurrences, pages and papers. Reset to 125% in Reading mode or Fit width normally, keeping the page centered. This returns from Find in PDF to the blue main-search marks.")
+        self.reader_views = ttk.Notebook(right, style="ReaderContent.TNotebook")
+        self.reader_views.pack(fill="both", expand=True)
+        self.note_details = ttk.Frame(self.reader_views)
+        self.note_document_title = DocumentTitle(self.note_details)
+        self.preview_actions = actions = WrapToolbar(self.note_details)
+        actions.pack(fill="x", pady=(0, 8))
         self.full_page_button = actions.add(Button(actions, text="Full page context", command=self.full_page_context, state="disabled"))
         self.enlarge_button = actions.add(Button(actions, text="Enlarge image", command=self.enlarge))
         self.copy_image_button = actions.add(Button(actions, text="Copy image", command=self.copy_note_image, state="disabled"))
-        Tooltip(self.copy_image_button, "Copy the loaded note image at its original resolution. Click the inline image and press Ctrl+C, or right-click it.")
-        Tooltip(self.enlarge_button, lambda: "Inspect this drawing or handwriting preview. Fit width or height, drag to pan, double-click to fit width, and Ctrl + scroll to zoom." if self.image else
-                "Select a drawing or handwriting note with a loaded preview. Highlights use extracted text and Open PDF.")
-        Tooltip(self.full_page_button, lambda: "Open the complete PDF page, including retained margins. Fit width or height, drag to pan, double-click to fit width, and Ctrl + scroll to zoom. Generated on demand; Copy image copies the complete page." if self.selected_entry() and self.selected_entry()["kind"] in {"drawing", "pdf"} else
-                "Select a drawing, handwriting note, or PDF text result first. Highlights use Open PDF.")
-        text_frame = ttk.Frame(right)
+        Tooltip(self.copy_image_button, "Copy the loaded drawing or PDF page image at its original resolution, including temporary search highlights. Click the inline image and press Ctrl+C, or right-click it.")
+        Tooltip(self.enlarge_button, lambda: "Inspect this PDF page or drawing. Ctrl + drag to pan, Ctrl + scroll to zoom, and Ctrl + double-click to reset the view." if self.image else
+                "Select a drawing or handwriting note with a loaded close-up in Note view. Use PDF view to read its document.")
+        Tooltip(self.full_page_button, lambda: "Open the complete PDF page, including retained margins. Ctrl + drag to pan, Ctrl + scroll to zoom, and Ctrl + double-click to reset the view. Generated on demand; Copy image copies the complete page." if self.selected_entry() and self.selected_entry()["kind"] in {"drawing", "pdf"} else
+                "Select a drawing, handwriting note, or PDF text result first. Highlights can be read in PDF view.")
+        self.expand_matches_button = actions.add(Button(actions, text="Show all matches", command=self.toggle_match_excerpts))
+        actions.set_visible(self.expand_matches_button, False)
+        text_frame = ttk.Frame(self.note_details)
         text_frame.pack(fill="both", expand=True)
-        self.preview_text = tk.Text(text_frame, height=9, width=35, wrap="word", state="disabled", **text_options())
-        self.preview_text.configure(spacing1=3, spacing3=3)
-        self.preview_text.tag_configure("paper_title", font=("Segoe UI", 12, "bold"))
-        self.preview_text.tag_configure("page_info", font=("Segoe UI", 9), foreground=self.style.lookup("Muted.TLabel", "foreground"))
+        self.preview_text = tk.Text(text_frame, height=6, width=35, wrap="word", state="disabled", **text_options())
+        self.preview_text.configure(spacing1=2, spacing3=2)
+        self.preview_text.tag_configure("section_label", font=("Segoe UI", 9, "bold"), foreground=self.style.lookup("Muted.TLabel", "foreground"))
+        self.preview_text.tag_configure("document_warning", foreground="#FFB4AB")
+        self.preview_text.tag_configure("search_match", background="#B9D1FF", foreground="#14254A")
+        self.preview_text.tag_configure("current_search_match", background="#4169E1", foreground="white")
+        self.preview_text.tag_raise("sel")
         scroll = ttk.Scrollbar(text_frame, orient="vertical", command=self.preview_text.yview)
         scroll.pack(side="right", fill="y")
         self.preview_text.pack(fill="both", expand=True)
@@ -274,5 +334,11 @@ class WorkspaceLayouts:
         self.preview_text.bind("<Shift-F10>", self.show_image_menu)
         self.image_menu = tk.Menu(self.preview_text, tearoff=False)
         menu_action(self.image_menu, "Copy image", self.copy_note_image)
-        Tooltip(self.source_button, lambda: f"{self.entry_paper_path(self.selected_entry())}\n\nOpen the combined PC and tablet notes at physical PDF page {self.selected_entry()['page']}.\n{page_description(self.selected_entry())}" if self.selected_entry() else "Select a note first. Open PDF navigates using the physical PDF page position.")
-        self.reader_pane.add(right, weight=3)
+        Tooltip(self.source_button, self.external_pdf_help)
+        self.pdf_reader = PDFReader(self.reader_views, self.load_reader_document, self.open_source_external, self.toggle_reader_expanded)
+        self.reader_views.add(self.note_details, text="Note view")
+        self.reader_views.add(self.pdf_reader, text="PDF view")
+        self.reader_views.select(self.pdf_reader)
+        self.reader_views.bind("<<NotebookTabChanged>>", self.reader_view_changed)
+        self.reader_pane.add(right, weight=1)
+        self.initial_split(self.reader_pane, .38)

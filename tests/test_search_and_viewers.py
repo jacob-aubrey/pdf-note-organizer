@@ -3,12 +3,26 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
-from note_organizer.search import compile_search, SearchSyntaxError
+from note_organizer.search import compile_search, positive_terms, match_spans, SearchSyntaxError
 from note_organizer.storage import Store, matches_search
 from note_organizer.viewers import open_pdf_page, viewer_command, executable_from_command
 
 
 class BooleanSearchTests(unittest.TestCase):
+    def test_highlight_terms_follow_boolean_polarity_and_literal_phrases(self):
+        self.assertEqual(positive_terms('(gold OR "spectral CT") AND NOT (iodine OR phantom)'),
+                         ["gold", "spectral ct"])
+        self.assertEqual(positive_terms('NOT NOT gold OR NOT (iodine AND NOT cobalt)'), ["gold", "cobalt"])
+        self.assertEqual(positive_terms('gold OR iodine', 'Exact phrase'), ["gold or iodine"])
+        self.assertEqual(positive_terms('NOT gold'), [])
+        self.assertEqual(positive_terms(''), [])
+
+    def test_highlight_spans_preserve_unicode_and_wrapped_phrase_offsets(self):
+        text = "Straße: Spectral\n  CT; GOLD gold."
+        spans = match_spans(text, ["strasse", "spectral ct", "gold"])
+        self.assertEqual([text[start:end] for start, end in spans],
+                         ["Straße", "Spectral\n  CT", "GOLD", "gold"])
+
     def test_precedence_groups_and_implicit_and(self):
         self.assertTrue(compile_search("iodine OR gold AND CT")(["iodine"]))
         self.assertFalse(compile_search("(iodine OR gold) AND CT")(["iodine"]))

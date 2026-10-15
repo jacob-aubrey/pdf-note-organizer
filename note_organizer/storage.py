@@ -42,7 +42,18 @@ SEARCH_FIELDS = {
     "context": "Surrounding printed text", "filename": "Filename",
     "author": "Author", "doi": "DOI", "color": "Annotation color", "page": "PDF page, label, or verified journal page",
 }
+DEFAULT_SEARCH_FIELDS = tuple(key for key in SEARCH_FIELDS if key != "context")
 NOTE_TYPES = ("All notes", "Highlights and markup", "Drawings and handwriting", "Typed notes")
+
+
+def search_values(entry):
+    """Return the same original field text used by filtering and previews."""
+    meta = entry.get("metadata", {})
+    values = {**{key: entry.get(key, "") for key in ("quote", "comment", "ocr", "context", "color")},
+              "title": entry.get("logical_paper_title") or meta.get("title") or Path(entry["path"]).stem,
+              "filename": Path(entry["path"]).name, "author": meta.get("author", ""),
+              "doi": meta.get("doi", ""), "page": page_search_text(entry)}
+    return {key: str(value) for key, value in values.items()}
 
 
 def matches_search(entry, query, fields, match_mode, note_type, matcher=None):
@@ -56,11 +67,7 @@ def matches_search(entry, query, fields, match_mode, note_type, matcher=None):
     if not query.strip() and len(query) <= 4096:
         return True
     matcher = matcher or compile_search(query, match_mode)
-    meta = entry.get("metadata", {})
-    values = {**{key: entry.get(key, "") for key in ("quote", "comment", "ocr", "context", "color")},
-              "title": entry.get("logical_paper_title") or meta.get("title") or Path(entry["path"]).stem,
-              "filename": Path(entry["path"]).name, "author": meta.get("author", ""),
-              "doi": meta.get("doi", ""), "page": page_search_text(entry)}
+    values = search_values(entry)
     haystacks = [normalize(values.get(key, "")) for key in fields]
     return matcher(haystacks)
 

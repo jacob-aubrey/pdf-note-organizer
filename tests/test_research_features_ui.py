@@ -4,6 +4,7 @@ from io import BytesIO
 from pathlib import Path
 import unittest
 from unittest.mock import patch
+from tkinter import ttk
 
 import fitz
 from PIL import Image
@@ -14,12 +15,51 @@ from note_organizer.research_ui import CitationWindow, SupplementsWindow
 from note_organizer.storage import digest_file
 from tests import test_review_controls
 from tests.ui_helpers import settle_library
+from tests.test_preferences_ui import descendants
 
 
 class ResearchUITests(unittest.TestCase):
     setUp = test_review_controls.ReviewControlTests.setUp
     tearDown = test_review_controls.ReviewControlTests.tearDown
     wait = test_review_controls.ReviewControlTests.wait
+
+    def test_search_scope_changes_from_dropdown_and_note_filters_disable_for_pdfs(self):
+        self.paper()
+        app = self.app
+        self.assertEqual(tuple(app.search_scope_control.cget("values")), ("Notes", "PDFs", "All"))
+        app.search_scope_control.set("PDFs")
+        self.assertEqual(app.search_scope.get(), "PDFs")
+        self.wait(lambda: len(app.entries) == 1 and app.entries[0]["kind"] == "pdf")
+        app.search_options()
+        window = next(w for w in descendants(self.root) if isinstance(w, ttk.Button)
+                      and w.cget("text") == "Apply").winfo_toplevel()
+        self.assertFalse(any(isinstance(w, ttk.Radiobutton) and w.cget("text") in {"All", "PDFs", "Notes"}
+                             for w in descendants(window)))
+        fields = [w for w in descendants(window) if isinstance(w, ttk.Checkbutton)]
+        self.assertTrue(fields)
+        self.assertTrue(all(w.instate(["disabled"]) for w in fields))
+        note_types = next(w for w in descendants(window) if isinstance(w, ttk.Combobox)
+                          and "All notes" in w.cget("values"))
+        self.assertTrue(note_types.instate(["disabled"]))
+        next(w for w in descendants(window) if isinstance(w, ttk.Button) and w.cget("text") == "Cancel").invoke()
+        self.assertEqual(app.search_scope.get(), "PDFs")
+        app.search_scope_control.set("Notes")
+        self.wait(lambda: len(app.entries) == 1 and app.entries[0]["kind"] == "drawing")
+
+    def test_inbox_paths_stack_and_review_heading_aligns_with_incoming_heading(self):
+        self.root.attributes("-alpha", 0)
+        self.root.deiconify()
+        self.app.tabs.select(self.app.inbox_tab)
+        self.root.geometry("1000x700+0+0")
+        self.root.update()
+        labels = {w.cget("text"): w for w in descendants(self.app.inbox_tab) if isinstance(w, ttk.Label)}
+        self.assertLessEqual(abs(labels["Incoming documents"].winfo_rooty() -
+                                 labels["Review filename & destination"].winfo_rooty()), 2)
+        self.assertGreater(labels["Library"].winfo_rooty(), labels["Inbox"].winfo_rooty())
+        self.assertEqual(labels["Library"].winfo_rootx(), labels["Inbox"].winfo_rootx())
+        inbox = self.app.inbox_view
+        self.assertGreaterEqual(inbox.editor_form.scroll.winfo_rootx() -
+                                (inbox.name_entry.winfo_rootx() + inbox.name_entry.winfo_width()), 12)
 
     def paper(self):
         path = self.pc / "Research paper.pdf"
@@ -59,7 +99,7 @@ class ResearchUITests(unittest.TestCase):
         finally:
             window.destroy()
 
-    def test_mixed_search_pdf_preview_and_open_target(self):
+    def test_mixed_search_pdf_reader_selection_and_open_target(self):
         path, _ = self.paper()
         app = self.app
         app.search.set("cobalt OR iodine")
@@ -69,11 +109,18 @@ class ResearchUITests(unittest.TestCase):
         app.notes.selection_set("1")
         app.preview()
         self.assertIn("Unique iodine experiment", app.preview_text.get("1.0", "end"))
+        self.assertEqual(Path(app.pdf_reader.entry["path"]), path)
+        self.assertEqual(app.pdf_reader.entry["page"], 1)
+        self.assertEqual(set(app.pdf_reader.terms), {"cobalt", "iodine"})
+        self.assertIsNone(app.image)
+        self.assertTrue(app.preview_text.tag_ranges("search_match"))
         self.assertTrue(app.copy_image_button.instate(["disabled"]))
+        self.assertEqual(app.notes.set("1", "kind"), "PDF")
+        self.assertEqual(app.tabs.tab(app.notes_tab, "text"), "Reader")
         self.assertFalse(app.full_page_button.instate(["disabled"]))
         with patch.object(app, "open_pdf") as opened:
             app.open_source()
-        opened.assert_called_once_with(app.entries[1]["path"], 1)
+        opened.assert_called_once_with(app.entries[1]["path"], 1, source_only=True)
         app.search_scope.set("PDFs")
         self.wait(lambda: app.note_count.get() == "1 result")
         self.assertTrue(app.export_button.instate(["disabled"]))
@@ -133,6 +180,8 @@ class ResearchUITests(unittest.TestCase):
         self.root.attributes("-alpha", 0)
         self.root.deiconify()
         self.app.tabs.select(self.app.notes_tab)
+        self.app.show_details.set(True)
+        self.app.toggle_note_details()
         self.root.geometry("940x700+0+0")
         self.root.update()
         for widget in (self.app.search_entry, self.app.search_scope_control, self.app.copy_image_button,

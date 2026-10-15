@@ -140,19 +140,30 @@ class ScaledLayoutTests(unittest.TestCase):
                     review = app.review_library()
                     review.window.attributes("-alpha", 0)
                     review.window.geometry("1000x700+0+0")
+                    copies = [library / "first.pdf", library / "second.pdf"]
+                    for path in copies:
+                        path.write_bytes(b"Disposable layout fixture")
                     review.rows = {"example": {"id": "example", "kind": "local_duplicate", "title": "Synthetic paper",
-                        "reason": "Compare both copies before linking.", "sources": [], "actions": [], "local_paths": []}}
+                        "reason": "Compare both copies before linking.", "sources": [], "actions": [], "local_paths": list(map(str, copies))}}
                     deadline = time.monotonic() + 4
                     while time.monotonic() < deadline and not hasattr(review, "undo_operation"):
                         root.update()
                         app.poll()
                         time.sleep(.005)
                     review.render()
+                    review.tree.selection_set("example")
+                    review.selected()
                     root.update()
                     row = review.tree.bbox("example")
                     self.assertTrue(row, f"Review row disappeared at {scale:.0%} scaling")
                     face = app.style.lookup("Treeview", "font")
                     self.assertGreaterEqual(row[3], font.Font(root=root, font=face).metrics("linespace") + 2)
+                    copy_row = review.local_copies.bbox("0")
+                    self.assertTrue(copy_row, f"Selected PDF list disappeared at {scale:.0%} scaling")
+                    for table, bounds in ((review.tree, row), (review.local_copies, copy_row)):
+                        self.assertLessEqual(bounds[1] + bounds[3], table.winfo_height())
+                        self.assertLessEqual(table.winfo_rooty() + bounds[1] + bounds[3],
+                                             review.window.winfo_rooty() + review.window.winfo_height())
                     for button in (review.link_button, review.keep_button, review.again_button, review.undo_button):
                         self.assertLessEqual(button.winfo_rooty() + button.winfo_height(),
                                              review.window.winfo_rooty() + review.window.winfo_height() + 2)

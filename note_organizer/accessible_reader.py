@@ -18,11 +18,19 @@ def render(entries, image_loader=None):
             data = image_loader(entry)
             if data:
                 note += f'<img alt="Drawing on {escape(page_description(entry))}. Transcription and surrounding text are listed with this note." src="data:image/png;base64,{escape(data, quote=True)}">'
-        path = Path(entry.get("source_link_path") or entry["path"]).resolve()
-        link = path.as_uri() + "#page=" + str(entry["page"])
+        document = bool(entry.get("pdf_document"))
+        location = "PDF document" if document else page_description(entry) + " · " + entry["kind"]
+        filename = Path(entry["path"]).name
+        if entry.get("missing"):
+            source = '<p class="location">Source PDF is unavailable. Locate the file in Library to read it.</p>'
+        else:
+            path = Path(entry.get("source_link_path") or entry["path"]).resolve()
+            link = path.as_uri() + ("" if document else "#page=" + str(entry["page"]))
+            label = "Open source PDF" if document else f"Open source PDF at page {entry['page']}"
+            source = f'<a href="{escape(link, quote=True)}">{escape(label)}</a>'
         articles.append(f'<article tabindex="0"><h2 id="note-{index}">{escape(title)}</h2>'
-                        f'<p class="location">{escape(page_description(entry))} · {escape(entry["kind"])}</p>{note}'
-                        f'<a href="{escape(link, quote=True)}">Open source PDF at page {entry["page"]}</a></article>')
+                        f'<p class="location">{escape(location)}</p>'
+                        f'<p class="location">File: {escape(filename)}</p>{note}{source}</article>')
     return '''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
 <title>Notable accessible reading view</title><style>
@@ -32,16 +40,16 @@ input{width:min(95%,36rem)}article{border-top:1px solid #aab0b5;padding:1rem 0}i
 *:focus-visible{outline:3px solid #ffd166;outline-offset:4px}.location{color:#c9ced6}p{white-space:pre-wrap}
 @media(prefers-color-scheme:light){body{background:white;color:#111}a{color:#064c8c}.location{color:#444}button,input{background:white}}
 @media print{header input,header button{display:none}body{background:white;color:black}article{break-inside:avoid}}
-</style><header><h1>Research notes</h1><p>Snapshot of your current Notable search. Use your browser's headings navigation, Tab, zoom or print controls. Source links open your local PDFs.</p>
+</style><header><h1>Papers and notes</h1><p>Snapshot of your current Notable reading view. Use your browser's headings navigation, Tab, zoom or print controls. Source links open your local PDFs.</p>
 <label for="filter">Filter this reading view</label><br><input id="filter" type="search" autofocus>
-<p id="count" role="status" aria-live="polite"></p><button onclick="window.print()">Print or save as PDF</button></header><main>''' + ("".join(articles) or "<p>No notes match the current search.</p>") + '''</main><script>
-const input=document.querySelector('#filter'),notes=[...document.querySelectorAll('article')],count=document.querySelector('#count');
-function filter(){const text=input.value.toLocaleLowerCase();let visible=0;for(const note of notes){note.hidden=!note.textContent.toLocaleLowerCase().includes(text);if(!note.hidden)visible++;}count.textContent=`${visible} of ${notes.length} notes shown`;}
+<p id="count" role="status" aria-live="polite"></p><button onclick="window.print()">Print or save as PDF</button></header><main>''' + ("".join(articles) or "<p>No results in the current reading view.</p>") + '''</main><script>
+const input=document.querySelector('#filter'),items=[...document.querySelectorAll('article')],count=document.querySelector('#count');
+function filter(){const text=input.value.toLocaleLowerCase();let visible=0;for(const item of items){item.hidden=!item.textContent.toLocaleLowerCase().includes(text);if(!item.hidden)visible++;}count.textContent=`${visible} of ${items.length} items shown`;}
 input.addEventListener('input',filter);filter();</script></html>'''
 
 
 def open_reader(app):
-    entries = [dict(entry) for entry in app.entries]
+    entries = [dict(app.entries[int(row)]) for row in app.notes.get_children()]
     app.notify("Preparing accessible reading view…")
     def prepare():
         def image(entry):

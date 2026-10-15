@@ -19,6 +19,12 @@ from tests.ui_helpers import settle_library
 
 class UIAuditTests(unittest.TestCase):
     def setUp(self):
+        # Most UI tests use synthetic note records and exercise Tk controls.
+        # The dedicated reader integration checks opt into the native runtime.
+        if not getattr(self, "enable_pdf_reader", False):
+            self.reader_load_patch = patch("note_organizer.pdf_reader.PDFReader.load_entry")
+            self.reader_load_mock = self.reader_load_patch.start()
+            self.addCleanup(self.reader_load_patch.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.folder = Path(self.temp.name)
         self.pc = self.folder / "Sorted"
@@ -44,6 +50,7 @@ class UIAuditTests(unittest.TestCase):
         self.root.update()
 
     def tearDown(self):
+        self.app.pdf_reader.close()
         self.app.closing = True
         self.app.inbox.stop()
         self.app.workflow_executor.shutdown(wait=True, cancel_futures=True)

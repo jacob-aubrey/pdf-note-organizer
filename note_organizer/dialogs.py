@@ -135,7 +135,7 @@ class PreferencesDialog:
         self.viewer = tk.StringVar(value=VIEWERS[app.viewer_preference["viewer"]])
         picker = ttk.Combobox(general, textvariable=self.viewer, values=list(VIEWERS.values()), state="readonly", width=44)
         picker.pack(anchor="w")
-        Tooltip(picker, "Choose the application used by Open PDF. Supported viewers receive the physical PDF page position.")
+        Tooltip(picker, "Choose the application used by Library's Open PDF and exported PDF actions. Supported viewers receive the physical PDF page position. Reader's Open externally always uses the computer default viewer.")
         self.viewer_path = tk.StringVar(value=app.viewer_preference.get("path", ""))
         row = ttk.Frame(general)
         row.pack(fill="x", pady=8)
@@ -214,7 +214,7 @@ class PreferencesDialog:
         custom = self.viewer.get() == VIEWERS["custom"]
         for widget in (self.path_entry, self.browse_button):
             widget.configure(state="normal" if custom else "disabled")
-        self.viewer_help.set("This viewer opens the file normally; the requested PDF page stays visible in Notes." if custom else
+        self.viewer_help.set("This viewer opens the file normally; the requested PDF page stays visible in Reader." if custom else
                              "Supported viewers receive the physical PDF page. Windows default uses the registered application when possible.")
 
     def copy_path(self):

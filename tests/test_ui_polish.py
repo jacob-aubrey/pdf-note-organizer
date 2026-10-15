@@ -99,7 +99,12 @@ class UIPolishTests(unittest.TestCase):
                             "kind": "highlight", "quote": quote, "page": 1}])
         app.finish_query(app.query_generation, None, future)
         self.assertEqual(app.notes.set("0", "text"), quote)
-        self.assertEqual(app.note_cell_value("0", "text"), quote)
+        for column in ("paper", "page", "kind", "text"):
+            with self.subTest(column=column):
+                tooltip = app.note_cell_value("0", column)
+                self.assertIn(quote, tooltip)
+                self.assertLess(tooltip.index("File: paper.pdf"), tooltip.index(quote))
+                self.assertIn("PDF page 1", tooltip)
 
     def test_dragged_column_width_survives_background_refresh(self):
         self.show()
@@ -369,7 +374,7 @@ class UIPolishTests(unittest.TestCase):
         apply.invoke()
         self.assertFalse(window.winfo_exists())
         self.assertEqual(self.app.search_mode, "Exact phrase")
-        self.assertEqual(self.app.search_options_button.cget("text"), "Search in… •")
+        self.assertEqual(self.app.search_options_button.cget("text"), "Search filters… •")
         self.assertEqual(self.app.search_options_button.icon_name, "list-filter")
         self.assertTrue(self.app.search_summary.get())
         self.app.search_options()
@@ -379,7 +384,7 @@ class UIPolishTests(unittest.TestCase):
         apply = next(w for w in descendants(window) if isinstance(w, Button) and w.cget("text") == "Apply")
         apply.invoke()
         self.assertFalse(window.winfo_exists())
-        self.assertEqual(self.app.search_options_button.cget("text"), "Search in…")
+        self.assertEqual(self.app.search_options_button.cget("text"), "Search filters…")
         self.assertEqual(self.app.search_options_button.icon_name, "list-filter")
         self.assertEqual(self.app.search_summary.get(), "")
         self.assertFalse(self.errors)

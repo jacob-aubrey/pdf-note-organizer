@@ -9,7 +9,7 @@ from tkinter import filedialog, ttk
 from .icons import Button
 from .storage_ui import _size, open_cleanup
 from .theme import BACKGROUND
-from .widgets import ReadOnlyText, bind_dialog_close, fit_dialog, annotate_buttons
+from .widgets import ReadOnlyText, bind_dialog_close, fit_dialog, Tooltip, annotate_buttons
 from .workflow_ui import background
 from .maintenance import stats
 
@@ -38,6 +38,8 @@ class MaintenanceWindow:
             button = Button(frame, text=label, command=action)
             button.pack(anchor="w", pady=4)
             self.controls.append(button)
+            if label == "Review extra PDFs…":
+                Tooltip(button, "Review older app-created reading copies and their preserved originals before choosing any cleanup. Opening this review does not remove files.")
         from .archive_ui import ArchiveReviewWindow
         archive_button = Button(frame, text="Review recovery archives…", command=lambda: ArchiveReviewWindow(app))
         archive_button.pack(anchor="w", pady=4)
@@ -48,9 +50,14 @@ class MaintenanceWindow:
         ttk.Label(frame, textvariable=self.status, wraplength=610).pack(fill="x", pady=8)
         self.close_button = Button(footer, text="Close", command=self.close)
         self.close_button.pack(side="right")
+        Tooltip(self.close_button, lambda: "Wait for the current backup, compaction, or restore to finish before closing." if self.busy else
+                "Close library storage and backups.")
         self.restored_path = None
         self.open_restored_button = Button(footer, text="Open restored library", command=self.open_restored, state="disabled")
         self.open_restored_button.pack(side="left")
+        Tooltip(self.open_restored_button, lambda: "Wait for the current storage operation to finish." if self.busy else
+                "Restore a verified backup first to open its separate recovered library." if not self.restored_path else
+                f"{self.restored_path}\n\nOpen this restored library in a separate app window with its own recovered originals and settings.")
         annotate_buttons(window)
         fit_dialog(window, app.root)
         background(app, lambda: stats(app.store), self.loaded, self.failed)

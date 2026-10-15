@@ -19,7 +19,7 @@ from .storage import digest_file
 
 GRAPHICS = {"ink", "line", "polyline", "polygon", "square", "circle", "stamp", "caret"}
 MARKUP = {"highlight", "underline", "squiggly", "strikeout"}
-EXTRACTION_REVISION = 6
+EXTRACTION_REVISION = 7
 
 
 def scan_fingerprint(settings):
@@ -276,7 +276,10 @@ def extract(path, settings, cancelled=None):
             lines = [fitz.Rect(line["bbox"])
                      for block in page.get_text("dict", textpage=textpage)["blocks"]
                      for line in block.get("lines", [])]
-            page_words = sorted(page.get_text("words", textpage=textpage), key=lambda w: (w[5], w[6], w[7]))
+            # Preserve MuPDF's text-flow order. Sorting by page coordinates
+            # interleaves adjacent columns and makes match navigation differ
+            # from PDF Find.
+            page_words = page.get_text("words", textpage=textpage, sort=False)
             contexts = {}
             label = page.get_label() or ""
             by_xref = {a.xref: a for a in annotations}
@@ -356,7 +359,10 @@ def extract(path, settings, cancelled=None):
                 if crop_key not in contexts:
                     # Keep MuPDF's original clipped-text semantics. Reusing a
                     # full-page TextPage here can change partially clipped words.
-                    contexts[crop_key] = page.get_text("text", clip=crop, sort=True).strip()
+                    # Follow the PDF text flow down each column, as PDF Find
+                    # does. Sorting by coordinates interleaves neighboring
+                    # columns and makes surrounding-text hit arrows jump rows.
+                    contexts[crop_key] = page.get_text("text", clip=crop, sort=False).strip()
                 entry = {"key": f"{index}:" + "+".join(sorted(keys[m.xref] for m in members)),
                          "page": index + 1, "page_count": len(doc), "pdf_label": label,
                          "label": label or str(index+1),

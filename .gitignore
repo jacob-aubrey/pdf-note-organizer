@@ -44,3 +44,6 @@ Thumbs.db
 !/output/pdf/
 /output/pdf/*
 !/output/pdf/Notable-README.pdf
+!/output/pdf/Notable-User-Manual.pdf
+
+.test-tmp/

@@ -30,11 +30,16 @@ class ArchiveReviewWindow:
         Tooltip(self.check, "Acknowledge the exact verified duplicate archives listed above. Cleanup first creates a complete, verified backup.")
         self.remove = Button(frame, text="Back up & remove duplicates…", command=self.remove_ready, state="disabled")
         self.remove.pack(anchor="w", pady=12)
-        Tooltip(self.remove, "Choose a new backup file. The app verifies the backup and rechecks source bytes before deleting only the exact verified duplicate archives listed above.")
+        Tooltip(self.remove, lambda: "Wait for the current backed-up cleanup to finish." if self.busy else
+                "No verified duplicate archives are ready to remove." if not any(row["ready"] for row in self.rows) else
+                "Review the verified duplicates and select the acknowledgment above first." if not self.acknowledged.get() else
+                "Choose a new backup file. The app verifies the backup and rechecks source bytes before deleting only the exact verified duplicate archives listed above.")
         self.status = tk.StringVar()
         ttk.Label(frame, textvariable=self.status, wraplength=750).pack(fill="x")
         self.close_button = Button(frame, text="Close", command=self.close)
         self.close_button.pack(anchor="e")
+        Tooltip(self.close_button, lambda: "Wait for the current backed-up cleanup to finish before closing." if self.busy else
+                "Close the recovery-archive review. Every unreviewed archive remains in place.")
         annotate_buttons(window)
         fit_dialog(window, app.root)
         background(app, lambda: plan(app.store), self.loaded, self.failed)

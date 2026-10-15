@@ -15,8 +15,9 @@ from note_organizer.citations import citation_for, save_citation, export_citatio
 from note_organizer.pdf_worker import _text_pages, _supplement_links
 from note_organizer.paper_registry import Registry
 from note_organizer.research_search import search_library
+from note_organizer.research_tools import save_labels
 from note_organizer.search import SearchSyntaxError
-from note_organizer.storage import Store, digest_file
+from note_organizer.storage import Store, canonical, digest_file
 from note_organizer.supplements import (SupplementLinks, find_supplements, download_supplement,
                                        attach_file, attachments, public_url, PublicRedirects)
 from note_organizer.sorting.metadata_lookup import DOIResolution, DOIReference
@@ -77,12 +78,116 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(len(self.search("iodine", "PDFs")), 1)
         self.worker.text_pages.assert_called_once()
 
-    def test_empty_queries_do_not_index_and_syntax_is_checked_without_documents(self):
-        self.assertEqual(len(self.search("")), 1)
-        self.assertEqual(self.search("", "PDFs"), [])
-        self.worker.text_pages.assert_not_called()
+    def test_empty_queries_browse_notes_and_one_row_per_pdf_without_reading_files(self):
+        with patch("note_organizer.research_search.file_version") as version, \
+             patch("note_organizer.research_search.indexed_pages") as index:
+            notes = self.search("", "Notes")
+            pdfs = self.search("  ", "PDFs")
+            combined = self.search("")
+        self.assertEqual([entry["kind"] for entry in notes], ["highlight"])
+        self.assertEqual([entry["kind"] for entry in combined], ["highlight", "pdf"])
+        self.assertEqual(len(pdfs), 1)
+        document = pdfs[0]
+        self.assertEqual(document["document_id"], self.document_id)
+        self.assertEqual(document["key"], "pdf-document")
+        self.assertTrue(document["pdf_document"])
+        self.assertEqual(document["page"], 1)
+        self.assertIsNone(document["page_count"])
+        self.assertEqual(document["quote"], "")
+        self.assertEqual(document["context"], "")
+        self.assertEqual(self.worker.mock_calls, [])
+        version.assert_not_called()
+        index.assert_not_called()
+
+    def test_invalid_query_syntax_is_checked_without_documents(self):
+        with self.store.connect() as db:
+            db.execute("UPDATE documents SET hidden=1")
         with self.assertRaises(SearchSyntaxError):
             self.search("gold AND", "PDFs")
+
+    def test_empty_pdf_browsing_obeys_paper_folder_and_label_filters(self):
+        other = self.folder / "unannotated.pdf"
+        self.make_pdf(other, ["Different text"])
+        self.scan(other)
+        other_id = self.store.document_at(self.project, other)["id"]
+        other_folder = self.folder / "second-folder"
+        other_folder.mkdir()
+        other_project = self.store.add_project(other_folder)
+        third = other_folder / "third.pdf"
+        self.store.save_scan(other_project, third, "third-digest", "sig", "settings", {}, [])
+        save_labels(self.store, other_id, {"tag": "Relevant"})
+        self.assertEqual({entry["document_id"] for entry in self.search("", "PDFs")},
+                         {self.document_id, other_id, self.store.document_at(other_project, third)["id"]})
+        self.assertEqual({entry["document_id"] for entry in self.search("", "PDFs", project_id=self.project)},
+                         {self.document_id, other_id})
+        self.assertEqual([entry["document_id"] for entry in self.search("", "PDFs", document_id=other_id)],
+                         [other_id])
+        self.assertEqual([entry["document_id"] for entry in self.search("", "All", label_filter="tag: Relevant")],
+                         [other_id])
+        self.assertEqual(self.search("", "PDFs", label_filter="tag: Missing"), [])
+        self.assertEqual(self.worker.mock_calls, [])
+
+    def test_empty_browsing_keeps_missing_pdfs_and_incomplete_metadata(self):
+        self.path.unlink()
+        self.store.mark_missing(self.project, set())
+        with self.store.connect() as db:
+            db.execute("UPDATE documents SET metadata='{}'")
+        result = self.search("", "PDFs")
+        self.assertEqual(len(result), 1)
+        self.assertTrue(result[0]["missing"])
+        self.assertEqual(result[0]["metadata"], {})
+        self.assertEqual(result[0]["path"], canonical(self.path))
+        self.assertFalse(result.warnings)
+        self.assertEqual(self.worker.mock_calls, [])
+
+    def test_pdf_browsing_deduplicates_overlapping_folders_but_keeps_independent_copies(self):
+        overlapping = self.store.add_project(self.folder.parent)
+        self.store.save_scan(overlapping, self.path, digest_file(self.path), "sig", "settings", {}, [])
+        copy = self.folder / "copy.pdf"
+        copy.write_bytes(self.path.read_bytes())
+        self.scan(copy)
+        pdfs = self.search("", "PDFs")
+        self.assertEqual({entry["path"] for entry in pdfs},
+                         {canonical(self.path), canonical(copy)})
+        self.assertEqual(len(pdfs), 2)
+
+    def test_empty_browsing_does_not_fetch_managed_tablet_documents(self):
+        managed = self.folder / "managed.pdf"
+        standalone = self.folder / "standalone.pdf"
+        self.store.save_scan(self.project, managed, "managed-digest", "sig", "settings",
+                             {"managed_cloud_id": "managed-cloud", "primary_path": canonical(self.path)}, [])
+        self.store.save_scan(self.project, standalone, "standalone-digest", "sig", "settings",
+                             {"managed_cloud_id": "standalone-cloud"}, [])
+        pdfs = self.search("", "PDFs")
+        self.assertEqual({entry["path"] for entry in pdfs},
+                         {canonical(self.path), canonical(standalone)})
+        self.assertEqual(len(pdfs), 2)
+        self.assertEqual(self.worker.mock_calls, [])
+
+    def test_pdf_browsing_and_page_search_reuse_reviewed_citation_metadata(self):
+        save_citation(self.store, self.document_id,
+                      {"title": "Reviewed paper", "authors": "Doe, Jane", "year": "2025", "pages": "12-19"})
+        for query in ("", "gold"):
+            with self.subTest(query=query):
+                metadata = self.search(query, "PDFs")[0]["metadata"]
+                self.assertEqual(metadata["title"], "Reviewed paper")
+                self.assertEqual(metadata["authors"], ["Doe, Jane"])
+                self.assertEqual(metadata["author"], "Doe, Jane")
+                self.assertEqual(metadata["year"], "2025")
+                self.assertEqual(metadata["pages"], 2)
+                self.assertEqual(metadata["citation_pages"], "12-19")
+
+    def test_empty_browsing_honors_cancellation_after_reading_catalog(self):
+        cancelled = [False]
+        original = self.store.search_documents
+        def documents(*args, **kwargs):
+            result = original(*args, **kwargs)
+            cancelled[0] = True
+            return result
+        with patch.object(self.store, "search_documents", side_effect=documents), \
+             self.assertRaises(InterruptedError):
+            self.search("", "PDFs", cancelled=lambda: cancelled[0])
+        self.assertEqual(self.worker.mock_calls, [])
 
     def test_changed_pdf_is_reported_until_rescanned_then_cache_refreshes(self):
         self.search("gold", "PDFs")
@@ -159,7 +264,13 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(citation_for(self.store, self.document_id)["title"], "Shared citation")
         target = self.folder / "linked.bib"
         self.assertEqual(export_citations(self.store, [self.document_id, variant_id], target), 1)
-        self.assertEqual(len(self.search("gold OR edition", "PDFs", document_id=self.document_id)), 2)
+        for query in ("", "gold OR edition"):
+            results = self.search(query, "PDFs", document_id=self.document_id)
+            self.assertEqual(len(results), 2)
+            self.assertEqual({entry["result_paper_id"] for entry in results}, {primary["paper_id"]})
+            # Grouping identity must not redirect independently paginated
+            # source PDFs through the combined notebook's page mapping.
+            self.assertTrue(all(entry["logical_paper_id"] is None for entry in results))
 
     def test_overlapping_watched_folders_share_metadata_without_duplicate_exports(self):
         overlapping = self.store.add_project(self.folder.parent)

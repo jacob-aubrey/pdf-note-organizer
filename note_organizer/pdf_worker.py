@@ -12,12 +12,14 @@ import sqlite3
 import threading
 import heapq
 import itertools
+from collections import OrderedDict
 
 
 _cancel_event = None
 _job_cancel_event = None
 MAX_PREVIEW_SIDE = 1600
 MAX_PREVIEW_PIXELS = 2_000_000
+_reader_popup_cache = OrderedDict()
 
 
 def _initialize(cancel_event, job_cancel_event=None):
@@ -80,6 +82,17 @@ def _materialize(library_path, reference):
     from .combined_pdf import materialize_combined
     _check_cancelled()
     result = materialize_combined(_ReadOnlyPDFStore(library_path), reference, cancelled=_cancelled)
+    _check_cancelled()
+    return os.fspath(result)
+
+
+def _materialize_source(library_path, path):
+    from .combined_pdf import _materialize_original, CACHE_LIMIT_BYTES
+    _check_cancelled()
+    # A printed-text result identifies one exact PDF version. Retain its native
+    # margin annotations without resolving/merging any other linked versions.
+    result = _materialize_original(_ReadOnlyPDFStore(library_path), Path(path), None,
+                                   _cancelled, CACHE_LIMIT_BYTES)
     _check_cancelled()
     return os.fspath(result)
 
@@ -173,13 +186,17 @@ def _text_pages(path, expected_digest=None, start=0, stop=None):
             _check_cancelled()
             page = document[index]
             pages.append({"page": index+1, "pdf_label": page.get_label() or "",
-                          "text": page.get_text(sort=True)})
+                          # Retain the PDF content/text flow, as native PDF Find
+                          # does. Coordinate sorting interleaves adjacent columns
+                          # line by line and sends main-search navigation across
+                          # the gutter instead of through each column.
+                          "text": page.get_text(sort=False)})
     if _file_version(path) != version:
         raise OSError("PDF changed during text extraction. Try again after Sync PDFs.")
     return pages
 
 
-def _full_page(path, page_number):
+def _full_page(path, page_number, terms=()):
     import pymupdf as fitz
     from .extraction import drawing_page_bounds, preview_canvas
     _check_cancelled()
@@ -193,6 +210,16 @@ def _full_page(path, page_number):
             raise ValueError(f"PDF page {page_number} is unavailable; this file has {len(document)} pages.")
         page = document[page_number-1]
         bounds = drawing_page_bounds(page)
+        # These annotations exist only in this in-memory document. Never save
+        # search marks into the original or the materialized reading PDF.
+        for term in terms:
+            _check_cancelled()
+            hits = page.search_for(term, quads=True)
+            if hits:
+                highlight = page.add_highlight_annot(hits)
+                highlight.set_colors(stroke=(185 / 255, 209 / 255, 1))
+                highlight.set_opacity(.72)
+                highlight.update()
         display = bounds * page.rotation_matrix
         width, height = display.width, display.height
         if width <= 0 or height <= 0 or not math.isfinite(width*height):
@@ -215,6 +242,84 @@ def _full_page(path, page_number):
         result = pixmap.tobytes("png")
     if _file_version(path) != version:
         raise OSError("PDF changed while the page preview was loading; try again.")
+    _check_cancelled()
+    return result
+
+
+def _reader_quote_popups(document, path, version):
+    """Identify quote-only legacy tablet popups for display suppression only."""
+    from .extraction import highlighted_words
+    from .search import normalize
+    key = (str(Path(path).resolve()), version)
+    if key in _reader_popup_cache:
+        _reader_popup_cache.move_to_end(key)
+        return _reader_popup_cache[key]
+    result = {}
+    for page in document:
+        _check_cancelled()
+        candidates = []
+        for annot in page.annots() or ():
+            info = annot.info or {}
+            if (annot.type[1].lower() == "highlight" and info.get("subject") == "reMarkable highlight"
+                    and info.get("content", "").strip() and not info.get("title", "").strip()
+                    and document.xref_get_key(annot.xref, "RMQuote")[0] == "null"):
+                candidates.append(annot)
+        if not candidates:
+            continue
+        words = sorted(page.get_text("words"), key=lambda w: (w[5], w[6], w[7]))
+        for annot in candidates:
+            quote = " ".join(word[4] for word in highlighted_words(page, annot, words))
+            if quote and normalize(quote) == normalize(annot.info.get("content", "")):
+                result.setdefault(str(page.number + 1), []).append(f"{annot.xref}R")
+    _reader_popup_cache[key] = result
+    while len(_reader_popup_cache) > 8:
+        _reader_popup_cache.popitem(last=False)
+    return result
+
+
+def _reader_location(path, page_number, source_path=None, source_page=None, rect=None):
+    """Validate a reader target and express a saved note in native PDF coordinates.
+
+    Margin expansion retains native PDF coordinates. Using the source page's
+    inverse transformation handles crop origins, rotation and expanded margins
+    without applying an extraction rectangle blindly to another page canvas.
+    """
+    import pymupdf as fitz
+    _check_cancelled()
+    if type(page_number) is not int or page_number < 1:
+        raise ValueError("Choose a physical PDF page number starting at 1.")
+    version = _file_version(path)
+    with fitz.open(path) as document:
+        if document.needs_pass:
+            raise ValueError("This PDF needs a password. Open an unlocked copy or use Open externally.")
+        if page_number > len(document):
+            raise ValueError(f"PDF page {page_number} is unavailable; this file has {len(document)} pages.")
+        result = {"pages": len(document), "rect": None}
+        popup_ids = _reader_quote_popups(document, path, version)
+        if popup_ids:
+            result["suppressedPopupIds"] = popup_ids
+        if rect and source_path and source_page:
+            try:
+                if len(rect) != 4 or not all(math.isfinite(float(value)) for value in rect):
+                    raise ValueError("Invalid saved note rectangle")
+                bounds = fitz.Rect(rect)
+                if bounds.is_empty or bounds.is_infinite:
+                    raise ValueError("Invalid saved note rectangle")
+                with fitz.open(source_path) as source:
+                    if not source.needs_pass and 1 <= source_page <= len(source):
+                        source_canvas = source[source_page-1]
+                        # PyMuPDF's rotated-page matrix can omit crop offsets.
+                        # Saved extraction rectangles are unrotated; normalize
+                        # this in-memory page before converting to native PDF.
+                        source_canvas.set_rotation(0)
+                        native = bounds * ~source_canvas.transformation_matrix
+                        result["rect"] = list(native)
+            except (OSError, ValueError, RuntimeError):
+                # The verified target can still be read if a historic source
+                # copy has disappeared. Page-only navigation is honest here.
+                pass
+    if _file_version(path) != version:
+        raise OSError("PDF changed while loading. Select the paper again to reload it.")
     _check_cancelled()
     return result
 
@@ -336,6 +441,17 @@ class PDFWorker:
     def materialize(self, library_path, reference):
         return self._call(_materialize, os.fspath(library_path), os.fspath(reference), priority=0)
 
+    def materialize_cancellable(self, library_path, reference, cancelled=None):
+        return self._call(_materialize, os.fspath(library_path), os.fspath(reference), priority=0, cancelled=cancelled)
+
+    def materialize_source(self, library_path, path, cancelled=None):
+        return self._call(_materialize_source, os.fspath(library_path), os.fspath(path), priority=0, cancelled=cancelled)
+
+    def reader_location(self, path, page, source_path=None, source_page=None, rect=None, cancelled=None):
+        return self._call(_reader_location, os.fspath(path), page,
+                          os.fspath(source_path) if source_path else None, source_page, rect,
+                          priority=0, cancelled=cancelled)
+
     def export_combined(self, library_path, reference, target, *, expected_digest=None, require_absent=True):
         return self._call(_export_combined, os.fspath(library_path), os.fspath(reference), os.fspath(target),
                           expected_digest, require_absent)
@@ -352,6 +468,10 @@ class PDFWorker:
 
     def full_page_cancellable(self, path, onebased_page, cancelled=None):
         return self._call(_full_page, os.fspath(path), onebased_page, priority=0, cancelled=cancelled)
+
+    def search_page(self, path, onebased_page, terms, cancelled=None):
+        return self._call(_full_page, os.fspath(path), onebased_page, tuple(terms),
+                          priority=0, cancelled=cancelled)
 
     def inspect(self, path):
         return self._call(_inspect, os.fspath(path))

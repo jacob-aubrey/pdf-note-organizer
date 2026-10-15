@@ -7,7 +7,7 @@ ASSETS = Path(__file__).with_name("assets") / "icons"
 
 # Labels remain intact for keyboard help, tooltips and action identification.
 BUTTON_ICONS = {
-    "Actions ▾": "ellipsis", "Folder actions ▾": "folder-open", "Set up Inbox…": "settings",
+    "Actions ▾": "ellipsis", "Library actions ▾": "ellipsis", "Folder actions ▾": "folder-open", "Set up Inbox…": "settings",
     "Library storage & backups…": "files", "Create verified backup…": "save",
     "Compact library…": "refresh-cw", "Restore backup…": "rotate-ccw",
     "Tags & collections…": "folder-plus", "Saved searches…": "search",
@@ -32,7 +32,7 @@ BUTTON_ICONS = {
     "Map its folder…": "folder-input", "Unlink folder…": "unlink", "Open PDF": "file-text",
     "Open review folder": "folder-open", "Dismiss": "x", "Cancel": "x", "Close": "x",
     "Open reMarkable pairing page": "external-link", "Open notebook": "book-open",
-    "Export view…": "download", "Search in…": "list-filter", "Source PDF": "file-text",
+    "Export view…": "download", "Search in…": "list-filter", "Search options…": "list-filter", "Source PDF": "file-text",
     "Export annotated PDF…": "download", "Review extra PDFs…": "files", "Remove reviewed copies": "trash-2",
     "Enlarge image": "zoom-in", "Full page context": "file-image", "Reset all": "rotate-ccw",
     "Fit width": "move-horizontal", "Remove folder…": "folder-minus",
@@ -58,15 +58,25 @@ BUTTON_ICONS = {
     "Send selected PDF…": "file-up", "Transfer queue…": "list-todo",
     "Retry transfers": "refresh-cw", "Use this folder": "folder-input",
     "Retry lookup": "refresh-cw",
+    "Search filters…": "list-filter", "Clear search": "x",
+    "Give feedback…": "circle-help", "Check for updates…": "refresh-cw",
+    "Copy report": "copy", "Open feedback email…": "external-link", "Open feedback form…": "external-link",
+    "Check again": "refresh-cw", "Open release…": "external-link", "Download update…": "download", "Download source…": "download",
+    "Previous match": "chevron-up", "Next match": "chevron-down",
+    "Show all matches": "chevron-down", "Show fewer matches": "chevron-up",
+    "Open externally": "external-link", "Reading mode": "maximize",
+    "Exit reading mode": "minimize", "Retry reader": "refresh-cw",
+    "Document details…": "logs",
+    "Open manual": "book-open", "Open README": "file-text", "Delete selected PDF…": "trash-2",
     "Remove saved key": "trash-2",
     "Undo removal": "rotate-ccw",
 }
-ICON_ONLY = {"Settings", "Help", "Copy full path", "More ▾", "Dismiss", "Transfer queue…", "Connection ▾"}
+ICON_ONLY = {"Settings", "Help", "Copy full path", "More ▾", "Dismiss", "Transfer queue…", "Connection ▾", "Clear search"}
 
 
-def icon(master, name, disabled=False):
+def icon(master, name, disabled=False, logical_size=16):
     root = master._root()
-    size = max(16, round(16 * float(root.tk.call("tk", "scaling")) / (96 / 72)))
+    size = max(logical_size, round(logical_size * float(root.tk.call("tk", "scaling")) / (96 / 72)))
     cache = getattr(root, "_action_icons", None)
     if cache is None:
         root._action_icons = cache = {}
@@ -85,22 +95,87 @@ class Button(ttk.Button):
 
     def __init__(self, master=None, **kwargs):
         self.icon_name = None
+        self.compact = False
+        self._width_cache = {}
+        self._responsive_pending = None
         super().__init__(master, **kwargs)
         self._set_icon()
+        # Buttons created after a dialog's tooltip pass still adapt to its row.
+        # Import lazily: widgets imports Button to build its shared controls.
+        self._responsive_pending = self._root().after_idle(self._register_responsive)
+        self.bind("<Destroy>", self._cancel_responsive_registration, add="+")
+        self.bind("<<ThemeChanged>>", self._theme_changed, add="+")
+
+    def _theme_changed(self, _event=None):
+        self._set_icon()
+        controller = getattr(self.master, "_responsive_buttons", None)
+        if controller is not None:
+            controller.schedule()
+        elif hasattr(self.master, "schedule"):
+            self.master.schedule()
+
+    def _register_responsive(self):
+        self._responsive_pending = None
+        from .widgets import ResponsiveButtons
+        ResponsiveButtons.attach(self.master)
+
+    def _cancel_responsive_registration(self, event):
+        if event.widget is self and self._responsive_pending is not None:
+            self._root().after_cancel(self._responsive_pending)
+            self._responsive_pending = None
+
+    @property
+    def always_icon(self):
+        return self.action_label.removesuffix(" •") in ICON_ONLY
+
+    @property
+    def retain_label(self):
+        """Keep consequential actions readable until no other labels fit."""
+        label = self.action_label.removesuffix(" •")
+        return label == "File document" or label.split(" ", 1)[0] in {"Save", "Delete", "Remove"}
+
+    def set_compact(self, compact):
+        """Hide the visual label while retaining text, command and focus order."""
+        compact = bool(compact) and not self.always_icon
+        if self.compact != compact:
+            self.compact = compact
+            super().configure(compound="image" if compact or self.always_icon else "left")
+
+    def measured_width(self, compact=False):
+        """Measure both presentations without an idle redraw or label mutation."""
+        target = "image" if compact or self.always_icon else "left"
+        if target in self._width_cache:
+            return self._width_cache[target]
+        previous = str(self.cget("compound"))
+        if previous != target:
+            super().configure(compound=target)
+        width = self.winfo_reqwidth()
+        if previous != target:
+            super().configure(compound=previous)
+        self._width_cache[target] = width
+        return width
 
     def _set_icon(self):
+        self._width_cache.clear()
         label = str(self.cget("text"))
         # The dot marks active search options; it does not change the action.
         self.icon_name = BUTTON_ICONS[label.removesuffix(" •")]
         self.action_label = label
-        normal, muted = icon(self, self.icon_name), icon(self, self.icon_name, True)
+        size = 20 if label.removesuffix(" •") == "Clear search" else 16
+        normal, muted = icon(self, self.icon_name, logical_size=size), icon(self, self.icon_name, True, size)
         super().configure(image=(normal, "disabled", muted),
-                          compound="image" if label in ICON_ONLY else "left")
+                          compound="image" if self.compact or self.always_icon else "left")
 
     def configure(self, cnf=None, **kwargs):
         result = super().configure(cnf, **kwargs)
+        options = {**(cnf if isinstance(cnf, dict) else {}), **kwargs}
+        if any(option in options for option in ("text", "style", "padding", "width", "image")):
+            self._width_cache.clear()
         if "text" in kwargs or isinstance(cnf, dict) and "text" in cnf:
             self._set_icon()
+        controller = getattr(self.master, "_responsive_buttons", None)
+        if controller is not None:
+            controller.schedule()
         return result
 
     config = configure

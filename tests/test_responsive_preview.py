@@ -48,6 +48,7 @@ class ResponsivePreviewTests(unittest.TestCase):
             app.preview_future.result(timeout=2)
         app.poll()
         app.tabs.select(app.notes_tab)
+        app.reader_views.select(app.note_details)
         self.root.geometry("1100x700")
         self.root.deiconify()
         self.root.update()

@@ -18,9 +18,12 @@ from . import APP_NAME, __version__
 from .exporting import paper_title
 from .combined_pdf import materialize_combined, export_combined
 from .service import Service
-from .storage import SEARCH_FIELDS, NOTE_TYPES, digest_file
-from .search import SearchSyntaxError
-from .research_search import search_library
+from .storage import SEARCH_FIELDS, DEFAULT_SEARCH_FIELDS, NOTE_TYPES, digest_file, search_values
+from .search import SearchSyntaxError, positive_terms
+from .research_search import search_library, enrich_note_matches
+from .reader_navigation import navigation_target, current_target
+from .reader_results import paper_identity, paper_labels, result_title, title_source, result_excerpt, result_tooltip, result_type, ordered_rows
+from .match_preview import excerpt_display
 from .viewers import open_pdf_page, VIEWERS
 from .theme import apply_theme, BACKGROUND, PANEL
 from .remarkable_cloud import PAIR_URL
@@ -148,7 +151,7 @@ class App(WorkspaceLayouts):
         self.remarkable_tab = ttk.Frame(self.tabs, padding=(12, 16))
         self.tabs.add(self.inbox_tab, text="Inbox")
         self.tabs.add(self.library_tab, text="Library")
-        self.tabs.add(self.notes_tab, text="Notes")
+        self.tabs.add(self.notes_tab, text="Reader")
         self.tabs.add(self.remarkable_tab, text="reMarkable")
         self.tabs.hide(self.remarkable_tab)
         self.inbox_view = InboxView(self, self.inbox_tab)
@@ -399,6 +402,8 @@ class App(WorkspaceLayouts):
     def bind_shortcuts(self):
         def focus_search():
             self.tabs.select(self.notes_tab)
+            if self.reader_expanded:
+                self.toggle_reader_expanded()
             self.search_entry.focus_set()
             self.search_entry.selection_range(0, "end")
         actions = {"<Control-f>": focus_search, "<F5>": self.service.request_sync,
@@ -1017,9 +1022,10 @@ class App(WorkspaceLayouts):
         measure_heading = font.Font(root=tree, font=heading_face).measure
         for key, title, width in columns:
             tree.heading(key, text=title, anchor="w")
-            minimum = max(60, measure_heading(title) + 28)
+            variants = (title, title + " ▲", title + " ▼") if key in {"paper", "page", "kind"} else (title,)
+            minimum = max(60, max(map(measure_heading, variants)) + 28)
             tree.column(key, width=max(width, minimum), minwidth=minimum,
-                        stretch=key in {"name", "text", "reason", "local"})
+                        stretch=key in {"name", "paper", "text", "reason", "local"})
         scrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         horizontal = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview)
@@ -1030,7 +1036,7 @@ class App(WorkspaceLayouts):
         CellTooltip(tree)
         tree.horizontal_scrollbar = horizontal
         tree.initial_widths = {key: tree.column(key, "width") for key, _, _ in columns}
-        tree.content_columns = {"name", "local", "folder", "text", "reason"} if content_columns is None else set(content_columns)
+        tree.content_columns = {"name", "paper", "local", "folder", "text", "reason"} if content_columns is None else set(content_columns)
         tree.user_columns = set()
         def scroll_x(first, last):
             horizontal.set(first, last)
@@ -1080,7 +1086,8 @@ class App(WorkspaceLayouts):
         def position(event):
             if event.width > 50 and not getattr(pane, "split_set", False):
                 pane.split_set = True
-                pane.after_idle(lambda: pane.sashpos(0, round(pane.winfo_width() * fraction)) if pane.winfo_exists() else None)
+                pane.after_idle(lambda: pane.sashpos(0, round(pane.winfo_width() * fraction))
+                                if pane.winfo_exists() and len(pane.panes()) > 1 else None)
             for frame in pane.winfo_children():
                 for details in frame.winfo_children():
                     if isinstance(details, SelectionDetails):
@@ -1103,20 +1110,23 @@ class App(WorkspaceLayouts):
             "Export annotated PDF…": "Save the selected paper with its combined PC and tablet notes as a separate PDF.",
             "Review extra PDFs…": "Review old app-generated reading copies and remove only verified copies whose notes and current notebook links are preserved.",
             "Citation details…": "Review, edit, copy, or look up the selected paper's citation information.",
-            "Export citations…": "Export citations for the current paper/folder selection, or papers in the current Notes search, as RIS or BibTeX.",
+            "Document details…": "Inspect this paper's identity, source path and extraction diagnostics.",
+            "Export citations…": "Export citations for the current paper/folder selection, or papers in the current Reader search, as RIS or BibTeX.",
             "Find supplementary files…": "Find supplementary links for the selected paper and review downloads or attached files.",
             "Tags & collections…": "Organize the selected paper with local tags and research collections.",
             "Saved searches…": "Save or apply searches in the current folder and paper scope.",
             "Accessible reading view…": "Open current results in your browser with semantic headings, keyboard search and screen reader support.",
             "Library storage & backups…": "Create or restore verified backups and compact the library without removing history.",
-            "Rebuild notebook…": "Regenerate this folder's Word notebook from saved notes.",
-            "Remove folder…": "Stop watching the selected folder. Original files remain on disk.",
+            "Rebuild notebook…": "Replace this folder's generated Word notebook using saved notes and current settings; externally edited copies are backed up first.",
+            "Remove folder…": "Remove this watched folder and its saved annotation history from the library. PDFs and Word notebooks remain on disk.",
             "Locate moved folder…": "Reconnect a moved folder while retaining saved history.",
             "Folder settings": "Change this folder's extraction and Word settings.",
             "Filing recovery…": "Inspect copies retained after interrupted filing.",
             "Review library…": "Compare duplicate papers and PC/tablet folder differences before changing relationships.",
         }
-        Tooltip(button, "\n".join(f"{label}: {help_text[label]}" for label, _ in actions))
+        button.menu_help = {label: help_text[label] for label, _ in actions}
+        Tooltip(button, "Paper actions: notebook and PDF exports, citation and document details, history, tags, saved searches, and accessible reading." if len(actions) > 6 else
+                "\n".join(f"{label}: {help_text[label]}" for label, _ in actions))
         def show():
             try:
                 menu.tk_popup(button.winfo_rootx(), button.winfo_rooty()+button.winfo_height())
@@ -1192,16 +1202,91 @@ class App(WorkspaceLayouts):
         entry = self.entries[int(row)] if row and int(row) < len(self.entries) else self.selected_entry()
         return page_tooltip(entry) if entry else "Select a note to read its text, page numbering and source PDF link."
 
+    def source_pdf_help(self):
+        entry = self.selected_entry()
+        if not entry:
+            return "Select a paper or result to open its PDF."
+        if entry.get("kind") == "pdf" and not entry.get("logical_paper_id"):
+            action = "Open this source PDF at its first page." if entry.get("pdf_document") else "Open this source PDF at the matching physical page."
+        else:
+            action = "Open this paper with its combined PC and tablet notes."
+        return result_tooltip(entry) + "\n\n" + action
+
     def note_cell_value(self, row, column):
         entry = self.entries[int(row)] if int(row) < len(self.entries) else {}
-        if column != "text" or not entry:
+        if not entry:
             return self.notes.set(row, column)
-        text = entry.get("comment") or entry.get("quote") or entry.get("ocr") or "Drawing with page context"
-        if entry.get("kind") == "pdf":
-            text = "PDF: " + text
-        if self.all_projects.get():
-            text = Path(entry["path"]).stem + ": " + text
-        return text
+        return result_tooltip(entry)
+
+    def note_tooltip_help(self, row, column):
+        return "Select to read this paper here. Double-click or press Enter to open its reading copy in your configured external viewer." if self.entries[int(row)].get("pdf_document") else "Select to read this result. Double-click or press Enter opens its PDF page in your configured external viewer."
+
+    def reader_document_details(self):
+        entry = self.selected_entry()
+        if not entry:
+            messagebox.showinfo("Document details", "Select a paper or note first.", parent=self.root)
+            return
+        window = tk.Toplevel(self.root)
+        window.title("Document details")
+        window.configure(background=BACKGROUND)
+        window.transient(self.root)
+        bind_dialog_close(window, window.destroy)
+        frame = ttk.Frame(window, padding=16)
+        frame.pack(fill="both", expand=True)
+        warnings = list(entry.get("metadata", {}).get("warnings", []))
+        lines = [result_title(entry), "Title source: " + title_source(entry), page_description(entry), "Source PDF: " + entry["path"]]
+        if entry.get("kind") != "pdf":
+            lines.append("Annotation: " + result_type(entry))
+        if warnings:
+            lines.append("Document information and diagnostics")
+            for warning in warnings:
+                if "reMarkable pen placement uses calibrated coordinates" in warning:
+                    lines.append("Imported from reMarkable. Tablet coordinates were translated into PDF coordinates. This is a general conversion advisory; it does not report a detected alignment failure on this page.")
+                else:
+                    lines.append(warning)
+        else:
+            lines.append("No extraction warnings were recorded for this document.")
+        content = ReadOnlyText(frame, height=15, width=65)
+        content.set("\n\n".join(lines), paths={"Source PDF": entry["path"]})
+        content.pack(fill="both", expand=True)
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill="x", pady=(12, 0))
+        close = Button(buttons, text="Close", command=window.destroy)
+        close.pack(side="right")
+        Tooltip(close, "Close document details and return to your selected result.")
+        copy = Button(buttons, text="Copy details", command=content.copy)
+        copy.pack(side="left")
+        Tooltip(copy, "Copy this paper's identity, source path and recorded diagnostics. No files are changed.")
+        fit_dialog(window, self.root)
+        return window
+
+    def sort_reader(self, column=None):
+        previous, descending = getattr(self, "reader_sort", ("paper", False))
+        if column is not None:
+            descending = not descending if column == previous else False
+            self.reader_sort = (column, descending)
+        else:
+            column = previous
+        rows = ordered_rows(self.entries, self.notes.get_children(), column, descending)
+        self.notes.tag_configure("paper_group_0", background=PANEL)
+        self.notes.tag_configure("paper_group_1", background="#202224")
+        group, last = -1, None
+        for index, row in enumerate(rows):
+            self.notes.move(row, "", index)
+            identity = paper_identity(self.entries[int(row)])
+            if identity != last:
+                group += 1
+                last = identity
+            self.notes.item(row, tags=(f"paper_group_{group % 2}",))
+        for key, label in (("paper", "Paper"), ("kind", "Type"), ("page", "Page")):
+            heading_face = ttk.Style(self.notes).lookup("Treeview.Heading", "font") or "TkDefaultFont"
+            measure = font.Font(root=self.notes, font=heading_face).measure
+            minimum = max(60, max(measure(label + suffix) for suffix in ("", " ▲", " ▼")) + 28)
+            self.notes.column(key, minwidth=minimum, width=max(minimum, self.notes.column(key, "width")))
+            self.notes.heading(key, text=label + ((" ▼" if descending else " ▲") if key == column else ""))
+        self.notes.tooltip.reset()
+        if hasattr(self, "match_count"):
+            self.update_match_navigation()
 
     def view_notes(self, event=None):
         self.all_projects.set(False)
@@ -1281,54 +1366,74 @@ class App(WorkspaceLayouts):
         return self.view.project(int(sel[0])) if sel else None
 
     def update_search_options_summary(self):
-        filtered = len(self.search_fields) != len(SEARCH_FIELDS) or self.search_mode != "Words / Boolean" or self.note_type != "All notes"
-        self.search_options_button.configure(text="Search in… •" if filtered else "Search in…")
-        self.search_summary.set(" · ".join([f"{len(self.search_fields)} search fields", self.search_mode, self.note_type]) if filtered else "")
+        details = []
+        if self.search_scope.get() != "PDFs":
+            if set(self.search_fields) != set(DEFAULT_SEARCH_FIELDS):
+                details.append(f"{len(self.search_fields)} note fields")
+            if "context" in self.search_fields:
+                details.append("Surrounding text included")
+            if self.note_type != "All notes":
+                details.append(self.note_type)
+        if self.search_mode != "Words / Boolean":
+            details.append(self.search_mode)
+        filtered = bool(details)
+        self.search_options_button.configure(text="Search filters… •" if filtered else "Search filters…")
+        self.search_summary.set(" · ".join(details))
         if filtered:
-            self.search_summary_label.pack(fill="x", before=self.reader_pane, pady=(0, 8))
+            self.search_summary_label.pack(fill="x", pady=(0, 8))
         else:
             self.search_summary_label.pack_forget()
 
     def search_options(self):
         window = tk.Toplevel(self.root)
-        window.title("Search options")
+        window.title("Search filters")
         window.configure(background=BACKGROUND)
         window.transient(self.root)
         bind_dialog_close(window, window.destroy)
         frame = ttk.Frame(window, padding=20)
         frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text="Search in", style="Section.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
+        scope = self.search_scope
+        ttk.Label(frame, text="Search filters", style="Section.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        ttk.Label(frame, text="Note fields", style="Muted.TLabel").grid(row=1, column=0, columnspan=2, sticky="w")
         fields = {key: tk.BooleanVar(value=key in self.search_fields) for key in SEARCH_FIELDS}
+        field_controls = []
         for index, (key, label) in enumerate(SEARCH_FIELDS.items()):
             check = ttk.Checkbutton(frame, text=label, variable=fields[key])
-            check.grid(row=1+index//2, column=index%2, sticky="w", padx=(0, 20), pady=5)
-            Tooltip(check, f"Include {label.lower()} when matching your query.")
-        ttk.Label(frame, text="Handwriting matches available OCR only. Printed text beneath ink is a separate field.",
-                  wraplength=500, style="Muted.TLabel").grid(row=6, column=0, columnspan=2, sticky="w", pady=12)
+            check.grid(row=2+index//2, column=index%2, sticky="w", padx=(0, 20), pady=5)
+            field_controls.append(check)
+            Tooltip(check, lambda key=key, label=label: "These fields apply to notes in Notes or All scope. PDF-only mode searches printed text on each page; choose Notes or All to change note fields." if scope.get() == "PDFs" else
+                    "Include printed text near an annotation, even when the note itself does not contain your terms. Off by default; these results identify the surrounding-text match." if key == "context" else
+                    "Include the original annotation color as searchable text. Search yellow, pink, blue, etc., or tantalum AND yellow across enabled fields. This does not choose a color or change temporary search highlights." if key == "color" else
+                    f"Include {label.lower()} in note searches. This does not change PDF-only page matching.")
+        ttk.Label(frame, text="PDFs searches printed text within each page. Note fields and note types apply only to notes.\nHandwriting matches available OCR only.",
+                  wraplength=500, style="Muted.TLabel").grid(row=7, column=0, columnspan=2, sticky="w", pady=12)
         mode, kind = tk.StringVar(value=self.search_mode), tk.StringVar(value=self.note_type)
-        ttk.Label(frame, text="Match").grid(row=7, column=0, sticky="w", pady=5)
+        ttk.Label(frame, text="Match").grid(row=8, column=0, sticky="w", pady=5)
         match = ttk.Combobox(frame, textvariable=mode, values=["Words / Boolean", "Exact phrase"], state="readonly")
-        match.grid(row=7, column=1, sticky="ew")
+        match.grid(row=8, column=1, sticky="ew")
         Tooltip(match, "Words / Boolean supports AND, OR, NOT and quoted phrases. Exact phrase matches the literal phrase and treats operators as text.")
-        ttk.Label(frame, text="Show").grid(row=8, column=0, sticky="w", pady=5)
+        ttk.Label(frame, text="Note type").grid(row=9, column=0, sticky="w", pady=5)
         types = ttk.Combobox(frame, textvariable=kind, values=NOTE_TYPES, state="readonly")
-        types.grid(row=8, column=1, sticky="ew")
-        Tooltip(types, "All notes includes every annotation. Highlights filters markup; Drawings filters pen notes; Typed notes includes annotations with comments.")
+        types.grid(row=9, column=1, sticky="ew")
+        Tooltip(types, lambda: "Note types apply in Notes or All scope. Choose one of those scopes to change this filter; PDF-only mode searches printed page text." if scope.get() == "PDFs" else
+                "All notes includes every annotation. Highlights filters markup; Drawings filters pen notes; Typed notes includes annotations with comments.")
         option_help = tk.StringVar()
-        ttk.Label(frame, textvariable=option_help, style="Muted.TLabel", wraplength=500).grid(row=11, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Label(frame, textvariable=option_help, style="Muted.TLabel", wraplength=500).grid(row=12, column=0, columnspan=2, sticky="w", pady=(8, 0))
         def explain_options(*_):
-            option_help.set(("Your words are matched across the selected fields." if mode.get() != "Exact phrase" else "Your complete phrase is matched as written.") + f" Showing: {kind.get()}.")
+            for control in field_controls + [types]:
+                control.configure(state="disabled" if scope.get() == "PDFs" else "readonly" if control == types else "normal")
+            clear.configure(state="disabled" if scope.get() == "PDFs" else "normal")
+            option_help.set("Only positive matches in enabled fields are marked. Main search uses blue; Find in PDF uses green.\nAnnotation color searches the original note color (for example, yellow); it does not set search-mark colors.")
         mode.trace_add("write", explain_options)
         kind.trace_add("write", explain_options)
-        explain_options()
         def reset():
-            for var in fields.values():
-                var.set(True)
+            for key, var in fields.items():
+                var.set(key in DEFAULT_SEARCH_FIELDS)
             mode.set("Words / Boolean")
             kind.set("All notes")
         def apply():
             selected = [key for key, var in fields.items() if var.get()]
-            if not selected:
+            if not selected and scope.get() != "PDFs":
                 messagebox.showinfo("Choose a field", "Select at least one field to search.", parent=window)
                 return
             self.search_fields, self.search_mode, self.note_type = selected, mode.get(), kind.get()
@@ -1339,14 +1444,18 @@ class App(WorkspaceLayouts):
         ttk.Label(frame, text='Words / Boolean: use uppercase AND, OR, NOT, quotes, and parentheses.\n'
                   'Example: (iodine OR gold) AND "spectral CT" NOT phantom\n'
                   'Spaces mean AND. Exact phrase treats operators as ordinary text.',
-                  style="Muted.TLabel", wraplength=500).grid(row=9, column=0, columnspan=2, sticky="w", pady=(12, 0))
-        buttons.grid(row=10, column=0, columnspan=2, sticky="ew", pady=(16, 0))
+                  style="Muted.TLabel", wraplength=500).grid(row=10, column=0, columnspan=2, sticky="w", pady=(12, 0))
+        buttons.grid(row=11, column=0, columnspan=2, sticky="ew", pady=(16, 0))
         Button(buttons, text="Reset all", command=reset).pack(side="left", padx=(0, 8))
-        Button(buttons, text="Clear fields", command=lambda: [v.set(False) for v in fields.values()]).pack(side="left")
+        clear = Button(buttons, text="Clear fields", command=lambda: [v.set(False) for v in fields.values()])
+        clear.pack(side="left")
         Button(buttons, text="Apply", command=apply, style="Primary.TButton").pack(side="right")
         cancel = Button(buttons, text="Cancel", command=window.destroy)
         cancel.pack(side="right", padx=(0, 8))
         Tooltip(cancel, "Close without applying these search options.")
+        scope_trace = scope.trace_add("write", explain_options)
+        window.bind("<Destroy>", lambda event: scope.trace_remove("write", scope_trace) if event.widget == window else None, add="+")
+        explain_options()
         annotate_buttons(window)
         window.update_idletasks()
         fit_dialog(window, self.root)
@@ -1438,7 +1547,7 @@ class App(WorkspaceLayouts):
 
     def editable_copy(self):
         if self.all_projects.get():
-            messagebox.showinfo("Choose a folder", "Select one folder in Notes to copy its notebook, or use Export view for notes from all folders.")
+            messagebox.showinfo("Choose a folder", "Select one folder in Reader to copy its notebook, or use Export view for notes from all folders.")
             return
         p = self.selected_project()
         if not p:
@@ -1480,7 +1589,7 @@ class App(WorkspaceLayouts):
         selected = self.papers.selection()
         if selected and any(row["id"] == selected[0] for row in self.view.documents()):
             return selected[0], self.library_paper_path(selected[0])
-        messagebox.showinfo("Choose a paper", "Select a paper in Library or a result in Notes first.", parent=self.root)
+        messagebox.showinfo("Choose a paper", "Select a paper in Library or a result in Reader first.", parent=self.root)
         return None
 
     def citation_details(self):
@@ -1495,7 +1604,8 @@ class App(WorkspaceLayouts):
 
     def export_citation_selection(self):
         in_notes = self.tabs.select() == str(self.notes_tab)
-        if in_notes and self.search.get().strip():
+        if in_notes and (self.search.get().strip() or self.search_scope.get() != "Notes"
+                         or self.label_filter.get() != "All papers" or self.note_type != "All notes"):
             ids = list(dict.fromkeys(entry["document_id"] for entry in self.entries))
         else:
             project = self.selected_project()
@@ -1736,9 +1846,23 @@ class App(WorkspaceLayouts):
         self.refresh_notes()
 
     def search_changed(self, *_):
+        if hasattr(self, "clear_search_button"):
+            self.clear_search_button.configure(state="normal" if self.search.get() else "disabled")
         if self.search_after:
             self.root.after_cancel(self.search_after)
         self.search_after = self.root.after(250, self.refresh_notes)
+
+    def clear_search(self, event=None):
+        self.search.set("")
+        self.search_entry.focus_set()
+        self.refresh_notes()
+        return "break"
+
+    def search_scope_changed(self, *_):
+        if not hasattr(self, "notes"):
+            return
+        self.update_search_options_summary()
+        self.refresh_notes()
 
     def refresh_notes(self):
         """Query off the Tk thread without loading every crop; cancel stale searches."""
@@ -1757,6 +1881,7 @@ class App(WorkspaceLayouts):
         if signature == self.query_signature:
             return
         self.query_signature = signature
+        self.pending_search = (options["query"], options["match_mode"])
         self.query_cancel.set()
         if self.query_future:
             self.query_future.cancel()
@@ -1766,11 +1891,36 @@ class App(WorkspaceLayouts):
         if self.notes_after:
             self.root.after_cancel(self.notes_after)
             self.notes_after = None
-        self.note_count.set("Searching PDFs…" if self.search_scope.get() != "Notes" and self.search.get().strip() else "Loading notes…")
+        self.set_reader_search_busy(True)
+        scope = self.search_scope.get()
+        self.note_count.set(({"Notes": "Searching notes…", "PDFs": "Searching PDFs…", "All": "Searching notes and PDFs…"}[scope])
+                            if self.search.get().strip() else "Loading results…")
         self.export_button.configure(state="disabled")
         self.query_future = self.query_executor.submit(search_library, self.store, self.pdf_worker,
                                                        self.search_scope.get(), **options, cancelled=cancelled.is_set)
         self.query_future.add_done_callback(lambda future: self.query_results.put((generation, current, future)))
+
+    def set_reader_search_busy(self, busy):
+        self.reader_search_busy = busy
+        if busy:
+            if not self.search_progress.winfo_manager():
+                self.search_progress.pack(side="right", before=self.search_options_button, padx=(8, 0))
+            if not getattr(self, "search_progress_after", None):
+                self.search_progress_after = self.root.after(60, self.animate_reader_search)
+        else:
+            if getattr(self, "search_progress_after", None):
+                self.root.after_cancel(self.search_progress_after)
+                self.search_progress_after = None
+            self.search_progress.pack_forget()
+
+    def animate_reader_search(self):
+        self.search_progress_after = None
+        if self.closing or not self.reader_search_busy:
+            return
+        self.search_progress.step(4)
+        # Use a Python-owned timer so normal Tk teardown can cancel it, unlike
+        # ttk's Tcl-owned Autoincrement callback (which can be a tuple).
+        self.search_progress_after = self.root.after(60, self.animate_reader_search)
 
     def finish_query(self, generation, current, future):
         if self.closing or generation != self.query_generation:
@@ -1779,23 +1929,27 @@ class App(WorkspaceLayouts):
             entries = future.result()
         except SearchSyntaxError as exc:
             entries = []
+            self.result_terms = []
             self.search_error.set(f"Search: {exc}")
-            self.search_error_label.pack(fill="x", before=self.reader_pane, pady=(0, 8))
+            self.search_error_label.pack(fill="x", pady=(0, 8))
         except InterruptedError:
+            self.set_reader_search_busy(False)
             return
         except Exception as exc:
+            self.set_reader_search_busy(False)
             self.notify(f"Could not load notes: {exc}", "notes")
             self.note_count.set("Could not load notes")
             self.query_signature = None
             return
         else:
+            self.result_terms = positive_terms(*self.pending_search)
             self.search_error.set("")
             self.search_error_label.pack_forget()
         warnings = getattr(entries, "warnings", [])
         self.search_warning.set("\n".join(warnings))
         if warnings:
             self.search_warning_label.configure(text=f"{len(warnings)} PDF search issue(s). Hover for details.")
-            self.search_warning_label.pack(fill="x", before=self.reader_pane, pady=(0, 8))
+            self.search_warning_label.pack(fill="x", pady=(0, 8))
         else:
             self.search_warning_label.pack_forget()
         self.notes.tooltip.reset()
@@ -1803,7 +1957,10 @@ class App(WorkspaceLayouts):
         unchanged_order = [(e["document_id"], e["key"]) for e in self.entries] == [(e["document_id"], e["key"]) for e in entries]
         if not unchanged_order:
             self.notes.delete(*self.notes.get_children())
-        self.entries = entries
+        # Legacy cached/injected note rows may predate occurrence metadata.
+        self.entries = entries = [enrich_note_matches(e, self.pending_search[0], self.search_fields,
+            self.pending_search[1]) if e.get("kind") != "pdf" and "search_hits" not in e else e for e in entries]
+        self.reader_paper_labels = paper_labels(entries)
         selected = [None]
         def insert_rows(start=0):
             self.notes_after = None
@@ -1813,12 +1970,10 @@ class App(WorkspaceLayouts):
             end = min(start + 100, len(entries))
             for i in range(start, end):
                 e = entries[i]
-                text = e.get("comment") or e.get("quote") or e.get("ocr") or "Drawing with page context"
-                if e.get("kind") == "pdf":
-                    text = "PDF: " + text
-                if self.all_projects.get():
-                    text = Path(e["path"]).stem + ": " + text
-                values = tuple(str(v) for v in (e["page"], e["kind"], text.replace("\n", " ")))
+                text = result_excerpt(e)
+                kind = result_type(e)
+                values = tuple(str(v) for v in (self.reader_paper_labels[paper_identity(e)],
+                                               "" if e.get("pdf_document") else e["page"], kind, text.replace("\n", " ")))
                 if not self.notes.exists(str(i)):
                     self.notes.insert("", "end", iid=str(i), values=values)
                 elif self.notes.item(str(i), "values") != values:
@@ -1829,23 +1984,32 @@ class App(WorkspaceLayouts):
                 self.notes_after = self.root.after(1, lambda: insert_rows(end))
                 return
             if entries:
+                self.sort_reader()
                 # Keep a selection the reader made while rows were loading.
                 selection = self.notes.selection()
-                target = selection[0] if selection else selected[0] or "0"
+                target = selection[0] if selection else selected[0] or self.notes.get_children()[0]
                 self.notes.selection_set(target)
+                self.notes.focus(target)
                 self.notes.see(target)
             pdf_count = sum(e.get("kind") == "pdf" for e in entries)
             noun = "result" if self.search_scope.get() != "Notes" else "note"
             count = f"{len(entries)} {noun}{'' if len(entries) == 1 else 's'}"
+            if not self.pending_search[0].strip() and self.search_scope.get() == "PDFs":
+                count = f"{len(entries)} PDF{'' if len(entries) == 1 else 's'}"
+            elif not self.pending_search[0].strip() and self.search_scope.get() == "All":
+                count = f"{len(entries)} items"
             self.note_count.set("Check search" if self.search_error.get() else count)
+            self.set_reader_search_busy(False)
             self.export_button.configure(state="normal" if len(entries) > pdf_count else "disabled")
             self.preview()
         insert_rows()
 
     def preview(self, event=None):
         e = self.selected_entry()
+        self.note_document_title.set_title(result_title(e) if e else "")
+        self.pdf_reader.set_entry(e, getattr(self, "result_terms", ()))
         self.reader_paper_path_access.refresh()
-        identity = (self.query_generation, e["document_id"], e["key"], self.show_details.get()) if e else None
+        identity = (self.query_generation, e["document_id"], e["key"]) if e else None
         if e and identity == self.preview_identity:
             return
         self.preview_cancel.set()
@@ -1854,32 +2018,63 @@ class App(WorkspaceLayouts):
         self.preview_cancel = cancelled = threading.Event()
         self.preview_identity = identity
         self.preview_text.configure(state="normal")
+        for tag in getattr(self, "match_excerpt_tags", []):
+            if tag:
+                self.preview_text.tag_delete(tag)
         self.preview_text.delete("1.0", "end")
         self.image = None
         self.preview_image_name = None
         self.preview_image_focused = False
+        self.preview_field_ranges = {}
+        self.match_extra_groups = []
+        self.match_excerpt_tags = []
         if e:
-            title = paper_title(e["path"], e.get("metadata", {}))
-            lines = [title, page_description(e)]
-            if e.get("kind") == "pdf":
-                lines.extend(["PDF text match", e.get("context", "")])
-            elif e.get("quote"):
-                lines.append(e["quote"])
-            for key, label in [("comment", "Note"), ("ocr", "Transcription to check")]:
+            def field_text(field, value, label=None):
+                if not value:
+                    return
+                # Identical saved quote/comment text should remain one reading
+                # passage while both search fields retain their exact offsets.
+                existing = next((bounds for name, bounds in self.preview_field_ranges.items()
+                                 if name in {"quote", "comment", "ocr"} and bounds[1] == value), None)
+                if existing:
+                    self.preview_field_ranges[field] = existing
+                    return
+                if label:
+                    self.preview_text.insert("end-1c", label + "\n", "section_label")
+                start = self.preview_text.index("end-1c")
+                self.preview_text.insert("end-1c", value + "\n\n")
+                self.preview_field_ranges[field] = (start, value)
+            if e.get("pdf_document"):
+                metadata = e.get("metadata", {})
+                field_text("filename", Path(e["path"]).name)
+                citation = " · ".join(str(value) for value in (metadata.get("author"), metadata.get("year")) if value)
+                if citation:
+                    self.preview_text.insert("end-1c", citation + "\n\n")
+                self.preview_text.insert("end-1c", "This PDF is unavailable. Locate the file in Library to read it." if e.get("missing") else
+                             "Choose PDF view to read this paper, or enter a search to find matching pages.")
+            if e.get("kind") == "pdf" and not e.get("search_hits"):
+                field_text("quote", e.get("quote", ""))
+            elif e.get("quote") and e.get("kind") != "pdf":
+                field_text("quote", e["quote"])
+            for key, label in [("comment", "Comment"), ("ocr", "Transcription to check")]:
                 if e.get(key):
-                    lines.append(f"{label}: {e[key]}")
-            if self.show_details.get():
-                lines.append(f"{Path(e['path']).name} | {e['kind']} {e.get('color', '')}")
-                if e.get("context"):
-                    lines.append("Nearby text: " + e["context"])
-                lines.extend(e.get("metadata", {}).get("warnings", []))
-            self.preview_text.insert("1.0", "\n\n".join(lines))
-            self.preview_text.tag_add("paper_title", "1.0", "1.end")
-            self.preview_text.tag_add("page_info", "3.0", "3.end")
+                    field_text(key, e[key], label)
+            for warning in e.get("metadata", {}).get("warnings", []):
+                if "reMarkable pen placement uses calibrated coordinates" not in warning:
+                    self.preview_text.insert("end-1c", warning + "\n\n", "document_warning")
+            self.configure_match_preview(e)
+            # Highlight only enabled-field occurrences represented in the main
+            # results. A matching word elsewhere in the note is not a hit.
+            for bounds in self.preview_match_ranges:
+                if bounds:
+                    self.preview_text.tag_add("search_match", bounds[0], bounds[1])
             if e["kind"] == "drawing":
                 # Fetch/decode only the selected drawing on the query worker.
                 # A late preview is ignored if the reader has selected another.
-                future = self.preview_future = self.query_executor.submit(self.load_preview_image, dict(e), cancelled.is_set)
+                executor = self.query_executor
+                loader = self.load_preview_image
+                args = (dict(e), cancelled.is_set)
+                future = self.preview_future = executor.submit(loader, *args)
                 future.add_done_callback(lambda result: self.image_results.put((identity, result)))
         elif self.search_error.get():
             self.preview_text.insert("1.0", "Complete or correct your search to see matching notes.")
@@ -1887,18 +2082,226 @@ class App(WorkspaceLayouts):
             path, error = self.failed_papers[self.papers.selection()[0]]
             self.preview_text.insert("1.0", f"{Path(path).name}\n\nCould not read this PDF:\n{error}\n\nUse Sync PDFs to retry.")
         elif self.search_scope.get() == "PDFs" and not self.search.get().strip():
-            self.preview_text.insert("1.0", "Enter a search to find printed text in your PDFs, including papers without notes.")
+            self.preview_text.insert("1.0", "No PDFs in this selection. Choose another folder, paper, or collection.")
         else:
             self.preview_text.insert("1.0", "No notes to show.\n\nTry another paper or search, or add a PDF folder in Library.")
-        self.source_button.configure(state="normal" if e else "disabled")
+        if not e:
+            self.preview_match_ranges = []
+            self.current_match_index = None
+            self.update_match_navigation()
+        self.source_button.configure(state="normal" if e and not (e.get("pdf_document") and e.get("missing")) else "disabled")
         self.enlarge_button.configure(state="normal" if self.image else "disabled")
         self.copy_image_button.configure(state="normal" if self.image else "disabled")
-        self.full_page_button.configure(state="normal" if e and e["kind"] in {"drawing", "pdf"} else "disabled")
+        self.full_page_button.configure(state="normal" if e and e["kind"] in {"drawing", "pdf"} and not e.get("missing") else "disabled")
+        self.update_preview_actions()
         self.preview_text.configure(state="disabled")
         self.preview_text.mark_set("preview_image", "end-1c")
         self.preview_text.yview_moveto(0)
         self.image_size = None
         self.draw_image()
+        if e:
+            self.sync_main_match()
+
+    def toggle_note_details(self):
+        """Compatibility action for callers; the visible control is now a tab."""
+        self.reader_views.select(self.note_details if self.show_details.get() else self.pdf_reader)
+
+    def reader_view_changed(self, event=None):
+        if not hasattr(self, "pdf_reader"):
+            return
+        self.show_details.set(self.reader_views.select() == str(self.note_details))
+        self.reader_view.set("note" if self.show_details.get() else "pdf")
+        self.schedule_image_resize()
+
+    def toggle_reader_expanded(self):
+        if self.reader_expanded:
+            self.pdf_reader.set_expanded(False)
+            self.reader_pane.insert(0, self.reader_results_pane, weight=1)
+            self.reader_expanded = False
+            self.reader_controls.pack(fill="x", before=self.reader_pane)
+            self.reader_views.select(getattr(self, "reader_saved_view", str(self.pdf_reader)))
+            self.reader_expand_button.configure(text="Reading mode")
+            split = getattr(self, "reader_saved_split", None)
+            self.root.after_idle(lambda: self.reader_pane.sashpos(0, split)
+                if split is not None and not self.reader_expanded and self.reader_pane.winfo_exists()
+                and len(self.reader_pane.panes()) > 1 else None)
+        else:
+            self.reader_saved_split = self.reader_pane.sashpos(0)
+            self.reader_saved_view = self.reader_views.select()
+            self.pdf_reader.set_expanded(True)
+            self.reader_views.select(self.pdf_reader)
+            self.reader_controls.pack_forget()
+            self.reader_pane.forget(self.reader_results_pane)
+            self.reader_expanded = True
+            self.reader_expand_button.configure(text="Exit reading mode")
+
+    def load_reader_document(self, entry, cancelled):
+        reference, page = self.entry_pdf_target(entry)
+        if entry.get("missing"):
+            raise FileNotFoundError("This PDF is unavailable. Locate it in Library, or choose another paper.")
+        if cancelled():
+            raise InterruptedError("Reader selection changed")
+        if entry.get("kind") == "pdf" and not entry.get("logical_paper_id"):
+            path = Path(self.pdf_worker.materialize_source(self.store.path, reference, cancelled))
+        else:
+            path = Path(self.pdf_worker.materialize_cancellable(self.store.path, reference, cancelled))
+        if cancelled():
+            raise InterruptedError("Reader selection changed")
+        # Managed tablet rectangles came from a separately expanded render;
+        # the primary PC path is not that extraction canvas. Keep a reliable
+        # page jump until its exact source geometry is available.
+        managed = entry.get("metadata", {}).get("managed_cloud_id") or entry.get("metadata", {}).get("tablet_layers_only")
+        location = self.pdf_worker.reader_location(path, page, entry.get("path"), entry.get("page"),
+            entry.get("rect") if entry.get("kind") != "pdf" and not managed else None, cancelled)
+        return {"path": str(path.resolve()), "title": result_title(entry), "page": page,
+                "rect": location["rect"], "hasSelection": not entry.get("pdf_document", False),
+                "mainHits": entry.get("search_hits", []),
+                "suppressedPopupIds": location.get("suppressedPopupIds", {})}
+
+    def configure_match_preview(self, entry):
+        self.preview_match_ranges = []
+        self.match_excerpt_tags = []
+        self.current_match_index = None
+        self.match_excerpts_expanded = False
+        hits = entry.get("search_hits", [])
+        excerpts = entry.get("match_excerpts", [])
+        self.expand_matches_button.configure(text="Show all matches")
+        self.preview_match_ranges = [None] * len(hits)
+        self.match_excerpt_tags = [None] * len(excerpts)
+        self.match_extra_groups = []
+        self.preview_actions.set_visible(self.expand_matches_button, False)
+        if not hits:
+            if self.pending_search[0].strip() and not entry.get("pdf_document"):
+                self.preview_text.insert("end-1c", "\n\nThe Boolean conditions match this result without a positive term to highlight.")
+            self.update_match_navigation()
+            return
+        self.current_match_index = 0
+        values = search_values(entry) if entry.get("kind") != "pdf" else {"pdf": entry.get("context", ""), "context": entry.get("context", "")}
+        for index, excerpt in enumerate(excerpts):
+            field = excerpt.get("field", "context")
+            shown = getattr(self, "preview_field_ranges", {}).get(field)
+            if shown and shown[1] == values.get(field, ""):
+                for hit_index in excerpt["hit_indices"]:
+                    hit = hits[hit_index]
+                    self.preview_match_ranges[hit_index] = (f"{shown[0]}+{hit['start']}c", f"{shown[0]}+{hit['end']}c", None)
+                continue
+            if not self.match_extra_groups:
+                self.preview_text.insert("end-1c", "Main search matches\n", "section_label")
+            text, ranges = excerpt_display(values.get(field, ""), excerpt, hits)
+            block_start = self.preview_text.index("end-1c")
+            source = excerpt.get("source_label") or ("PDF text" if entry.get("kind") == "pdf" else SEARCH_FIELDS.get(field, field))
+            ordinal = len(self.match_extra_groups)
+            prefix = f"\n{ordinal + 1}. {source}: "
+            self.preview_text.insert("end-1c", prefix + text + "\n")
+            block_end = self.preview_text.index("end-1c")
+            tag = f"match_excerpt_{index}"
+            self.preview_text.tag_add(tag, block_start, block_end)
+            self.preview_text.tag_configure(tag, elide=ordinal >= 3)
+            self.match_excerpt_tags[index] = tag
+            self.match_extra_groups.append(index)
+            for hit_index, (start, end) in ranges.items():
+                self.preview_match_ranges[hit_index] = (
+                    f"{block_start}+{len(prefix) + start}c", f"{block_start}+{len(prefix) + end}c", index)
+        self.preview_text.tag_raise("current_search_match")
+        self.preview_text.tag_raise("sel")
+        self.preview_actions.set_visible(self.expand_matches_button, len(self.match_extra_groups) > 3)
+        self.highlight_main_match()
+        self.update_match_navigation()
+
+    def update_match_navigation(self):
+        selected = self.notes.selection()
+        target = current_target(self.entries, self.notes.get_children(), selected[0] if selected else None,
+                                getattr(self, "current_match_index", None))
+        enabled = bool(target and target.total > 1)
+        for button in (self.previous_match_button, self.next_match_button):
+            button.configure(state="normal" if enabled else "disabled")
+        if target:
+            noun = "Match" if getattr(self, "result_terms", ()) else "Result"
+            self.match_count.set(f"Main search · {noun} {target.ordinal} of {target.total}")
+            self.match_display.set(f"{'Main search' if self.pending_search[0].strip() else 'Results'} · {target.ordinal}/{target.total}")
+        else:
+            self.match_count.set("No results")
+            self.match_display.set("No results")
+
+    def highlight_main_match(self):
+        ranges = getattr(self, "preview_match_ranges", [])
+        index = getattr(self, "current_match_index", None)
+        self.preview_text.tag_remove("current_search_match", "1.0", "end")
+        if index is not None and 0 <= index < len(ranges) and ranges[index]:
+            start, end, excerpt_index = ranges[index]
+            if excerpt_index is not None and self.match_excerpt_tags[excerpt_index]:
+                self.preview_text.tag_configure(self.match_excerpt_tags[excerpt_index], elide=False)
+            self.preview_text.tag_add("current_search_match", start, end)
+            self.preview_text.see(start)
+
+    def navigate_match(self, step):
+        selected = self.notes.selection()
+        target = navigation_target(self.entries, self.notes.get_children(), selected[0] if selected else None,
+                                   getattr(self, "current_match_index", None), step)
+        if not target:
+            return
+        self.notes.selection_set(target.row)
+        self.notes.focus(target.row)
+        self.notes.see(target.row)
+        self.preview()
+        self.current_match_index = target.hit_index
+        self.highlight_main_match()
+        self.update_match_navigation()
+        # Keep the requested occurrence even if its PDF is still resolving or
+        # Note view is open. Mapping PDF view later must not lose navigation.
+        self.sync_main_match(fit_width=True)
+
+    def sync_main_match(self, fit_width=False):
+        entry = self.selected_entry()
+        if not entry:
+            return
+        index = getattr(self, "current_match_index", None)
+        hits = entry.get("search_hits", [])
+        hit = hits[index] if index is not None and 0 <= index < len(hits) else {}
+        source = entry.get("context", "") if entry.get("kind") == "pdf" else search_values(entry).get(hit.get("field"), "")
+        start, end = hit.get("start", 0), hit.get("end", 0)
+        self.pdf_reader.select_match({"index": index or 0, "term": hit.get("term", ""),
+            "text": hit.get("text", ""), "context": hit.get("snippet", ""), "field": hit.get("field", "context"),
+            "normalized_text": hit.get("normalized_text", ""), "mainHits": hits,
+            "before": source[max(0, start - 100):start], "after": source[end:end + 100], "fitWidth": bool(fit_width)})
+
+    def activate_reader_result(self, event):
+        row = self.notes.identify_row(event.y)
+        if row and row in self.notes.selection():
+            self.preview()
+            self.sync_main_match()
+
+    def toggle_match_excerpts(self):
+        self.match_excerpts_expanded = not self.match_excerpts_expanded
+        for ordinal, index in enumerate(self.match_extra_groups):
+            self.preview_text.tag_configure(self.match_excerpt_tags[index], elide=not self.match_excerpts_expanded and ordinal >= 3)
+        self.expand_matches_button.configure(text="Show fewer matches" if self.match_excerpts_expanded else "Show all matches")
+        if not self.match_excerpts_expanded and self.preview_match_ranges:
+            self.highlight_main_match()
+            self.update_match_navigation()
+
+    def update_preview_actions(self):
+        entry = self.selected_entry()
+        image_actions = bool(self.image)
+        full_page = bool(entry and entry.get("kind") in {"drawing", "pdf"} and not entry.get("missing"))
+        expanded = len(getattr(self, "match_extra_groups", [])) > 3
+        self.preview_actions.set_visible(self.full_page_button, full_page)
+        self.preview_actions.set_visible(self.enlarge_button, image_actions)
+        self.preview_actions.set_visible(self.copy_image_button, image_actions)
+        self.preview_actions.set_visible(self.expand_matches_button, expanded)
+        if image_actions or full_page or expanded:
+            self.preview_actions.pack(fill="x", before=self.preview_text.master, pady=(0, 6))
+        else:
+            self.preview_actions.pack_forget()
+
+    def load_pdf_search_preview(self, entry, terms, cancelled):
+        reference, page = self.entry_pdf_target(entry)
+        path = self.materialize_pdf(reference) if entry.get("logical_paper_id") else reference
+        if cancelled():
+            return None
+        data = self.pdf_worker.search_page(path, page, terms, cancelled)
+        with Image.open(BytesIO(data)) as image:
+            return image.copy()
 
     def load_preview_image(self, entry, cancelled):
         if cancelled():
@@ -1957,7 +2360,7 @@ class App(WorkspaceLayouts):
             except OSError as exc:
                 self.notify(f"Could not copy image: {exc}", "notes")
             else:
-                self.notify("Note image copied at its original resolution.", "notes")
+                self.notify("Image copied at its original resolution.", "notes")
         return "break"
 
     def show_image_menu(self, event):
@@ -1980,13 +2383,13 @@ class App(WorkspaceLayouts):
         if not self.image:
             return
         window = tk.Toplevel(self.root)
-        window.title("Original annotation and page context")
+        window.title("PDF search preview" if self.selected_entry() and self.selected_entry()["kind"] == "pdf" else "Original annotation and page context")
         window.geometry("1000x750")
         window.configure(background=BACKGROUND)
         bind_dialog_close(window, window.destroy)
         header = ttk.Frame(window, padding=12)
         header.pack(fill="x")
-        help_text = tk.StringVar(value="100% · Scroll to move vertically · Drag to pan · Ctrl + scroll to zoom")
+        help_text = tk.StringVar(value="100% · Scroll to move vertically · Ctrl + drag to pan · Ctrl + scroll to zoom")
         instructions = ttk.Label(window, textvariable=help_text, style="Muted.TLabel", padding=12)
         instructions.pack(fill="x")
         instructions.bind("<Configure>", lambda event: instructions.configure(wraplength=max(100, event.width - 24)))
@@ -2018,8 +2421,11 @@ class App(WorkspaceLayouts):
             return
         # One context window bounds pending renders; waiting for PDF work must
         # never occupy the library/search worker.
+        context_identity = (entry["path"], entry["page"])
+        if entry["kind"] == "pdf":
+            context_identity += (tuple(getattr(self, "result_terms", [])),)
         if self.context_window and self.context_window.winfo_exists():
-            if self.context_window.context_identity == (entry["path"], entry["page"]):
+            if self.context_window.context_identity == context_identity:
                 self.context_window.lift()
                 return
             self.context_window.destroy()
@@ -2028,7 +2434,7 @@ class App(WorkspaceLayouts):
             return
         dismiss_tooltips()
         self.context_window = window = tk.Toplevel(self.root)
-        window.context_identity = (entry["path"], entry["page"])
+        window.context_identity = context_identity
         window.title("Full page context — " + page_description(entry))
         window.configure(background=BACKGROUND)
         bind_dialog_close(window, window.destroy)
@@ -2072,7 +2478,11 @@ class App(WorkspaceLayouts):
         except ValueError as exc:
             info.configure(text=str(exc))
             return
-        self.context_future = future = self.context_executor.submit(self.load_full_page, reference, page, context_cancel.is_set)
+        if entry["kind"] == "pdf":
+            self.context_future = future = self.context_executor.submit(
+                self.load_pdf_search_preview, dict(entry), list(context_identity[2]), context_cancel.is_set)
+        else:
+            self.context_future = future = self.context_executor.submit(self.load_full_page, reference, page, context_cancel.is_set)
         future.add_done_callback(lambda result: self.dialog_results.put((window, loaded, result)))
 
     def load_full_page(self, path, page, cancelled=None):
@@ -2102,20 +2512,39 @@ class App(WorkspaceLayouts):
         if e:
             self.open_entry_pdf(e)
 
+    def external_pdf_help(self):
+        entry = self.selected_entry()
+        if not entry:
+            return "Select a paper or note to open its source PDF in your computer's default PDF viewer."
+        return entry["path"] + "\n\nOpen this original source PDF in your computer's default PDF viewer. Edits belong to this source file; use Sync PDFs afterwards to refresh its notes."
+
+    def open_source_external(self):
+        entry = self.selected_entry()
+        if not entry:
+            return
+        try:
+            status, supported = open_pdf_page(entry["path"], entry.get("page", 1), {"viewer": "system"})
+            self.notify(status, "notes")
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Unable to open PDF", str(exc), parent=self.root)
+
     def open_entry_pdf(self, entry):
         try:
             reference, page = self.entry_pdf_target(entry)
         except ValueError as exc:
             messagebox.showerror("PDF needs review", str(exc), parent=self.root)
             return
-        self.open_pdf(reference, page)
+        if entry.get("kind") == "pdf" and not entry.get("logical_paper_id"):
+            self.open_pdf(reference, page, source_only=True)
+        else:
+            self.open_pdf(reference, page)
 
-    def open_pdf(self, path, page=1):
+    def open_pdf(self, path, page=1, *, source_only=False):
         section = "cloud" if self.tabs.select() == str(self.remarkable_tab) else "library" if self.tabs.select() == str(self.library_tab) else "notes"
         if self.pdf_open_future and not self.pdf_open_future.done():
             self.notify("Preparing the previous PDF. It will open when ready.", section)
             return
-        self.notify("Preparing PDF with saved notes…", section)
+        self.notify("Opening source PDF…" if source_only else "Preparing PDF with saved notes…", section)
         def loaded(future):
             try:
                 resolved = future.result()
@@ -2125,7 +2554,7 @@ class App(WorkspaceLayouts):
                 return
             self.launch_pdf(resolved, page, section)
         self.pdf_open_future = future = self.context_executor.submit(
-            self.materialize_pdf, path)
+            Path if source_only else self.materialize_pdf, path)
         future.add_done_callback(lambda result: self.dialog_results.put((self.root, loaded, result)))
 
     def launch_pdf(self, path, page=1, section="notes"):
@@ -2264,6 +2693,14 @@ class App(WorkspaceLayouts):
         fit_dialog(window, self.root)
         return window
 
+    def give_feedback(self):
+        from .support_ui import open_feedback
+        return open_feedback(self)
+
+    def check_updates(self):
+        from .support_ui import open_updates
+        return open_updates(self)
+
     def help(self):
         existing = getattr(self, "help_window", None)
         if existing and existing.winfo_exists():
@@ -2276,9 +2713,13 @@ class App(WorkspaceLayouts):
         bind_dialog_close(window, window.destroy)
         frame = ttk.Frame(window, padding=16)
         frame.pack(fill="both", expand=True)
-        actions = ttk.Frame(frame)
+        actions = WrapToolbar(frame)
         actions.pack(side="bottom", fill="x", pady=(12, 0))
-        Button(actions, text="Close", command=window.destroy).pack(side="right")
+        from .support_ui import add_documentation_buttons
+        add_documentation_buttons(self, actions)
+        actions.add(Button(actions, text="Give feedback…", command=self.give_feedback))
+        actions.add(Button(actions, text="Check for updates…", command=self.check_updates))
+        actions.add(Button(actions, text="Close", command=window.destroy))
         library_row = ttk.Frame(frame)
         library_row.pack(fill="x", pady=(0, 12))
         ttk.Label(library_row, text="Active library").pack(side="left", padx=(0, 8))
@@ -2293,23 +2734,27 @@ class App(WorkspaceLayouts):
             "Library: add folders, sync PDFs, and adjust Folder settings. Show sync details opens the processing log and changes to Hide sync details while it is open. View sync details in the bottom bar opens it when a check needs attention.\n\n"
             "reMarkable: enable cloud services in Settings → Connections to reveal the tab, then pair and link your PC and tablet roots. "
             "New PDF sending and new folder creation each have separate switches. Existing paper transfers are explicit. Cloud activity stays within the linked roots; mismatches need review.\n\n"
-            "Notes: choose a folder and paper, search annotations, read their page context, and export. Open folder in Library or Notes opens the selected PC folder. More contains editable copies, Export annotated PDF and history. Drag a column divider to see more text, or double-click it to fit the column to its rows.\n\n"
+            "Reader: choose Folder, Paper, and Collection or tag in the equal-width dropdowns, then browse or search notes and PDFs below. The dropdown beside Search chooses Notes, PDFs, or All. An empty search lists notes and one row per PDF; entering a query finds matching pages. Clear search or Escape in the search field restores browsing without changing other filters. Results group by Paper; Type sorts Drawing, Highlight, Note and PDF in either direction. Search filters contains matching rules and note fields. Drag a column divider to see more text, or double-click it to fit the column to its rows.\n\n"
+            "Reader views: Note view shows extracted text, comments, labeled search excerpts and drawing close-ups. PDF view shows the full document. Switching views keeps the result selection, PDF zoom and position. Previous/Next match follows actual main-search occurrences in source reading order, including columns, across results and papers. Blue marks identify main-search hits; green marks identify Find in PDF hits. Only enabled note fields count as main hits. Surrounding printed text is off by default in Search filters; opt-in matches identify that source. Annotation color includes original note color names in the search: for example, tantalum AND yellow. It does not set search-mark colors. Paper titles come from saved citation/PDF metadata; when those are unavailable or unusable the filename is shown. Citation details lets you review and save a better title.\n\n"
+            "PDF reader: select a result to jump to its page, or scroll freely and use Back to selection to return. Reading mode hides filters and results for more PDF width and height; Exit reading mode restores your previous view. Find in PDF or Ctrl+F inside the PDF searches only this document without changing the main result list. Selecting a result, using the main match arrows, changing the main search, or closing Find restores main-search navigation. Ctrl + click-and-drag pans the PDF or an image preview; ordinary dragging selects PDF text. Ctrl + mouse wheel zooms; Ctrl + double-click resets zoom and pan (125% in Reading mode or Fit width normally, plus the current-page start for PDFs; opening zoom and top-left for images). Ctrl+0 restores the same mode default. Main-match arrows use 125% in Reading mode and Fit width normally. The reader requires Windows WebView2 Runtime and uses bundled PDF.js resources locally. Retry reader recovers a failed start. PDF scripting, forms and annotation editing are disabled.\n\n"
+            "Open externally opens the original source PDF in the computer's default application, where you can edit it. Sync PDFs afterwards to refresh extracted notes. Library Open PDF uses your saved external viewer preference and prepares a verified combined reading copy.\n\n"
             "Open PDF combines PC and tablet notes when the paper version and page positions are verified. Uncertain matches need review first. Export annotated PDF saves this combined view as a separate PDF. Your original sources stay intact.\n\n"
-            "Highlights keep their text and PDF link. Only drawings and handwriting show context previews, also in Word notebooks. After a tablet paper is verified and refreshed, Word PDF links open its saved original. Older tablet copies keep their existing links until that refresh succeeds. Use Notable to open or export the combined annotated view.\n\n"
+            "Highlights keep their text and PDF link. Drawings and handwriting retain context previews, also in Word notebooks. After a tablet paper is verified and refreshed, Word PDF links open its saved original. Older tablet copies keep their existing links until that refresh succeeds. Use Notable to open or export the combined annotated view.\n\n"
             "PDF page is the physical file position used by Open PDF. PDF labels are separate; journal pages appear only when verified.\n\n"
             "Settings: configure sorting, your own optional Gemini key, PDF viewing and processing defaults. Gemini starts off; Local only makes no naming requests. Key removal stays pending until Save; Undo removal or Cancel keeps the saved key. Library & diagnostics identifies saved libraries.\n\n"
             "Drawings retain surrounding text and figures. Folder settings adjusts grouping and context margins; Whole page keeps drawings together. Highlights and typed comments stay separate.\n\n"
             "Sync checks PDFs and updates extracted screenshots. Right-click a watched folder in Library to rebuild its notebook from saved notes "
             "using current formatting after confirmation. Save editable copy makes a separate notebook for your writing. "
             "External edits to generated notebooks are preserved in Notebook backups before regeneration.\n\n"
-            "Updates are watched while the app is open, checked every five minutes, and caught up at startup. "
+            "Watched PDF changes are checked while the app is open, every five minutes, and at startup. "
             "Closing the app stops watching.\n\n"
+            "Give feedback prepares a report for your email app; you review and send it yourself. Only app version, operating system, and source/packaged status are included automatically. You can copy the report if no email app opens. Check for updates reads GitHub's latest published stable release only when requested. Downloads open in your browser; installation and source replacement remain manual.\n\n"
             "Hover over a file or folder location to see its complete path and an explanation. The small Copy full path button copies the entire location. For a selected table row with several locations, choose the location in its details panel first.\n\n"
             "Library → Actions → Library storage & backups creates verified backups, restores an independent library and compacts repeated drawing images without removing note history. Recovery archive review removes only proven duplicate raw archives after backup.\n\n"
-            "Notes → Actions contains tags and research collections, saved searches and an accessible browser reading view. Collection or tag filters apply to both note and printed PDF results. Saved searches apply to the current folder and paper selection.\n\n"
-            "Keyboard: Ctrl+F searches notes; F5 syncs PDFs; Ctrl+, opens Settings. Alt+1/2/3 selects Inbox/Library/Notes. Ctrl+Shift+S opens saved searches, Ctrl+Shift+T edits tags, and Ctrl+Shift+A opens the accessible reading view. Tab and Shift+Tab move between controls; Enter opens the selected note's PDF.\n\n"
+            "Reader → Actions contains tags and research collections, saved searches and an accessible browser reading view. Collection or tag filters apply to both note and printed PDF results. Saved searches apply to the current folder and paper selection.\n\n"
+            "Keyboard: Ctrl+F searches notes; F5 syncs PDFs; Ctrl+, opens Settings. Alt+1/2/3 selects Inbox/Library/Reader. Ctrl+Shift+S opens saved searches, Ctrl+Shift+T edits tags, and Ctrl+Shift+A opens the accessible reading view. Tab and Shift+Tab move between controls; Enter opens the selected note's PDF.\n\n"
             f"Version {__version__}")
-        window.help_text = ReadOnlyText(frame, content, height=18)
+        window.help_text = ReadOnlyText(frame, content, height=18, width=80)
         window.help_text.pack(fill="both", expand=True)
         annotate_buttons(window)
         fit_dialog(window, self.root)
@@ -2430,11 +2875,12 @@ class App(WorkspaceLayouts):
                 try:
                     self.image = future.result()
                 except Exception as exc:
-                    self.notify(f"Could not load drawing preview: {exc}. Open the source PDF to see it.", "notes")
+                    self.notify(f"Could not load preview: {exc}. Open the source PDF to see it.", "notes")
                     continue
                 self.image_size = None
                 self.enlarge_button.configure(state="normal" if self.image else "disabled")
                 self.copy_image_button.configure(state="normal" if self.image else "disabled")
+                self.update_preview_actions()
                 self.draw_image()
         self.show_work_progress()
         if not self.closing:
@@ -2459,6 +2905,7 @@ class App(WorkspaceLayouts):
 
     def close(self):
         self.closing = True
+        self.pdf_reader.close()
         self.status.set("Finishing the current PDF safely before closing…")
         self.service.stop()
         self.query_cancel.set()
@@ -2474,7 +2921,9 @@ class App(WorkspaceLayouts):
         self.wait_close()
 
     def wait_close(self):
-        if (self.service.thread and self.service.thread.is_alive()) or any(not future.done() for future in self.workflow_futures):
+        if ((self.service.thread and self.service.thread.is_alive())
+                or any(not future.done() for future in self.workflow_futures)
+                or any(reaper.is_alive() for reaper in self.pdf_reader.reapers)):
             self.root.after(100, self.wait_close)
         else:
             self.root.destroy()

@@ -80,7 +80,10 @@ class LegacyCleanupDialog:
         self.remove_button = Button(actions, text="Remove reviewed copies", command=self.review_removal,
                                     style="Primary.TButton", state="disabled")
         self.remove_button.pack(side="left")
-        Tooltip(self.remove_button, "Review the exact selected paths and total size, then explicitly remove verified extra reading copies. Edited or changed copies remain in place.")
+        Tooltip(self.remove_button, lambda: "Wait for the current storage review or removal to finish." if self.busy else
+                "Select only copies marked Ready for review first." if not self.ready_selection() else
+                "Review the selected paths and acknowledge the old-link warning above first." if not self.acknowledged.get() else
+                "Review the exact selected paths and total size, then explicitly remove verified extra reading copies. Edited or changed copies remain in place.")
         self.close_button = Button(actions, text="Close", command=self.close)
         self.close_button.pack(side="right")
         Tooltip(self.close_button, "Close this review. A removal you already confirmed must finish before the window closes.")

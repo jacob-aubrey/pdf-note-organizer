@@ -5,7 +5,7 @@ from tkinter import ttk
 import unittest
 from unittest.mock import Mock, patch
 
-from note_organizer.widgets import Tooltip, dismiss_tooltips
+from note_organizer.widgets import Tooltip, EntryPlaceholder, dismiss_tooltips
 
 
 class TooltipBehaviorTests(unittest.TestCase):
@@ -103,6 +103,37 @@ class TooltipBehaviorTests(unittest.TestCase):
             tip.show()
         self.assertIs(tip.window, window)
         window.deiconify.assert_called_once()
+
+    def test_empty_search_hint_forwards_hover_to_its_entry_help(self):
+        value = tk.StringVar(self.root)
+        entry = ttk.Entry(self.root, textvariable=value)
+        entry.pack()
+        hint = EntryPlaceholder(entry, "Search…", value)
+        tip = Tooltip(entry, "Search fields and Boolean rules")
+        hint.help_enter()
+        self.assertIsNotNone(tip.pending)
+        with self.hovering(entry, target=hint.label), self.popup() as window:
+            tip.show()
+        window.deiconify.assert_called_once()
+        self.assertEqual(value.get(), "")
+
+    def test_only_known_placeholder_overlay_counts_as_entry_hover(self):
+        entry = ttk.Entry(self.root)
+        entry.pack()
+        other_child = tk.Label(entry, text="Unrelated child")
+        tip = Tooltip(entry, "Explanation")
+        with self.hovering(entry, target=other_child):
+            self.assertFalse(tip.pointer_over())
+
+    def test_native_pdf_focus_allows_hover_only_while_its_app_is_foreground(self):
+        tip = Tooltip(self.button, "Compact control explanation")
+        native = Mock()
+        self.root._native_reader_children = [native]
+        with self.hovering(self.button, focused=False):
+            native.owner_is_foreground.return_value = True
+            self.assertTrue(tip.pointer_over())
+            native.owner_is_foreground.return_value = False
+            self.assertFalse(tip.pointer_over())
 
     def test_help_cannot_display_over_an_inactive_owner(self):
         tip = Tooltip(self.button, "Explanation")

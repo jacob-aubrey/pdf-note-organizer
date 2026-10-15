@@ -26,7 +26,9 @@ def review_citation_conflict(app, records, chosen, action_label="Use citation an
               wraplength=620).pack(anchor="w")
     choice = tk.IntVar(value=0)
     for index, record in enumerate(records):
-        ttk.Radiobutton(frame, text=f"Citation {index+1}", variable=choice, value=index).pack(anchor="w", pady=(12, 2))
+        option = ttk.Radiobutton(frame, text=f"Citation {index+1}", variable=choice, value=index)
+        option.pack(anchor="w", pady=(12, 2))
+        Tooltip(option, "Choose this reviewed citation for the linked paper. The source files and note history remain preserved.")
         ReadOnlyText(frame, height=4, value=citation_text(record)).pack(fill="x")
     controls = ttk.Frame(frame)
     controls.pack(fill="x", pady=(14, 0))
@@ -35,7 +37,10 @@ def review_citation_conflict(app, records, chosen, action_label="Use citation an
         window.destroy()
         chosen(record)
     Button(controls, text=action_label, command=accept, style="Primary.TButton").pack(side="right")
-    Button(controls, text="Cancel", command=window.destroy).pack(side="right", padx=8)
+    cancel = Button(controls, text="Cancel", command=window.destroy)
+    cancel.pack(side="right", padx=8)
+    Tooltip(cancel, "Close without choosing a citation or changing the paper's links.")
+    annotate_buttons(window)
     bind_dialog_close(window, window.destroy)
     fit_dialog(window, app.root)
 
@@ -60,7 +65,18 @@ class CitationWindow:
             entry = ttk.Entry(frame, textvariable=variable, width=60, state="disabled")
             entry.grid(row=row, column=1, sticky="ew", pady=4)
             self.inputs.append(entry)
-            Tooltip(entry, "Review or edit this citation field. Author names use semicolons between authors; commas can remain inside a name.")
+            field_help = {
+                "title": "Review or edit the paper title used in citations and Reader results.",
+                "authors": "Separate authors with semicolons; commas can remain inside a name, for example Doe, Jane; Smith, John.",
+                "year": "Enter the publication year used in the citation.",
+                "journal": "Enter the journal, proceedings, or other publication venue.",
+                "volume": "Enter the journal or proceedings volume, if available.",
+                "issue": "Enter the publication's issue number, if available.",
+                "pages": "Enter the published page range or article number. This does not change PDF navigation page numbers.",
+                "doi": "Enter the DOI identifier or DOI URL. Look up DOI retrieves citation metadata for your review.",
+                "url": "Enter a public article or publisher URL to include in the citation. Saving does not open it.",
+            }
+            Tooltip(entry, field_help[key] + " Save citation keeps your edits; Cancel discards them.")
         self.status = tk.StringVar(value="Loading citation…")
         ttk.Label(frame, textvariable=self.status, wraplength=650, style="Muted.TLabel").grid(
             row=len(FIELDS), column=0, columnspan=2, sticky="w", pady=12)
@@ -68,16 +84,20 @@ class CitationWindow:
         controls.grid(row=len(FIELDS)+1, column=0, columnspan=2, sticky="ew")
         self.lookup = Button(controls, text="Look up DOI", command=self.look_up, state="disabled")
         self.lookup.pack(side="left")
-        Tooltip(self.lookup, "Send only this DOI to Crossref/DataCite and fill available citation fields for your review. Save citation keeps your edits; Cancel discards them.")
+        Tooltip(self.lookup, lambda: "Wait for the current citation operation to finish." if self.lookup.instate(["disabled"]) else
+                "Send only this DOI to Crossref/DataCite and fill available citation fields for your review. Save citation keeps your edits; Cancel discards them.")
         self.copy = Button(controls, text="Copy citation", command=self.copy_text, state="disabled")
         self.copy.pack(side="left", padx=8)
-        Tooltip(self.copy, "Copy the current fields as a plain-text reference. This does not save draft edits.")
+        Tooltip(self.copy, lambda: "Wait for the current citation operation to finish." if self.copy.instate(["disabled"]) else
+                "Copy the current fields as a plain-text reference. This does not save draft edits.")
         self.save = Button(controls, text="Save citation", command=self.save_record, style="Primary.TButton", state="disabled")
         self.save.pack(side="right")
-        Tooltip(self.save, "Save these reviewed details with this paper and its linked sources. PDF rescans keep your citation edits.")
+        Tooltip(self.save, lambda: "Wait for the current citation operation to finish." if self.save.instate(["disabled"]) else
+                "Save these reviewed details with this paper and its linked sources. PDF rescans keep your citation edits.")
         self.cancel = cancel = Button(controls, text="Cancel", command=self.close)
         cancel.pack(side="right", padx=8)
-        Tooltip(cancel, "Close without saving draft citation changes.")
+        Tooltip(cancel, lambda: "Wait for the citation save to finish before closing." if self.saving else
+                "Close without saving draft citation changes.")
         annotate_buttons(window)
         fit_dialog(window, app.root)
         background(app, lambda: citation_for(app.store, document_id), self.loaded, self.failed)
@@ -195,11 +215,16 @@ class SupplementsWindow:
         self.find = actions.add(Button(actions, text="Find files", command=self.discover))
         Tooltip(self.find, "Inspect PDF hyperlinks locally and request this paper's DOI metadata and publisher page. No PDF or note text is uploaded.")
         self.open = actions.add(Button(actions, text="Open selected link", command=self.open_link, state="disabled"))
-        Tooltip(self.open, "Open this candidate in your browser. Publisher access or a manual file download may be needed.")
+        Tooltip(self.open, lambda: "Choose a web candidate above; existing local files can be attached with Use existing file."
+                if self.open.instate(["disabled"]) else
+                "Open the selected candidate in your browser. Publisher access or a manual download may be needed.")
         self.download = actions.add(Button(actions, text="Download selected…", command=self.download_selected, state="disabled"))
-        Tooltip(self.download, "Use the sorter's naming style with the parent citation and _SI suffix. Identical library files are reused; different existing files are never overwritten. Limit: 100 MB.")
+        Tooltip(self.download, lambda: "Wait for the current download to finish." if getattr(self, "downloading", False) else
+                "Select a web candidate above to choose a new download filename." if self.download.instate(["disabled"]) else
+                "Use the sorter's naming style with the parent citation and _SI suffix. Identical library files are reused; different existing files are never overwritten. Limit: 100 MB.")
         self.article = actions.add(Button(actions, text="Open article", command=lambda: webbrowser.open(self.landing), state="disabled"))
-        Tooltip(self.article, "Open the article's publisher page in your browser to look for supplementary files when automatic discovery is incomplete.")
+        Tooltip(self.article, lambda: "Choose Find files to locate the article's publisher page first." if self.article.instate(["disabled"]) else
+                "Open the article's publisher page in your browser to look for supplementary files when automatic discovery is incomplete.")
         ttk.Label(frame, text="Attached files", style="Section.TLabel").grid(row=4, column=0, sticky="w", pady=(8, 6))
         self.attached = app.tree(frame, [("path", "File location", 760)], height=4, content_columns=(),
                                  empty_text="No attached files", pack=False)
@@ -217,10 +242,14 @@ class SupplementsWindow:
         add = controls.add(Button(controls, text="Add file…", command=self.add_file))
         Tooltip(add, "Attach an already downloaded supplementary file to this paper. The file stays in its existing location.")
         self.use_existing = controls.add(Button(controls, text="Use existing file", command=self.use_local, state="disabled"))
-        Tooltip(self.use_existing, "Attach the selected library candidate in its current location. A similar filename alone does not confirm that it belongs to this paper.")
+        Tooltip(self.use_existing, lambda: "Select an existing local file in the candidate list above." if self.use_existing.instate(["disabled"]) else
+                "Attach the selected library candidate in its current location. A similar filename alone does not confirm that it belongs to this paper.")
         self.open_file = controls.add(Button(controls, text="Open containing folder", command=self.open_attachment, state="disabled"))
-        Tooltip(self.open_file, "Open the folder containing the selected attachment so you can inspect the saved file.")
+        Tooltip(self.open_file, lambda: "Select an attached file below first." if self.open_file.instate(["disabled"]) else
+                "Open the folder containing the selected attachment so you can inspect the saved file.")
         self.open_attachment_file = controls.add(Button(controls, text="Open attached file", command=self.open_saved_file, state="disabled"))
+        Tooltip(self.open_attachment_file, lambda: "Select an attached file below first." if self.open_attachment_file.instate(["disabled"]) else
+                "Open the selected supplementary file in its computer default application.")
         self.attached.bind("<Return>", lambda _: self.open_saved_file())
         self.attached.bind("<Double-1>", lambda _: self.open_saved_file())
         close = Button(frame, text="Close", command=window.destroy)

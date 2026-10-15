@@ -32,6 +32,27 @@ def crash_process(marker):
 
 
 class PDFWorkerTests(unittest.TestCase):
+    def test_search_page_highlights_matches_without_changing_original(self):
+        with fitz.open() as document:
+            page = document.new_page(width=300, height=220)
+            page.insert_text((30, 50), "Gold imaging and iodine")
+            page.insert_text((30, 100), "Spectral")
+            page.insert_text((30, 115), "CT experiment")
+            page.set_rotation(90)
+            document.save(self.path)
+        original = self.path.read_bytes()
+        plain = _full_page(self.path, 1)
+        marked = self.worker.search_page(self.path, 1, ["gold", "spectral ct"])
+        self.assertNotEqual(plain, marked)
+        self.assertNotEqual(self.worker.search_page(self.path, 1, ["gold"]), marked)
+        with Image.open(BytesIO(marked)) as image:
+            self.assertLess(image.width, image.height)
+            pixels = list(image.convert("RGB").get_flattened_data())
+            self.assertTrue(any(b > 245 and 180 < r < 235 and r < g < 245 for r, g, b in pixels))
+        self.assertEqual(self.path.read_bytes(), original)
+        with fitz.open(self.path) as document:
+            self.assertEqual(list(document[0].annots() or ()), [])
+
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.path = Path(self.folder.name) / "article.pdf"

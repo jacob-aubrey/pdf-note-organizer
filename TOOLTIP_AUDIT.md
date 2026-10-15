@@ -1,4 +1,46 @@
-# Combined workflow tooltip audit
+# Tooltip audit
+
+## October 15, 2026: Reader and app-wide help refresh
+
+Reviewed the current Inbox, Library, Reader and reMarkable controls, Search
+filters, Settings and processing options, citation editing/conflicts,
+supplementary files, tags/collections, saved searches, feedback, updates,
+storage and recovery cleanup. The PDF toolbar's HTML help is maintained with
+the reader assets; native PDF annotation popups are document contents rather
+than application tooltips.
+
+Changes to the supporting dialogs:
+
+- Feedback names the actual email or form route and makes the review/send
+  handoff explicit. It no longer describes the configured public email as a
+  private form. No report is sent by opening the dialog.
+- Viewer preferences distinguish the configured viewer for Library/export
+  actions from Reader's computer-default Open externally action.
+- Citation fields have individual help; published pages are distinguished
+  from physical PDF navigation pages. Citation conflict choices have help.
+- Inbox, citation, supplementary-file, saved-search and cleanup controls explain
+  selection requirements, pending work and relevant disabled states.
+- Saved-search help includes Notes/PDFs/All scope and keeps the current folder
+  and paper boundaries clear. Labels still use Collection or tag.
+- Maintenance identifies the separate restored library, and removal controls
+  explain verified-copy and acknowledgment requirements.
+
+Coverage is in `tests/test_tooltip_audit_refresh.py` and the existing tooltip,
+workflow, support, preferences and storage UI suites. Tests enumerate actual
+controls and evaluate callable help in changing states. All GUI verification
+runs on a private inactive Windows desktop, with disposable synthetic libraries
+and mocked external handoffs. Tests do not move the desktop pointer or display
+test dialogs over the user's work.
+
+Validation: 52 tooltip, workflow, support, preferences and storage UI checks
+passed together (`.test-tmp/ui-tests-13940.log`). Source compilation and the
+focused Git whitespace check also passed. This confirms help coverage and
+tested dynamic states; it is not a claim that every external service or every
+PDF annotation format has been exercised.
+
+The historical audits below describe their own versions and test runs.
+
+## Earlier combined-workflow audit
 
 October 8 follow-up: the current path design uses full current paths together
 with contextual hover help and compact copy buttons throughout the interface.

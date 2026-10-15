@@ -2,12 +2,14 @@
 
 Notable helps you organize research documents and collect your PDF annotations into searchable notes and Word notebooks. You can use it entirely on your PC. Document identification through online services and connection to a reMarkable tablet are optional.
 
+For step-by-step navigation with colorful annotated screenshots, see the [Notable 2.5 user manual](output/pdf/Notable-User-Manual.pdf). The 24-page guide covers setup, filing, PDF notes, search, exports, optional tablet syncing, backups, troubleshooting, and keyboard shortcuts.
+
 There are two related workflows:
 
 - **Sorting documents:** review a suggested name and choose where an incoming PDF, Word document, or PowerPoint presentation belongs.
 - **Reading PDF notes:** collect highlights, comments, drawings, and handwriting from watched PDF folders, then read, search, or export those notes.
 
-Sorting supports `.pdf`, `.docx`, `.pptx`, and legacy `.ppt`. **Only PDFs enter note extraction, combined paper notes, Word notebooks, and reMarkable paper transfers.** Filing a Word or PowerPoint document does not turn it into a PDF or add it to the Notes tab.
+Sorting supports `.pdf`, `.docx`, `.pptx`, and legacy `.ppt`. **Only PDFs enter note extraction, combined paper notes, Word notebooks, and reMarkable paper transfers.** Filing a Word or PowerPoint document does not turn it into a PDF or add it to the Reader tab.
 
 This README starts with setup and ordinary use. The [existing-library cleanup walkthrough](#bring-an-existing-pc-and-tablet-library-together) explains how to work through disorganized collections a few papers at a time. Troubleshooting and technical reference follow afterward.
 
@@ -37,11 +39,29 @@ The first command creates the project's own Python environment. The second insta
 
 **Actions ▾** exposes additional commands in each workspace. Library also has a visible **Folder actions ▾** menu. An unconfigured Inbox offers **Set up Inbox**. Advanced processing distances stay collapsed until needed; an example illustrates the grouping choices.
 
-In Notes, use **Actions → Tags & collections…** to label the selected paper and its linked copies. Separate names with semicolons. Choose a tag or collection in the Notes filter to browse its notes and printed PDF matches. **Saved searches…** stores search text, fields, matching mode, note type, collection and Notes/PDFs/All scope. Applying a saved search uses your currently selected folder and paper.
+In Reader, use **Actions → Tags & collections…** to label the selected paper and its linked copies. Separate names with semicolons. Choose a tag or collection in the Reader filter to browse its notes and printed PDF matches. **Saved searches…** stores search text, fields, matching mode, note type, collection and Notes/PDFs/All scope. Applying a saved search uses your currently selected folder and paper.
 
 **Accessible reading view…** opens the current results in your browser with semantic headings, searchable text, source links, zoom and print controls. It is a local snapshot; open it again after changing the results. This improves access to reading content. The full Tk application has not been certified with NVDA or other screen readers.
 
-Keyboard shortcuts include **Ctrl+F** for search, **F5** to sync PDFs, **Ctrl+,** for Settings, **Alt+1/2/3** for Inbox/Library/Notes, **Ctrl+Shift+S** for saved searches, **Ctrl+Shift+T** for labels and **Ctrl+Shift+A** for the accessible reading view. Drawing images appear directly below the note text, with one scrollbar for the entire preview. Images fit the available width; Enlarge image opens the original. The four preview actions wrap as needed in a narrow pane and return to one row when there is room. Saved timestamps appear in local time.
+Reader has **Note view** and **PDF view** tabs sharing one result list and main search. A single compact header contains the view tabs, **Open externally**, **Reading mode**, and main-match arrows/counter. Note view displays each note passage once with inline matches, comments and drawing close-ups; additional excerpts identify matches in other fields. PDF view displays the complete selected document, including verified combined PC/reMarkable notes. Switching views keeps the selection, PDF position and zoom. Select a result to jump to its page; continue scrolling independently, then use **Back to selection** to return. That button is unavailable when browsing a PDF without a selected note or search hit. **Reading mode** hides the filters and results, opens PDF view, and starts at **125%**. Main-match arrows and reset gestures return to 125% while Reading mode is active. Manual zoom remains available. **Exit reading mode** restores the previous view, layout and zoom while retaining your current PDF reading place.
+
+**Find in PDF** or **Ctrl+F while focused inside the PDF** searches only the open document. It never changes the main query, filters or result list. Selecting a result, using the shared main-search arrows, changing the main search, or closing Find returns navigation to the main search and its positive terms. Main-search arrows apply **125% in Reading mode** or **Fit width normally**, keep the page centered and reveal the occurrence vertically. Blue marks show only actual enabled-field hits for the selected main result; PDF Find uses green and searches the whole document. Wrapped words count and navigate as one occurrence; PDF results follow the document text flow through columns. PDF-local Find retains your chosen zoom, including when closed. **Ctrl + mouse wheel** zooms; **Ctrl+0** restores 125% in Reading mode or Fit width normally. **Ctrl + click-and-drag** pans from any PDF content, including hyperlink text and linked images. Ordinary clicks open links and plain dragging selects text. **Ctrl + double-click**, including on links, resets the same mode default and the current page's starting position. Image/full-page previews use the same gestures, resetting to their opening zoom and top-left position. Search marks are temporary; there are no selected-note bounding boxes. Muted placeholders explain search boxes without becoming part of their queries. A progress indicator beside Search identifies searches still running. Main-search and PDF Find clear buttons use the same larger X icon.
+
+When a toolbar needs more room, button labels collapse to icons and return when space allows. Their action names, hover help, keyboard order and click targets remain available. Consequential actions retain text until other labels have collapsed. Reading mode uses an expand icon and Exit reading mode a collapse icon.
+
+**Actions → Document details…** contains the selected paper's identity, page information, original source path and extraction diagnostics. Both views keep a prominent document title visible, with at most two lines and the full title on hover. Titles use saved paper/PDF metadata, falling back to the filename when no usable title exists; Citation details can save a better title. The title source is identified in result tooltips and Document details. The general reMarkable coordinate-conversion advisory appears there instead of in every note. Actual extraction issues remain visible. Legacy reMarkable highlight popups that only repeat the highlighted quotation are suppressed in the embedded reader; genuine comments are retained and source PDFs remain unchanged.
+
+**Open externally** opens the original source PDF in your computer's default PDF application, where you can edit it. Use **Sync PDFs** afterwards to refresh extracted notes. Existing Library **Open PDF** and **Export annotated PDF** actions still provide the verified combined reading copy. The embedded reader is read-only; annotation creation, form editing and PDF scripting are disabled.
+
+The embedded reader currently requires Windows and the **Microsoft Edge WebView2 Runtime**, normally present on Windows 11. Its pinned PDF.js runtime is bundled under `note_organizer/assets/pdfjs`; PDFs and viewer resources stay on the computer and need no CDN. A private loopback server serves only the selected PDF to the embedded browser. Source installations get the reader dependencies through `requirements.txt` / the Windows `requirements.lock`. If the runtime cannot start, the reader explains the issue and offers **Retry reader**; **Open externally** remains available.
+
+Other keyboard shortcuts include **Ctrl+F** outside the PDF for library search, **F5** to sync PDFs, **Ctrl+,** for Settings, **Alt+1/2/3** for Inbox/Library/Reader, **Ctrl+Shift+S** for saved searches, **Ctrl+Shift+T** for labels and **Ctrl+Shift+A** for the accessible reading view. Saved timestamps appear in local time.
+
+**Help → Open manual** and **Open README** launch the bundled guides. The Inbox review details area expands to use available height while retaining scrolling in smaller windows.
+
+**Help → Give feedback…** prepares an editable bug report or suggestion. **Open feedback email…** copies the complete report and opens a draft in your configured email application; you review and send it yourself. **Copy report** is available if no email application opens. Screenshots can be attached manually in the email. Only the app version, operating system, and source/packaged status are added automatically; no library paths, logs, PDFs, note contents, or credentials are attached.
+
+**Help → Check for updates…** manually checks the repository's latest published stable GitHub release and shows its version and release notes. Source users can open a tagged source download; packaged users can open a compatible attached Windows download when available. Downloads open only after you choose them, in your browser. The app does not install updates or overwrite a source checkout. A repository without a public stable release, an unavailable connection, or an unrecognized version produces an explanatory result.
 
 When linked copies have different reviewed citations, choose the citation to retain before linking or exporting. A citation draft must be saved to apply it to the linked paper. Undoing a link restores its previous citations when no later citation edit would be lost. Supplements use DOI and verified content matches to associate with their parent paper; attachments can be opened from the paper's supplement view.
 
@@ -52,7 +72,9 @@ Open **Library → Actions → Library storage & backups…**, also available in
 - **Restore backup…** verifies the archive and creates a new independent directory. **Open restored library** launches it with recovered original snapshots. Inbox watching and cloud services start paused for setup review. Existing directories cannot be overwritten.
 - **Review extra PDFs…** retains the existing reviewed cleanup workflow. **Review recovery archives…** removes a raw tablet archive only when every member is proven identical to retained baseline/layer assets and its notes have migrated. It requires review and a verified backup; uncertain archives remain with an explanation.
 
-PDF text indexing builds as papers are searched. Short terms and negative queries retain the existing matching behavior through a conservative fallback. Reading PDFs retain the guarded cache budget. Large PDF text jobs yield between small page batches so a preview can run promptly; obsolete previews and searches cancel cooperatively.
+In **Search filters**, **Annotation color** includes original note color names as searchable fields; it does not choose the temporary search mark color. For example, `tantalum AND yellow` can match highlighted text and annotation color across enabled fields.
+
+PDF text indexing builds as papers are searched. Older indexes refresh automatically; Sync PDFs refreshes stored note contexts for the latest source reading order. Short terms and negative queries retain the existing matching behavior through a conservative fallback. Reading PDFs retain the guarded cache budget. Large PDF text jobs yield between small page batches so a preview can run promptly; obsolete previews and searches cancel cooperatively.
 
 Optional Gemini naming has a model selector and **Test connection** in Sorting settings. The test checks the selected model with your draft/saved key; it does not send a document or generate text. Existing configured libraries preserve their model compatibility. New setups default to `gemini-3.5-flash-lite`; availability still depends on your account.
 
@@ -100,7 +122,7 @@ File and folder paths use the same controls throughout the app: hover over the p
 
 Some details panels contain several locations, such as an original file and its destination. Choose the location in the panel's small list, then use its copy button. **Copy details** copies the entire explanation and its paths together. You can reach the path copy buttons with Tab and activate them with Space or Enter. There is no separate right-click menu for paths.
 
-In Notes, the folder copy button copies the selected watched folder. The paper copy button copies the chosen paper's location. When viewing **All papers**, it copies the selected note's source PDF; its tooltip identifies that source. In the expanded processing log, **Locations** lets you choose a recorded file, recovery copy, or watched folder to copy.
+In Reader, the folder copy button copies the selected watched folder. The paper copy button copies the chosen paper's location. When viewing **All papers**, it copies the selected note's source PDF; its tooltip identifies that source. In the expanded processing log, **Locations** lets you choose a recorded file, recovery copy, or watched folder to copy.
 
 Read-only summaries may identify other project or installed libraries. Selecting a different data directory on launch loads that library's own watched folders, settings, and credentials. Diagnostics does not merge or move libraries.
 
@@ -114,13 +136,13 @@ The window title is **Notable**. **Settings** and **Help** sit at the right of t
 | --- | --- | --- |
 | **Inbox** | Review incoming document names and destinations. | **File document** puts the selected file in its chosen library folder and removes the Inbox copy after successful filing. |
 | **Library** | Choose watched PDF folders, inspect their papers, and manage processing. | **Add folder** registers an existing folder for PDF notes. It does not move its papers. |
-| **Notes** | Read and search extracted annotations; open papers and export notes. | Read saved notes, export Word documents, or save an annotated PDF. |
+| **Reader** | Read and search notes and printed PDF text; open papers and export notes. | Read saved notes, preview highlighted PDF matches, export Word documents, or save an annotated PDF. |
 | **reMarkable** | Connect, download tablet PDF annotations, map folders, and review outgoing transfers. | Cloud actions use the connection and the separately enabled transfer permissions. |
 | **Settings** | Choose naming permissions, PDF viewing, processing defaults, and optional connections. | **Save preferences** commits the draft; **Cancel** discards it. |
 
 For a new library, reMarkable cloud services start **off**, and its tab is hidden. Enable them through **Settings → Connections** and save to reveal the tab. Turning the master switch off hides the tab and pauses cloud activity while keeping downloaded notes, pairing, and folder links. Existing configured libraries retain their saved connection choices.
 
-An empty library normally opens on Inbox. A library with saved notes normally opens on Notes. **Open folder** in Library opens the selected watched folder in File Explorer. In Notes it opens the selected folder; select a specific folder first if you are viewing all folders.
+An empty library normally opens on Inbox. A library with saved notes normally opens on Reader. **Open folder** in Library opens the selected watched folder in File Explorer. In Reader it opens the selected folder; select a specific folder first if you are viewing all folders.
 
 The footer describes background work. **View sync details** appears when a check or recovery needs attention and takes you to Library's processing log. In Library, **Show sync details** expands that log and **Hide sync details** collapses it. Unavailable watched folders, PDF read failures, pending notebook exports, and retained previous PDF copies are reported separately. The log includes complete saved recovery paths so you can find those copies in File Explorer.
 
@@ -130,7 +152,7 @@ Hover over a button for a short explanation. Path fields and path entries in tab
 
 Long filenames in Inbox also show their full current text on hover. Inbox metadata, Help, and annotation history have scrollbars so longer information stays readable. **Escape** follows the same action as a dialog's Cancel or Close button. In Settings, this discards draft changes, including a pending key removal; a save already in progress must finish first.
 
-Drag the divider between column headings to resize a column. **Double-click that divider** to fit the column to its current rows. A manually sized column keeps its size through refreshes. Horizontal scrollbars appear when needed; **Shift + mouse wheel** pans across a wide table. Dividers between the Notes list and preview can also be dragged.
+Drag the divider between column headings to resize a column. **Double-click that divider** to fit the column to its current rows. A manually sized column keeps its size through refreshes. Horizontal scrollbars appear when needed; **Shift + mouse wheel** pans across a wide table. Dividers between the Reader list and preview can also be dragged.
 
 ## Sort new documents through Inbox
 
@@ -185,7 +207,7 @@ All Settings tabs save together. If saving fails, the dialog stays open, the pre
 
 DOCX and PPTX text each require their own Gemini permission. Legacy PPT files need local/manual review and are not sent to Gemini. Filename formats and a limited custom template let you choose a naming pattern; a custom template contains supported tokens, not a path or extension.
 
-## Use Library, Notes, and notebooks
+## Use Library, Reader, and notebooks
 
 ### Watch an existing PDF folder
 
@@ -197,7 +219,7 @@ Changes are watched while the app is open. Startup and periodic reconciliation s
 
 Select a paper and choose **View notes**, or double-click its row, to open its notes. **Open PDF** prepares one reading PDF with the paper's PC and reMarkable notes together. This happens in the background. Notable first checks that the printed pages and their positions match. Different editions, added or reordered tablet pages, and several independently annotated copies need review before they can be combined. Saved notes and their separate histories remain intact.
 
-To keep or share that reading PDF, choose **More → Export annotated PDF…** in Library or Notes. Choose a separate destination. This is a lasting export with the combined annotations; the temporary reading view is not intended as your working original. Continue making PC annotations in your main original and tablet annotations on your tablet, then sync to refresh the combined view.
+To keep or share that reading PDF, choose **More → Export annotated PDF…** in Library or Reader. Choose a separate destination. This is a lasting export with the combined annotations; the temporary reading view is not intended as your working original. Continue making PC annotations in your main original and tablet annotations on your tablet, then sync to refresh the combined view.
 
 Handwriting can extend beyond an article's original page edge. **Open PDF** and **Export annotated PDF** add white space around supported margin notes so the whole note stays visible, including handwriting already saved in a PC PDF or an older tablet reading copy. The article stays at its original size, and its text stays searchable. Only the generated reading or export PDF gets the extra space; your original file keeps its existing page size. A wider page can make the article look smaller when your viewer uses **Fit page** or **Fit width**; zoom in for a larger reading size. These reading PDFs use the same temporary cache as combined notes and can be rebuilt when needed.
 
@@ -207,25 +229,31 @@ The generated Word notebook collects linked PC and tablet notes under one paper.
 
 ### Read and search notes
 
-Choose a folder and paper in Notes. **All folders** searches the saved library across watched folders. Search and the available filters can narrow highlighted text, comments, handwriting transcription, publication metadata, annotation color, and note type.
+Choose a folder and paper in Reader. **All folders** searches the saved library across watched folders. Search and the available filters can narrow highlighted text, comments, handwriting transcription, publication metadata, annotation color, and note type.
 
-The scope beside the search box offers **Notes**, **PDFs**, and **All**. Notes keeps the existing annotation search. PDFs searches the printed text on each page, including papers with no annotations; All combines note and PDF page results. Enter a query to search PDF contents. An empty search browses saved notes without indexing the library. Spaces mean AND; uppercase AND, OR, NOT, quoted phrases, and parentheses are supported. PDF words must match within the same page. **Search in…** fields and note-type filters apply to note results.
+In **Reader**, the equal-width **Folder**, **Paper**, and **Collection or tag** dropdowns share one row, with Search immediately below. The dropdown beside **Search** chooses **Notes**, **PDFs**, or **All**. With an empty search, Notes lists saved annotations, PDFs lists one row per PDF document, and All includes both. Browsing documents does not extract or index PDF text. Entering a query filters notes and shows matching PDF pages. **Clear search** (the × beside the field), or Escape while typing there, clears only the query and restores browsing. Changing scope applies immediately to the current query and keeps the current display until replacement results are ready. Folder, paper, collection/tag, and other filters remain in effect.
+
+**Search filters…** contains searchable note fields, note types, and matching rules. **Surrounding printed text** is off by default and after Reset all. Turn it on to include text near annotations; those results show **Match in surrounding text** with the actual matching excerpt. Explicit saved-search choices are retained. Note controls are disabled for PDF-only searches. Spaces mean AND; uppercase AND, OR, NOT, quoted phrases, and parentheses are supported. PDF words must match within the same page. A summary appears only for nondefault options.
 
 The first PDF search extracts text in the background and caches it locally in the active library. Later searches reuse the cache; changed PDFs are checked again. A file changed since its saved scan needs **Sync PDFs** before its contents can be searched. Missing, unreadable, and password-protected sources appear as search issues without removing saved notes. Image-only scans need a searchable text layer; this feature does not run whole-document OCR or send PDFs online.
 
-PDF page results begin with **PDF:** and show an excerpt in the list. Select one to read its page text. **Open PDF**, double-click, or Enter opens the source at the physical page. **Full page context** renders a page preview that can also be copied. **Export view…** exports matching annotations to Word; printed PDF page results are excluded.
+Results show **Paper**, **Page**, **Type**, and **Match**. By default, each paper's results stay together, with notes before PDF results and pages ordered numerically. Alternating group backgrounds mark paper boundaries. Clicking **Type** sorts actual displayed types, such as Drawing, Highlight, Note, and PDF; clicking again reverses their order. Paper and numeric page break ties. Clicking **Paper** restores paper grouping. Sorting retains the selected result. Column minimum widths reserve space for both sort arrows at the active display scale. Hovering over any result identifies its actual paper title, author/year when available, filename, page, excerpt, and full source location. Separate sources with the same title include filenames in the Paper column.
 
-Highlights and typed comments use text and source-page links. Drawings and handwriting also have retained context images. **More** offers an editable notebook copy and annotation history for the selected note's actual source. The preview's **Details** checkbox reveals extraction information when you need it.
+Matches in the displayed note are highlighted directly in its text. Exactly identical enabled quote/comment/OCR passages share one set of navigation stops while retaining their matched-source identities. **Main search matches** adds labeled excerpts for other fields and printed PDF text. Nearby occurrences share an excerpt; overlapping phrase/word matches count once. Three additional excerpts show initially, with **Show all matches** for longer lists. The shared **Previous match** and **Next match** controls visit individual occurrences, then the next result, across papers in the displayed sort order. They update the selected row and work in either view. The **Main search** counter identifies this navigation separately from Find in PDF. Empty browsing and NOT-only searches still allow result navigation. If a typed note, OCR or metadata match is absent from printed PDF text, PDF view stays on the selected result's page; Note view shows the actual match.
+
+Selecting a PDF document row opens its first page in PDF view; Note view shows its identity. Listing documents does not extract or index their text. Double-click or Enter opens the selected paper externally; **Full page context** loads an image preview on request. Selecting a matching PDF page renders the original page with its tables, columns, and figures intact. Positive search terms and quoted phrases are highlighted in excerpts and the PDF; excluded terms under NOT are not. For example, `tantalum AND PCCT NOT phantom` highlights tantalum and PCCT. A NOT-only search has no positive terms to highlight. Search marks are temporary and never saved to your PDF. **Full page context** supports fitting, panning, zooming, and copying the highlighted page. Opening a matching result in your external viewer navigates to its physical page; temporary search marks stay in Notable. **Export view…** exports matching annotations to Word; PDF document and page results are excluded.
+
+Highlights and typed comments use text and source-page links. Drawings and handwriting also have retained context images. **Actions** offers an editable notebook copy and annotation history for the selected note's actual source. Choose **Note view** for the extracted content and **PDF view** for its document.
 
 For a loaded drawing or handwriting image, choose **Copy image**, right-click the image, or click it and press **Ctrl+C**. The clipboard receives the complete retained image at its original resolution, with transparency flattened onto white. Enlarged images and Full page context offer the same copy actions. Text selection keeps its ordinary Ctrl+C behavior. Image copying currently requires Windows; a busy clipboard reports an error so you can retry.
 
 ### Keep and export citation information
 
-In Library or Notes, select a paper or note and choose **More → Citation details…**. Review or edit its title, authors, year, journal, volume, issue, page range/article number, DOI, and URL. Separate authors with semicolons; commas can remain inside author names. Initial details reuse local PDF metadata and available Inbox filing information. A filename may supply a provisional title, so check the fields before exporting.
+In Library or Reader, select a paper or note and choose **More → Citation details…**. Review or edit its title, authors, year, journal, volume, issue, page range/article number, DOI, and URL. Separate authors with semicolons; commas can remain inside author names. Initial details reuse local PDF metadata and available Inbox filing information. A filename may supply a provisional title, so check the fields before exporting.
 
 **Look up DOI** optionally sends only the entered DOI to Crossref/DataCite and fills available fields for review. It does not save automatically. **Save citation** retains reviewed details separately from PDF scans and shares them with currently linked paper sources. Rescanning a paper keeps these edits. Saved titles, authors, and DOIs participate in the existing note search. **Cancel** discards draft edits. **Copy citation** copies the current fields as a plain-text reference, without applying a journal-specific citation style.
 
-Choose **More → Export citations…** to save `.ris` or `.bib` (BibTeX). In Library, the export uses the selected paper, or all papers in the chosen folder when no paper is selected. In Notes, an active query exports distinct papers represented by the displayed results; otherwise the folder/paper filters determine the selection. All folders with no query exports the active library. Linked source variants export once. No citation-service request is made during export. Import the resulting file into your reference manager; Zotero documents [RIS and BibTeX imports](https://www.zotero.org/support/kb/importing_standardized_formats).
+Choose **More → Export citations…** to save `.ris` or `.bib` (BibTeX). In Library, the export uses the selected paper, or all papers in the chosen folder when no paper is selected. In Reader, an active query, PDF/All browsing, or a collection/tag or note-type filter exports distinct papers represented by the displayed results. Otherwise the folder/paper filters determine the selection. All folders with no query or additional filters in Notes mode exports the active library. Linked source variants export once. No citation-service request is made during export. Import the resulting file into your reference manager; Zotero documents [RIS and BibTeX imports](https://www.zotero.org/support/kb/importing_standardized_formats).
 
 ### Find supplementary information
 
@@ -249,20 +277,21 @@ Feedback beside a tab's controls describes your last action there and clears whe
 
 **PDF page 3 of 12** means the physical, one-based position inside the PDF. That is the page sent to the viewer. An embedded label can appear separately as **PDF label 233**. A verified printed journal number appears as **Journal p. 233**; an embedded PDF label alone does not prove the journal numbering. Automatic verification of journal page numbering is not implemented.
 
-Change the viewer in **Settings → Preferences**. New libraries use **Windows default**. Explicit choices include Edge, Chrome, Firefox, Acrobat/Reader, SumatraPDF, and **Other application** for a chosen `.exe`. Saving this choice does not change Windows file associations.
+Change the external viewer for Library **Open PDF** in **Settings → Preferences**. New libraries use **Windows default**. Explicit choices include Edge, Chrome, Firefox, Acrobat/Reader, SumatraPDF, and **Other application** for a chosen `.exe`. Saving this choice does not change Windows file associations. Reader **Open externally** always uses the computer's default application for the original source file.
 
 Recognized viewers receive the physical page position. An unrecognized default or custom viewer can open the PDF normally, with an explanation of the page to navigate to. A missing explicitly selected viewer produces an error and directions to change the preference. Page jumps depend on the viewer honoring its parameter; every viewer has not been checked live.
 
 ### Inspect handwriting and drawing context
 
-The usual drawing preview is a saved close-up of the source page containing its text, figures, and marks. Nearby letters and strokes are grouped into blocks, with surrounding context. **Open PDF** and **Full page context** use the combined reading view. Supported margin handwriting can expand that view's page boundaries without changing your original PDF.
+The PDF reader shows drawing and handwriting in their full page context. **Note view** also provides a saved close-up of the source page containing its text, figures, and marks. Nearby letters and strokes are grouped into blocks, with surrounding context. Library **Open PDF** and **Full page context** use the combined reading view. Supported margin handwriting can expand that view's page boundaries without changing your original PDF.
 
 **Enlarge image** opens the saved close-up. **Full page context** opens the complete physical PDF page, including supported margin context. In either image window:
 
 - **Fit width** or **Fit height** follows window resizing.
 - **Ctrl + mouse wheel** zooms around the pointer and chooses manual zoom.
 - **Double-click** restores Fit width.
-- Scroll vertically, drag to pan, or use **Shift + mouse wheel** horizontally.
+- **Ctrl + double-click** restores the opening zoom and resets both pan axes.
+- Scroll vertically, **Ctrl + click-and-drag** to pan, or use **Shift + mouse wheel** horizontally.
 
 Select the watched folder in Library and open **Folder settings** to adjust grouping:
 
@@ -345,7 +374,7 @@ Then choose the action that fits:
 | **Map and sync…** | Choose the corresponding existing PC folder beneath the linked root, then save that mapping and sync. Folder names may differ on PC and tablet. |
 | **Send selected PDF…** | Explicitly review sending one existing local PDF to its linked tablet destination. Sending must be enabled in Connections. |
 
-Linking combines the paper's entry, rather than removing duplicate files. Two disk files can remain even though Notes shows one paper. A text annotation appears once only when the app can prove that the same mark was carried over from another saved source. Uncertain overlap and drawings remain preserved. Do not remove a physical PDF just because the app now presents one heading.
+Linking combines the paper's entry, rather than removing duplicate files. Two disk files can remain even though Reader shows one paper. A text annotation appears once only when the app can prove that the same mark was carried over from another saved source. Uncertain overlap and drawings remain preserved. Do not remove a physical PDF just because the app now presents one heading.
 
 Undo is available for the latest new link recorded by this version. Legacy links cannot be undone through this action. If affected paper memberships have changed afterward, the app can refuse an unsafe undo rather than overwrite later work.
 
@@ -558,6 +587,19 @@ Run the suite from the project folder:
 ```
 
 The suite uses synthetic documents and temporary libraries, with cloud clients mocked. It covers PDF extraction/notebooks, document naming and Office exclusions, incomplete downloads, filing collisions/recovery, key removal and atomic preferences, paper links and independent history, source reconstruction, cloud transfer retries and changed destinations, folder scope, moved-folder recovery, and interface behavior.
+
+On Windows, GUI tests can run on a separate inactive desktop so they do not display windows or take keyboard focus from your work:
+
+```powershell
+.\.venv\Scripts\python.exe tools/run_ui_tests.py -m unittest discover -s tests -q
+.\.venv\Scripts\python.exe tools/run_ui_tests.py tools/run_test_batches.py
+.\.venv\Scripts\python.exe tools/run_ui_tests.py tests/reader_webview_regression.py
+.\.venv\Scripts\python.exe tools/run_ui_tests.py tests/reader_app_regression.py
+.\.venv\Scripts\python.exe tools/run_ui_tests.py tools/check_reader_focus.py
+.\.venv\Scripts\python.exe tools/run_ui_tests.py tools/check_reader_startup.py
+```
+
+The batch runner releases native Tk/GDI resources between groups, avoiding bitmap exhaustion in very long single-process runs. The opt-in native checks require Windows WebView2 and local loopback access. They generate disposable documents, exercise the real embedded reader and cleanly close its process, including cancellation during startup. The focus check reproduces the native/Tk disagreement before checking the repair; its inactive desktop has no foreground window, so the foreground guard is separately tested with simulated handles. These checks do not switch the user's active desktop.
 
 For disposable visual examples:
 

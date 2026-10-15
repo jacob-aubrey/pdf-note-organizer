@@ -70,6 +70,7 @@ def main():
         root.destroy()
     finally:
         if app is not None:
+            app.pdf_reader.close()
             app.inbox.stop()
             app.workflow_executor.shutdown(wait=True, cancel_futures=True)
             app.service.stop()
@@ -81,6 +82,7 @@ def main():
             if app.service.thread:
                 app.service.thread.join()
             app.pdf_worker.shutdown(wait=True)
+            app.pdf_reader.wait_closed()
         lock.close()
 
 

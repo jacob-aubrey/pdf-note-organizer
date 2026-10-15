@@ -490,7 +490,7 @@ class Service:
         """Serialize an explicitly reviewed cleanup with sync and notebook writes."""
         if self.stop_event.is_set():
             raise InterruptedError("The app is closing; extra PDFs were retained.")
-        if action in {"backup", "compact", "restore", "archive_cleanup"}:
+        if action in {"backup", "compact", "restore", "archive_cleanup", "recycle_pdf"}:
             if self.thread is not None and self.thread.is_alive() and threading.current_thread() != self.thread:
                 future = Future()
                 self.command("storage_maintenance", action, values, future)
@@ -498,6 +498,9 @@ class Service:
             from . import maintenance
             inbox = getattr(self, "inbox", None)
             with inbox._lock if inbox is not None else nullcontext():
+                if action == "recycle_pdf":
+                    from .library_files import recycle_pdf
+                    return recycle_pdf(self.store, values)
                 if action == "archive_cleanup":
                     from .archive_storage import cleanup
                     return cleanup(self.store, values)

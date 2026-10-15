@@ -326,6 +326,7 @@ def _cache_records(root, *, key=None, verify=True):
             if verify and _digest(path.read_bytes()) != info.get("digest"):
                 continue  # A user-edited cache file is preserved, never reused.
             info["_manifest_digest"] = _digest(manifest_data)
+            info["_last_used_ns"] = manifest.stat().st_mtime_ns
             records.append((path, manifest, info, path.stat()))
         except (OSError, ValueError, TypeError):
             continue
@@ -338,7 +339,7 @@ def prune_reading_cache(store, *, limit_bytes=CACHE_LIMIT_BYTES, keep=(), max_re
         kept = {canonical(path) for path in keep}
         records = _cache_records(_cache_root(store), verify=False)
         total, removed = sum(stat.st_size for _, _, _, stat in records), 0
-        for path, manifest, info, stat in sorted(records, key=lambda row: row[3].st_mtime_ns):
+        for path, manifest, info, stat in sorted(records, key=lambda row: row[2]["_last_used_ns"]):
             if total <= max(0, limit_bytes):
                 break
             if max_removals is not None and removed >= max_removals:
@@ -361,10 +362,13 @@ def prune_reading_cache(store, *, limit_bytes=CACHE_LIMIT_BYTES, keep=(), max_re
 
 def _cached_reading(store, key, create, cancelled, cache_limit_bytes):
     root = _cache_root(store)
-    for path, _, manifest, _ in _cache_records(root, key=key):
+    for path, manifest_path, manifest, _ in _cache_records(root, key=key):
         if manifest["key"] == key:
             _check(cancelled)
-            path.touch()
+            # Access recency belongs to the cache metadata. Changing the PDF's
+            # version on each note click invalidates live browser range reads
+            # and needlessly reloads the document, losing its zoom/position.
+            manifest_path.touch()
             now = time.monotonic()
             if now - _cache_maintenance.get(str(root), -120) >= 120:
                 prune_reading_cache(store, limit_bytes=cache_limit_bytes, keep=[path], max_removals=16)

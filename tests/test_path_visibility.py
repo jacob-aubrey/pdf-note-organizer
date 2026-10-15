@@ -201,9 +201,9 @@ class WorkflowPathVisibilityTests(unittest.TestCase):
             for number, path in enumerate(paths):
                 review.tree.selection_set(str(number))
                 review.selected()
-                self.assertEqual(review.paths.get(), path)
-                self.assertIn(path, review.paths.tooltip.text())
-                with patch.object(review.paths, "clipboard_clear"), patch.object(review.paths, "clipboard_append") as copied:
+                self.assertEqual(review.selected_path(), path)
+                self.assertIn(path, review.local_path_copy.tooltip.text())
+                with patch.object(review.local_copies, "clipboard_clear"), patch.object(review.local_copies, "clipboard_append") as copied:
                     review.local_path_copy.invoke()
                 copied.assert_called_once_with(path)
                 expected = review.details.get("1.0", "end-1c")

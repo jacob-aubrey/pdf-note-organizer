@@ -499,6 +499,44 @@ class CombinedPdfTests(unittest.TestCase):
         self.assertTrue(replacement.is_file())
         self.assertEqual(len(self.notes(replacement)), 3)
 
+    def test_cache_hit_keeps_live_pdf_version_stable_and_refreshes_eviction_recency(self):
+        paper = self.link()
+        original_source = self.pc.read_bytes()
+        first = materialize_combined(self.store, paper)
+        self.add_pc_note("A later revision creates another reading copy")
+        second = materialize_combined(self.store, paper)
+        self.assertNotEqual(first, second)
+        self.pc.write_bytes(original_source)
+
+        first_manifest, second_manifest = first.with_suffix(".json"), second.with_suffix(".json")
+        old = 1_600_000_000_000_000_000
+        for path, timestamp in ((first, old), (first_manifest, old),
+                                (second, old + 60_000_000_000),
+                                (second_manifest, old + 60_000_000_000)):
+            os.utime(path, ns=(timestamp, timestamp))
+        before = first.stat()
+        pdf_bytes, manifest_bytes = first.read_bytes(), first_manifest.read_bytes()
+        manifest_time = first_manifest.stat().st_mtime_ns
+
+        self.assertEqual(materialize_combined(self.store, paper), first)
+        after = first.stat()
+        # These are the fields that identify a live PDF to the reader's range
+        # server; cache access must not masquerade as a changed document.
+        self.assertEqual((after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns),
+                         (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns))
+        self.assertEqual(first.read_bytes(), pdf_bytes)
+        self.assertEqual(first_manifest.read_bytes(), manifest_bytes)
+        self.assertGreater(first_manifest.stat().st_mtime_ns, manifest_time)
+        self.assertGreater(first_manifest.stat().st_mtime_ns, second_manifest.stat().st_mtime_ns)
+
+        # The first PDF remains physically older, but was used most recently.
+        # A constrained cache must evict the other revision instead.
+        self.assertEqual(prune_reading_cache(self.store, limit_bytes=after.st_size), 1)
+        self.assertTrue(first.is_file())
+        self.assertFalse(second.exists())
+        self.assertEqual(first.read_bytes(), pdf_bytes)
+        self.assertEqual(self.pc.read_bytes(), original_source)
+
     def test_simultaneous_readers_publish_one_complete_cached_pdf(self):
         paper = self.link()
         with ThreadPoolExecutor(max_workers=3) as pool:

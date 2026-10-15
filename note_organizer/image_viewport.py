@@ -17,6 +17,7 @@ class ImageCanvas(tk.Canvas):
         self.image_item = None
         self.zoom = 1.0
         self.fit_mode = None
+        self.default_fit_mode = None
         self.panning = False
         self.pan_cursor = self.grabbing_cursor()
         self.status = status
@@ -26,10 +27,16 @@ class ImageCanvas(tk.Canvas):
         self.bind("<Button-3>", self.show_copy_menu)
         self.bind("<Shift-F10>", self.show_copy_menu)
         self.bind("<Configure>", self.resize)
-        self.bind("<ButtonPress-1>", self.start_pan)
-        self.bind("<B1-Motion>", self.pan)
+        self.bind("<ButtonPress-1>", lambda event: self.focus_set())
+        self.bind("<Control-ButtonPress-1>", self.start_pan)
+        self.bind("<Control-B1-Motion>", self.pan)
+        self.bind("<B1-Motion>", self.end_pan)
         self.bind("<ButtonRelease-1>", self.end_pan)
+        self.bind("<KeyRelease-Control_L>", self.end_pan)
+        self.bind("<KeyRelease-Control_R>", self.end_pan)
+        self.bind("<Escape>", self.cancel_pan)
         self.bind("<Double-Button-1>", self.double_click)
+        self.bind("<Control-Double-Button-1>", self.reset_view)
         self.bind("<FocusOut>", self.end_pan)
         self.bind("<Unmap>", self.end_pan)
         window.bind("<MouseWheel>", self.wheel)
@@ -80,14 +87,18 @@ class ImageCanvas(tk.Canvas):
         return min(8, 8192 / max(image.size), (32_000_000 / (image.width * image.height)) ** .5)
 
     def set_image(self, image, fit_width=False):
+        self.end_pan()
         self.original_image = image
         self.display_size = None
         self.fit_mode = None
+        self.default_fit_mode = "width" if fit_width else None
         self.zoom = min(1, self.maximum_zoom())
         if fit_width:
             self.fit_width()
         else:
             self.render()
+        self.xview_moveto(0)
+        self.yview_moveto(0)
 
     def render(self):
         image = self.original_image
@@ -103,7 +114,7 @@ class ImageCanvas(tk.Canvas):
                 self.itemconfigure(self.image_item, image=self.image)
             self.display_size = (width, height)
             self.configure(scrollregion=(0, 0, width, height))
-        self.status(f"{self.zoom:.0%} · Scroll vertically · Drag to pan · Double-click to fit width · Ctrl + wheel to zoom")
+        self.status(f"{self.zoom:.0%} · Ctrl + drag to pan · Ctrl + wheel to zoom · Ctrl + double-click to reset view")
 
     def fit_width(self):
         if self.original_image is None:
@@ -132,24 +143,50 @@ class ImageCanvas(tk.Canvas):
             self.fit_height()
 
     def start_pan(self, event):
-        if self.original_image is None:
+        if self.original_image is None or not event.state & 0x0004:
             return
         self.focus_set()
         self.panning = True
         self.scan_mark(event.x, event.y)
         self.configure(cursor=self.pan_cursor)
+        return "break"
 
     def pan(self, event):
+        if not event.state & 0x0004 or not event.state & 0x0100:
+            self.end_pan()
+            return
         if self.panning:
             self.scan_dragto(event.x, event.y, gain=1)
+            return "break"
 
     def end_pan(self, event=None):
         self.panning = False
         self.configure(cursor="")
 
+    def cancel_pan(self, event=None):
+        was_panning = self.panning
+        self.end_pan()
+        # Escape still closes an inspection window when no drag is active.
+        return "break" if was_panning else None
+
     def double_click(self, event):
         self.end_pan()
         self.fit_width()
+        return "break"
+
+    def reset_view(self, event=None):
+        """Return to the opening scale and origin, cancelling any active drag."""
+        self.end_pan()
+        if self.original_image is None:
+            return "break"
+        if self.default_fit_mode == "width":
+            self.fit_width()
+        else:
+            self.fit_mode = None
+            self.zoom = min(1, self.maximum_zoom())
+            self.render()
+        self.xview_moveto(0)
+        self.yview_moveto(0)
         return "break"
 
     def wheel(self, event):

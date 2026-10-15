@@ -363,6 +363,8 @@ class IsolatedReviewIntegrationTests(unittest.TestCase):
         window.scope = Mock()
         window.scope.get.return_value = str(self.library)
         window.feedback, window.check_button = Mock(), Mock()
+        window.busy = False
+        window.open_actions = Mock()
         window.cancelled = threading.Event()
         window.scan_generation = 0
         with patch("note_organizer.workflow_ui.background") as background, patch("note_organizer.reconciliation.scan_reconciliation", return_value=[]) as scan:

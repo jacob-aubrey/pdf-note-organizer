@@ -129,7 +129,7 @@ class ExtractionPerformanceTests(unittest.TestCase):
                             entry = next(e for e in entries if e["key"].endswith(annotation.info["id"]))
                             self.assertEqual(entry["quote"], " ".join(word[4] for word in expected))
                     for entry in entries:
-                        self.assertEqual(entry["context"], page.get_text("text", clip=fitz.Rect(entry["crop"]), sort=True).strip())
+                        self.assertEqual(entry["context"], page.get_text("text", clip=fitz.Rect(entry["crop"]), sort=False).strip())
 
     def test_group_sweep_preserves_all_pairs_clusters(self):
         generator = random.Random(137)

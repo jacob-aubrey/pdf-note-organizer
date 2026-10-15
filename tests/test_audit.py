@@ -21,12 +21,42 @@ from tests.ui_helpers import settle_library
 def settle_notes(app, root):
     """Let the actual asynchronous reader complete before asserting its result."""
     deadline = time.monotonic() + 3
-    while app.note_count.get() == "Loading notes…" and time.monotonic() < deadline:
+    while time.monotonic() < deadline:
+        # The visible progress wording changes with Notes/PDFs/All scope. Wait
+        # for work state, including a pending debounced query and row insertion,
+        # rather than treating a new label as a completed search.
+        root.update()
         app.poll()
         root.update()
+        if not app.reader_search_busy and app.search_after is None and app.notes_after is None:
+            return
         time.sleep(.005)
-    if app.note_count.get() == "Loading notes…":
-        raise AssertionError("Reader did not finish loading")
+    raise AssertionError("Reader did not finish loading")
+
+
+def close_test_app(root, app):
+    """Finish disposable workers before their SQLite/temp files are removed."""
+    if app is not None:
+        app.closing = True
+        app.query_cancel.set()
+        app.preview_cancel.set()
+        app.pdf_reader.close()
+        app.inbox.stop()
+        app.service.stop()
+        app.query_executor.shutdown(wait=True, cancel_futures=True)
+        app.context_executor.shutdown(wait=True, cancel_futures=True)
+        app.workflow_executor.shutdown(wait=True, cancel_futures=True)
+        app.pdf_worker.shutdown(wait=True)
+        deadline = time.monotonic() + 9
+        while any(reaper.is_alive() for reaper in app.pdf_reader.reapers) and time.monotonic() < deadline:
+            root.update()
+            time.sleep(.01)
+        app.pdf_reader.wait_closed()
+    for pending in root.tk.call("after", "info"):
+        # ttk progress bars own Tcl list scripts, rather than Python command
+        # names. Tkinter.after_cancel tries to delete those as Python commands.
+        root.tk.call("after", "cancel", pending)
+    root.destroy()
 
 
 class AuditTests(unittest.TestCase):
@@ -80,6 +110,23 @@ class AuditTests(unittest.TestCase):
         doc = build_notebook("Notes", entries)
         self.assertEqual([p.text for p in doc.paragraphs if p.style.name == "Quote"],
                          ["First passage", "Second passage"])
+
+    def test_same_line_columns_preserve_pdf_text_flow(self):
+        import fitz
+        pdf = self.folder / "same-line-columns.pdf"
+        with fitz.open() as source:
+            page = source.new_page()
+            page.insert_text((50, 80), "First column passage.")
+            page.insert_text((320, 80), "Second column passage.")
+            for phrase in ("First column", "Second column"):
+                page.add_highlight_annot(page.search_for(phrase))
+            source.save(pdf)
+        _, _, meta, entries = extract(pdf, DEFAULT_SETTINGS)
+        for entry in entries:
+            entry.update(path=str(pdf), metadata=meta)
+        ordered = sorted(entries, key=entry_sort_key)
+        self.assertEqual([entry["quote"] for entry in ordered],
+                         ["First column", "Second column"])
 
     def test_layout_change_does_not_repeat_extraction(self):
         self.store.set_settings(self.pid, {**DEFAULT_SETTINGS, "notebook_style": "Detailed"})
@@ -184,6 +231,7 @@ class AuditTests(unittest.TestCase):
     def test_library_reader_selection_survives_background_refresh(self):
         root = tk.Tk()
         root.withdraw()
+        app = None
         errors = []
         root.report_callback_exception = lambda *args: errors.append(args)
         try:
@@ -191,7 +239,7 @@ class AuditTests(unittest.TestCase):
                 app = App(root, self.store, self.folder)
                 settle_library(app, root)
                 root.update()
-                self.assertEqual([app.tabs.tab(t, "text") for t in app.tabs.tabs()], ["Inbox", "Library", "Notes", "reMarkable"])
+                self.assertEqual([app.tabs.tab(t, "text") for t in app.tabs.tabs()], ["Inbox", "Library", "Reader", "reMarkable"])
                 paper = app.papers.get_children()[0]
                 app.papers.selection_set(paper)
                 app.view_notes()
@@ -243,14 +291,13 @@ class AuditTests(unittest.TestCase):
                 self.assertFalse(app.activity_frame.winfo_manager())
                 self.assertFalse(errors)
         finally:
-            for pending in root.tk.call("after", "info"):
-                root.after_cancel(pending)
-            root.destroy()
+            close_test_app(root, app)
 
     def test_failed_first_scan_is_visible_and_theme_initializes(self):
         self.store.scan_result(self.pid, self.folder / "broken.pdf", "Invalid PDF")
         root = tk.Tk()
         root.withdraw()
+        app = None
         errors = []
         root.report_callback_exception = lambda *args: errors.append(args)
         try:
@@ -269,9 +316,7 @@ class AuditTests(unittest.TestCase):
                 self.assertEqual(app.preview_text.cget("background"), "#18191a")
                 self.assertFalse(errors)
         finally:
-            for pending in root.tk.call("after", "info"):
-                root.after_cancel(pending)
-            root.destroy()
+            close_test_app(root, app)
 
 
 if __name__ == "__main__":

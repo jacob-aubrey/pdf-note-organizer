@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notable PDF reader</title>
+  <link rel="stylesheet" href="../pdfjs/web/pdf_viewer.css">
+  <link rel="stylesheet" href="reader.css">
+</head>
+<body>
+  <header id="toolbar" aria-label="PDF reader controls">
+    <div class="toolbar-group page-controls">
+      <button id="previousPage" title="Go to the previous PDF page" aria-label="Previous PDF page">‹</button>
+      <label for="pageNumber">Page</label>
+      <input id="pageNumber" type="text" inputmode="numeric" value="1" autocomplete="off" aria-label="PDF page number" title="Enter a PDF page number and press Enter. Printed page labels may differ.">
+      <span id="pageCount" title="Total pages in the open PDF">of 0</span>
+      <button id="nextPage" title="Go to the next PDF page" aria-label="Next PDF page">›</button>
+    </div>
+    <div class="toolbar-group zoom-controls">
+      <button id="zoomOut" title="Zoom out. Ctrl+wheel also changes PDF zoom." aria-label="Zoom out">−</button>
+      <select id="zoom" aria-label="PDF zoom" title="Choose PDF zoom. Ctrl+double-click restores 125% in Reading mode or Fit width otherwise, and resets panning.">
+        <option value="page-width">Fit width</option>
+        <option value="page-fit">Fit page</option>
+        <option value="0.5">50%</option>
+        <option value="0.75">75%</option>
+        <option value="1">100%</option>
+        <option value="1.25">125%</option>
+        <option value="1.5">150%</option>
+        <option value="2">200%</option>
+        <option value="3">300%</option>
+        <option id="customZoom" value="custom" hidden>100%</option>
+      </select>
+      <button id="zoomIn" title="Zoom in. Ctrl+wheel zooms; Ctrl+double-click restores 125% in Reading mode or Fit width otherwise." aria-label="Zoom in">+</button>
+    </div>
+    <div class="toolbar-group reader-actions">
+      <button id="findToggle" title="Find a word or phrase in this PDF (Ctrl+F). Main search results stay unchanged." aria-label="Find in this PDF" aria-expanded="false" aria-controls="findbar"><svg class="button-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="m12 12 5 5"/></svg><span class="button-label">Find in PDF</span></button>
+      <button id="backToSelection" title="Return to the selected note or main search result and resume main search highlighting." aria-label="Back to selected note or main search result"><svg class="button-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M8 4 2 10l6 6M3 10h9a5 5 0 0 1 5 5"/></svg><span class="button-label">Back to selection</span></button>
+    </div>
+  </header>
+  <div id="findbar" hidden role="search" aria-label="Find in this PDF">
+    <label for="findInput">Find in PDF</label>
+    <input id="findInput" type="search" autocomplete="off" spellcheck="false" placeholder="Find a word or phrase…" title="Search only the open PDF. This search takes navigation control until you select a main result or close Find." aria-label="Find a word or phrase in this PDF">
+    <button id="findPrevious" title="Previous match in this PDF (Shift+Enter). Keeps your chosen zoom." aria-label="Previous match in this PDF">↑</button>
+    <button id="findNext" title="Next match in this PDF (Enter). Keeps your chosen zoom." aria-label="Next match in this PDF">↓</button>
+    <span id="findCount" role="status" aria-live="polite"></span>
+    <button id="findClose" title="Close Find in PDF and resume main search highlighting (Escape)" aria-label="Close Find in PDF"><svg class="clear-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div id="documentInfo" hidden>
+    <h1 id="documentTitle"></h1>
+  </div>
+  <main id="stage">
+    <div id="viewerContainer" tabindex="0" aria-label="PDF document. Drag to select text. Ctrl+drag to pan, Ctrl+wheel to zoom, Ctrl+double-click to reset.">
+      <div id="viewer" class="pdfViewer"></div>
+    </div>
+    <div id="empty" role="status"><p>Select a paper or note to read its PDF.</p></div>
+    <div id="loading" role="status" hidden>Opening PDF…</div>
+  </main>
+  <script type="module" src="reader.mjs"></script>
+</body>
+</html>

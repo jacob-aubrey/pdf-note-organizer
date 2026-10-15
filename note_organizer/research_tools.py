@@ -5,6 +5,16 @@ from .icons import Button
 from .theme import BACKGROUND
 from .widgets import bind_dialog_close, fit_dialog, Tooltip, annotate_buttons, WrapToolbar
 from .workflow_ui import background
+from .storage import DEFAULT_SEARCH_FIELDS
+
+
+def saved_search_options(value):
+    """Read older saved searches with safe current defaults."""
+    result = {"query": "", "mode": "Words / Boolean", "note_type": "All notes",
+              "scope": "Notes", "label": "All papers", **value}
+    fields = value.get("fields")
+    result["fields"] = list(DEFAULT_SEARCH_FIELDS if fields is None else fields)
+    return result
 
 
 def labels(store):
@@ -48,7 +58,7 @@ def open_labels(app):
     if not paper:
         return
     window, frame = _window(app, "Tags & collections")
-    ttk.Label(frame, text="Organize this paper and its linked copies. Separate names with semicolons.", wraplength=570).pack(anchor="w")
+    ttk.Label(frame, text="Organize this paper and its linked copies. Collections group papers for a project or reading list; tags describe topics or follow-up tasks. Separate names with semicolons. These labels do not move or copy files.", wraplength=570).pack(anchor="w")
     variables, inputs = {}, []
     for kind, title in (("tag", "Tags"), ("collection", "Research collections")):
         ttk.Label(frame, text=title).pack(anchor="w", pady=(12, 4))
@@ -91,7 +101,10 @@ def open_labels(app):
     save.pack(side="right")
     cancel = Button(actions, text="Cancel", command=close)
     cancel.pack(side="right", padx=(0, 8))
-    Tooltip(cancel, "Close without saving changes to this paper's tags and collections.")
+    Tooltip(save, lambda: "Wait for the current label operation to finish." if save.instate(["disabled"]) else
+            "Save local tags and research collections for this paper and its linked copies.")
+    Tooltip(cancel, lambda: "Wait for labels to finish saving before closing." if saving[0] else
+            "Close without saving changes to this paper's tags and collections.")
     annotate_buttons(window)
     bind_dialog_close(window, close)
     window.protocol("WM_DELETE_WINDOW", close)
@@ -106,7 +119,7 @@ def open_labels(app):
             for field in inputs:
                 field.configure(state="normal")
             save.configure(state="normal")
-            status.set("Labels are local to this library. Use the Notes collection filter to browse them.")
+            status.set("Labels are local to this library. Use Collection or tag in Reader to filter notes and PDFs within your current folder and paper selection. All papers clears this label filter.")
     background(app, load, loaded, failed)
     fit_dialog(window, app.root)
 
@@ -124,7 +137,7 @@ def _window(app, title):
 
 def open_saved_searches(app):
     window, frame = _window(app, "Saved searches")
-    ttk.Label(frame, text="Save search text, fields, note type and collection filter. Searches apply to the folder and paper currently selected.", wraplength=600).pack(anchor="w")
+    ttk.Label(frame, text="Save search text, Notes/PDFs/All scope, fields, note type and collection filter. Searches apply to the folder and paper currently selected.", wraplength=600).pack(anchor="w")
     list_frame = ttk.Frame(frame)
     list_frame.pack(fill="both", expand=True, pady=12)
     listing = tk.Listbox(list_frame, height=8, exportselection=False)
@@ -201,6 +214,7 @@ def open_saved_searches(app):
         if value is None:
             status.set("Select a saved search first.")
             return
+        value = saved_search_options(value)
         app.search_fields, app.search_mode, app.note_type = value["fields"], value["mode"], value["note_type"]
         app.update_search_options_summary()
         app.label_filter.set(value.get("label", "All papers"))
@@ -215,9 +229,17 @@ def open_saved_searches(app):
     save_button = controls.add(Button(controls, text="Save current search", command=persist, state="disabled"))
     apply_button = controls.add(Button(controls, text="Apply saved search", command=apply, state="disabled", style="Primary.TButton"))
     delete_button = controls.add(Button(controls, text="Delete saved search", command=lambda: persist(True), state="disabled"))
+    Tooltip(save_button, lambda: "Wait for the current saved-search operation to finish." if busy[0] else
+            "Save the current query, Notes/PDFs/All scope, matching rules, note fields, note type and collection filter under the entered name. An existing name is updated.")
+    Tooltip(apply_button, lambda: "Wait for saved searches to finish loading or saving." if busy[0] else
+            "Select a saved search from the list first." if not selected() else
+            "Apply this saved query and its filters in Reader, keeping the folder and paper currently selected.")
+    Tooltip(delete_button, lambda: "Wait for saved searches to finish loading or saving." if busy[0] else
+            "Select a saved search from the list first." if not selected() else
+            "Remove this saved search from the library. Notes and papers remain preserved.")
     close = Button(frame, text="Close", command=window.destroy)
     close.pack(anchor="e", pady=(12, 0))
-    Tooltip(close, "Close this window. Saved searches and the current Notes filters stay unchanged.")
+    Tooltip(close, "Close this window without applying a saved search. Any save or deletion already requested will finish.")
     background(app, lambda: app.store.preference("saved_searches", {}), render, failed)
     annotate_buttons(window)
     fit_dialog(window, app.root)
