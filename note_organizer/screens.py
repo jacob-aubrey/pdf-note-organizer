@@ -2,7 +2,6 @@
 import ctypes
 from ctypes import wintypes
 import os
-import tkinter as tk
 
 
 def _monitor_work_area(handle):
@@ -22,28 +21,6 @@ def _monitor_work_area(handle):
     except (AttributeError, OSError):
         pass
     return None
-
-
-def round_window_corners(widget, radius=16):
-    """Clip a borderless Tk window to the same rounded shape as native windows."""
-    if os.name != "nt":
-        return
-    try:
-        user32 = ctypes.windll.user32
-        gdi32 = ctypes.windll.gdi32
-        user32.SetWindowRgn.argtypes = [wintypes.HWND, wintypes.HRGN, wintypes.BOOL]
-        user32.SetWindowRgn.restype = ctypes.c_int
-        gdi32.CreateRoundRectRgn.argtypes = [
-            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-            ctypes.c_int, ctypes.c_int,
-        ]
-        gdi32.CreateRoundRectRgn.restype = wintypes.HRGN
-        width, height = widget.winfo_width(), widget.winfo_height()
-        region = gdi32.CreateRoundRectRgn(0, 0, width + 1, height + 1, radius * 2, radius * 2)
-        if region:
-            user32.SetWindowRgn(widget.winfo_id(), region, True)
-    except (AttributeError, OSError, tk.TclError):
-        pass
 
 
 def launch_source_work_area():

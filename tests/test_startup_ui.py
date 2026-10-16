@@ -266,6 +266,68 @@ class StartupWorkspaceTests(unittest.TestCase):
                 gc.collect()
 
 
+class StartupBorderTests(unittest.TestCase):
+    def setUp(self):
+        import ctypes
+        # Capture native pixels rather than Windows' rescaled bitmap for a
+        # DPI-unaware test process. Tk font scaling is varied explicitly below.
+        self.dpi_context = ctypes.windll.user32.SetThreadDpiAwarenessContext
+        self.dpi_context.argtypes = [ctypes.c_void_p]
+        self.dpi_context.restype = ctypes.c_void_p
+        self.previous_dpi = self.dpi_context(ctypes.c_void_p(-4))
+
+    def tearDown(self):
+        if self.previous_dpi:
+            self.dpi_context(self.previous_dpi)
+
+    def test_single_window_has_complete_one_pixel_outline_at_display_scales(self):
+        from PIL import Image
+        from tests.reader_app_regression import capture_test_window
+
+        destination = Path(__file__).resolve().parents[1] / ".test-tmp"
+        destination.mkdir(exist_ok=True)
+        for scale in (1, 1.25, 1.5):
+            with self.subTest(scale=scale):
+                root = tk.Tk()
+                root.withdraw()
+                root.tk.call("tk", "scaling", (96 / 72) * scale)
+                release = threading.Event()
+                errors = []
+                root.report_callback_exception = lambda *args: errors.append(args)
+                splash = None
+                try:
+                    splash = StartupSplash(root, lambda _: release.wait(5), Mock(), errors.append)
+                    until = time.monotonic() + .1
+                    while time.monotonic() < until:
+                        root.update()
+                        time.sleep(.005)
+                    windows = [child for child in root.winfo_children() if isinstance(child, tk.Toplevel)]
+                    self.assertEqual(windows, [splash.window])
+                    path = destination / f"startup-border-{round(scale*100)}.png"
+                    capture_test_window(splash.window, path)
+                    with Image.open(path) as image:
+                        width, height = image.size
+                        pixels = image.load()
+                        white = (255, 255, 255)
+                        for x in range(width):
+                            self.assertEqual(pixels[x, 0], white, (scale, "top", x))
+                            self.assertEqual(pixels[x, height-1], white, (scale, "bottom", x))
+                        for y in range(height):
+                            self.assertEqual(pixels[0, y], white, (scale, "left", y))
+                            self.assertEqual(pixels[width-1, y], white, (scale, "right", y))
+                        for point in ((width//2, 1), (width//2, height-2), (1, height//2), (width-2, height//2)):
+                            self.assertEqual(pixels[point], (36, 36, 36))
+                    status = splash.status
+                    self.assertLess(status.winfo_rooty()+status.winfo_height(),
+                                    splash.window.winfo_rooty()+splash.window.winfo_height()-1)
+                    self.assertFalse(errors)
+                finally:
+                    release.set()
+                    if splash:
+                        splash.wait_closed()
+                    root.destroy()
+
+
 class StartupEntryPointTests(unittest.TestCase):
     def test_entry_point_reveals_ready_app_and_preserves_cleanup(self):
         self.run_launch()

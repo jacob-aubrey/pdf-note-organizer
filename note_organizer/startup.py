@@ -8,7 +8,7 @@ from PIL import Image, ImageTk
 
 from . import APP_NAME, __version__
 from .branding import apply_app_icon
-from .screens import round_window_corners, work_area
+from .screens import work_area
 from .theme import BACKGROUND, SURFACE, TEXT, MUTED
 from .widgets import Tooltip
 
@@ -33,13 +33,15 @@ class StartupSplash:
         window.withdraw()
         window.title(APP_NAME)
         window.overrideredirect(True)
-        window.configure(background=BACKGROUND)
+        # Keep the entire outline in the same window as the content. Separate
+        # clipped windows can disagree at their edges and expose jagged pixels.
+        window.configure(background="white")
         window.resizable(False, False)
         apply_app_icon(window)
         window.protocol("WM_DELETE_WINDOW", self.cancel)
         window.bind("<Escape>", lambda _: self.cancel())
         panel = tk.Frame(window, background=BACKGROUND, padx=30, pady=24)
-        panel.pack(fill="both", expand=True)
+        panel.pack(fill="both", expand=True, padx=1, pady=1)
         with Image.open(Path(__file__).with_name("assets") / "branding" / "notable.png") as source:
             self.logo = ImageTk.PhotoImage(source.resize((80, 80), Image.Resampling.LANCZOS), master=window)
         tk.Label(panel, image=self.logo, background=BACKGROUND).pack(pady=(4, 12))
@@ -64,22 +66,8 @@ class StartupSplash:
         width, height = window.winfo_reqwidth(), window.winfo_reqheight()
         x = left + (right-left-width)//2
         y = top + (bottom-top-height)//2
-        self.border_window = border = tk.Toplevel(root)
-        border.withdraw()
-        border.overrideredirect(True)
-        border.configure(background="white")
-        border.geometry(f"{width + 2}x{height + 2}+{x - 1}+{y - 1}")
         window.geometry(f"{width}x{height}+{x}+{y}")
-        window.attributes("-alpha", 0)
-        border.attributes("-alpha", 0)
-        border.deiconify()
         window.deiconify()
-        border.update_idletasks()
-        window.update_idletasks()
-        round_window_corners(border)
-        round_window_corners(window)
-        border.attributes("-alpha", 1)
-        window.attributes("-alpha", 1)
         window.lift()
         window.focus_set()
         window.update_idletasks()
@@ -226,8 +214,6 @@ class StartupSplash:
                 self.root.unbind("<Configure>", self.configure_binding)
             self.cancel_button.tooltip.hide()
             self.window.destroy()
-            if hasattr(self, "border_window"):
-                self.border_window.destroy()
         except tk.TclError:
             # A normal app shutdown can destroy the root before this watcher
             # sees app.closing. Joining the preparation worker is still needed.
