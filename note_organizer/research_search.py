@@ -175,6 +175,7 @@ def _pdf_metadata(store, documents, check):
 def search_library(store, worker, scope="Notes", **options):
     if scope not in SCOPES:
         raise ValueError("Choose Notes, PDFs, or All.")
+    progress = options.pop("progress", None)
     cancelled = options.get("cancelled") or (lambda: False)
     def check():
         if cancelled():
@@ -200,7 +201,9 @@ def search_library(store, worker, scope="Notes", **options):
         documents = [document for document in documents if document["id"] in selected_labels]
     metadata_by_id = _pdf_metadata(store, documents, check)
     browsing = not query.strip()
-    seen, pdf_count = set(), 0
+    seen, selected = set(), []
+    primary_paths = {document["path"] for document in documents
+                     if not metadata_by_id[document["id"]].get("managed_cloud_id")}
     for document in documents:
         check()
         metadata = metadata_by_id[document["id"]]
@@ -211,12 +214,25 @@ def search_library(store, worker, scope="Notes", **options):
         # file handle even though catalog browsing needs no filesystem access.
         identity = (str(Path(path)).casefold(), document["digest"])
         if metadata.get("managed_cloud_id") and metadata.get("primary_path"):
-            if any(other["path"] == metadata["primary_path"] and not
-                   json.loads(other["metadata"]).get("managed_cloud_id") for other in documents):
+            if metadata["primary_path"] in primary_paths:
                 continue
         if identity in seen:
             continue
         seen.add(identity)
+        selected.append(document)
+    completed, pdf_count = 0, 0
+    counts = {"cached": 0, "indexed": 0, "issues": 0}
+    def report(detail=""):
+        check()
+        if progress:
+            progress({"phase": "Loading PDFs" if browsing else "Searching PDFs", "unit": "PDFs",
+                      "current": completed, "total": len(selected), "detail": detail, **counts})
+    report()
+    for document in selected:
+        check()
+        metadata = metadata_by_id[document["id"]]
+        path = document["path"]
+        report(Path(path).name)
         managed = bool(metadata.get("managed_cloud_id"))
         entry = {"document_id": document["id"], "kind": "pdf", "path": path,
                  "rect": [0, 0, 0, 0], "metadata": metadata,
@@ -231,7 +247,10 @@ def search_library(store, worker, scope="Notes", **options):
             results.append({**entry, "key": "pdf-document", "pdf_document": True,
                             "page": 1, "page_count": None, "pdf_label": "",
                             "quote": "", "context": ""})
+            completed += 1
+            report(Path(path).name)
             continue
+        finished_document = True
         try:
             physical = worker.materialize(store.path, document.get("logical_paper_id") or path) if managed else path
             version = file_version(physical)
@@ -246,12 +265,18 @@ def search_library(store, worker, scope="Notes", **options):
                     check()
                     if version != file_version(physical):
                         raise OSError("PDF changed while indexing; sync it and search again.")
+                    counts["indexed"] += 1
+                else:
+                    counts["cached"] += 1
                 store.cache_pdf_pages(document["id"], document["digest"], version, pages)
                 indexed = indexed_pages(store, document["id"], document["digest"], version, query, mode)
                 if indexed is None:
                     raise ValueError("Library changed during indexing. Search again.")
+            else:
+                counts["cached"] += 1
             pages, page_count, has_text = indexed
             if page_count and not has_text:
+                counts["issues"] += 1
                 results.warnings.append(f"{Path(path).name}: No searchable text layer. Scanned pages need OCR before PDF text search.")
                 continue
             for page in pages:
@@ -273,11 +298,18 @@ def search_library(store, worker, scope="Notes", **options):
                                 "match_count": len(hits), "match_excerpts": excerpts})
                 pdf_count += 1
                 if pdf_count >= MAX_PDF_RESULTS:
+                    finished_document = False
                     results.warnings.append("Showing the first 2,000 PDF page matches. Narrow your search to see more.")
                     return results
         except InterruptedError:
+            finished_document = False
             raise
         except Exception as exc:
+            counts["issues"] += 1
             results.warnings.append(f"{Path(path).name}: {exc}")
+        finally:
+            if finished_document and not cancelled():
+                completed += 1
+                report(Path(path).name)
     check()
     return results

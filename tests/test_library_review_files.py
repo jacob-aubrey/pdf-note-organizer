@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from note_organizer import library_files
-from note_organizer.storage import canonical, digest_file
+from note_organizer.storage import Store, canonical, digest_file
 from tests import test_review_controls
 
 
@@ -128,6 +128,20 @@ class LibraryReviewFileTests(unittest.TestCase):
 
 
 class ReviewedPDFTests(unittest.TestCase):
+    def test_batch_rechecks_every_confirmation_before_recycling_any_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            store = Store(root / "library.sqlite3")
+            paths = [root / "first.pdf", root / "second.pdf"]
+            for path in paths:
+                path.write_bytes(b"disposable reviewed file")
+            proofs = [library_files.reviewed_pdf(path, root) for path in paths]
+            paths[1].write_bytes(b"changed after confirmation")
+            with patch.object(library_files, "_recycle_windows") as recycle, self.assertRaisesRegex(ValueError, "changed"):
+                library_files.recycle_pdfs(store, proofs)
+            recycle.assert_not_called()
+            self.assertTrue(all(path.exists() for path in paths))
+
     def test_confirmation_proof_rejects_outside_roots_directories_and_changed_bytes(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

@@ -210,6 +210,18 @@ class PDFReaderLifecycleTests(unittest.TestCase):
         self.assertGreater(self.reader.generation, generation)
         self.assertFalse(self.reader.loaded)
 
+    def test_requested_hit_is_sent_with_open_without_waiting_for_loaded_event(self):
+        self.reader.set_entry(self.entry())
+        requested = {"index": 2, "term": "gold", "fitWidth": True}
+        self.reader.select_match(requested)
+        self.show()
+        self.wait(lambda: self.reader.pending is not None)
+        self.assertEqual(self.reader.pending["match"], requested)
+        self.assertIsNone(self.reader.pending_match)
+        self.reader.connection = connection = Mock()
+        self.reader.handle_event({"kind": "state", "id": self.reader.generation, "loaded": True})
+        connection.send.assert_not_called()
+
     def test_close_is_idempotent_and_cancels_all_scheduled_reader_work(self):
         self.reader.set_entry(self.entry())
         cancelled = self.reader.cancelled

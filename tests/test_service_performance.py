@@ -310,6 +310,51 @@ class ServicePerformanceTests(unittest.TestCase):
         self.assertIsNone(self.service.scan_context)
         self.assertIsNone(self.service.activity_state)
 
+    def test_sync_counts_finished_pdfs_from_one_inventory_and_accounts_for_failures(self):
+        import os
+        for name in ("first.pdf", "second.pdf", "third.pdf"):
+            sample_pdf(self.watched / name)
+        states, final = [], []
+        def scan(project, path, force):
+            states.append(dict(self.service.activity_state))
+            if len(states) == 2:
+                raise OSError("Synthetic unreadable PDF")
+        with patch("note_organizer.service.os.walk", wraps=os.walk) as walk, \
+                patch.object(self.service, "scan", side_effect=scan), \
+                patch.object(self.service, "export_pending", side_effect=lambda: final.append(self.service.activity_state)), \
+                self.assertLogs(level="ERROR"):
+            self.service.sync()
+        walk.assert_called_once()
+        self.assertEqual([(state["current"], state["total"]) for state in states], [(0, 3), (1, 3), (2, 3)])
+        self.assertEqual((final[-1]["current"], final[-1]["total"]), (3, 3))
+        self.assertEqual(self.store.preference("sync_summary")["pdf_errors"], 1)
+        self.assertIsNone(self.service.activity_state)
+
+    def test_sync_preserves_batch_count_during_pdf_extraction(self):
+        sample_pdf(self.watched / "first.pdf")
+        sample_pdf(self.watched / "second.pdf")
+        states = []
+        def read(*args):
+            states.append(dict(self.service.activity_state))
+            return extract(*args)
+        with patch("note_organizer.service.extract", side_effect=read):
+            self.service.sync()
+        self.assertEqual([(state["current"], state["total"]) for state in states], [(0, 2), (1, 2)])
+        self.assertTrue(all(state["phase"] == "Reading PDF" for state in states))
+
+    def test_notebook_progress_advances_only_after_each_export(self):
+        second = self.root / "Second"
+        second.mkdir()
+        self.store.add_project(second)
+        states = []
+        def export(*args, **kwargs):
+            states.append(dict(self.service.activity_state))
+            return "new-notebook", None
+        with patch("note_organizer.service.export_notebook", side_effect=export):
+            self.service.export_pending()
+        self.assertEqual([(state["current"], state["total"]) for state in states], [(0, 2), (1, 2)])
+        self.assertIsNone(self.service.activity_state)
+
 
 if __name__ == "__main__":
     unittest.main()

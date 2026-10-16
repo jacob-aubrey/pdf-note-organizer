@@ -47,13 +47,17 @@ Reader has **Note view** and **PDF view** tabs sharing one result list and main 
 
 **Find in PDF** or **Ctrl+F while focused inside the PDF** searches only the open document. It never changes the main query, filters or result list. Selecting a result, using the shared main-search arrows, changing the main search, or closing Find returns navigation to the main search and its positive terms. Main-search arrows and PDF Find apply **125% in Reading mode** or **Fit width normally**, keep the page centered horizontally, and scroll to reveal the selected occurrence. Blue marks show only actual enabled-field hits for the selected main result; PDF Find uses green and searches the whole document. Wrapped words count and navigate as one occurrence; PDF results follow the document text flow through columns. **Ctrl + mouse wheel** zooms; **Ctrl+0** restores 125% in Reading mode or Fit width normally. **Ctrl + click-and-drag** pans from any PDF content, including hyperlink text and linked images. Ordinary clicks open links and plain dragging selects text. **Ctrl + double-click**, including on links, resets the same mode default and the current page's starting position. Image/full-page previews use the same gestures, resetting to their opening zoom and top-left position. Search marks are temporary; there are no selected-note bounding boxes. Muted placeholders explain search boxes without becoming part of their queries. A progress indicator beside Search identifies searches still running. Main-search and PDF Find clear buttons use the same larger X icon.
 
+PDF search/indexing, local PDF checks, pending notebook exports, and batched search-result display use compact completed-item progress bars. A count such as **143 / 520 PDFs** advances after each PDF finishes; hover for the current filename. Files reporting issues count as processed and retain their existing warnings. Unknown-duration work keeps an activity indicator.
+
 When a toolbar needs more room, button labels collapse to icons and return when space allows. Their action names, hover help, keyboard order and click targets remain available. Consequential actions retain text until other labels have collapsed. Reading mode uses an expand icon and Exit reading mode a collapse icon.
 
 **Actions → Document details…** contains the selected paper's identity, page information, original source path and extraction diagnostics. Both views keep a prominent document title visible, with at most two lines and the full title on hover. Titles use saved paper/PDF metadata, falling back to the filename when no usable title exists; Citation details can save a better title. The title source is identified in result tooltips and Document details. The general reMarkable coordinate-conversion advisory appears there instead of in every note. Actual extraction issues remain visible. Legacy reMarkable highlight popups that only repeat the highlighted quotation are suppressed in the embedded reader; genuine comments are retained and source PDFs remain unchanged.
 
-**Open externally** opens the original source PDF in your computer's default PDF application, where you can edit it. Use **Sync PDFs** afterwards to refresh extracted notes. Existing Library **Open PDF** and **Export annotated PDF** actions still provide the verified combined reading copy. The embedded reader is read-only; annotation creation, form editing and PDF scripting are disabled.
+**Open externally** opens the original source PDF in your computer's default PDF application, where you can edit it. Use **Sync PDFs** afterwards to refresh extracted notes. Library **Open externally** and **Export annotated PDF** actions still provide the verified combined reading copy. The embedded reader is read-only; annotation creation, form editing and PDF scripting are disabled.
 
 The embedded reader currently requires Windows and the **Microsoft Edge WebView2 Runtime**, normally present on Windows 11. Its pinned PDF.js runtime is bundled under `note_organizer/assets/pdfjs`; PDFs and viewer resources stay on the computer and need no CDN. A private loopback server serves only the selected PDF to the embedded browser. Source installations get the reader dependencies through `requirements.txt` / the Windows `requirements.lock`. If the runtime cannot start, the reader explains the issue and offers **Retry reader**; **Open externally** remains available.
+
+Closing Notable shows a centered **Closing Notable safely…** dialog. App interaction is blocked while active tasks finish, but the progress indicator and task details stay responsive. The dialog identifies the remaining save, PDF, Inbox, search or sync operation and closes automatically when shutdown is complete.
 
 Other keyboard shortcuts include **Ctrl+F** outside the PDF for library search, **F5** to sync PDFs, **Ctrl+,** for Settings, **Alt+1/2/3** for Inbox/Library/Reader, **Ctrl+Shift+S** for saved searches, **Ctrl+Shift+T** for labels and **Ctrl+Shift+A** for the accessible reading view. Saved timestamps appear in local time.
 
@@ -142,7 +146,7 @@ The window title is **Notable**. **Settings** and **Help** sit at the right of t
 
 For a new library, reMarkable cloud services start **off**, and its tab is hidden. Enable them through **Settings → Connections** and save to reveal the tab. Turning the master switch off hides the tab and pauses cloud activity while keeping downloaded notes, pairing, and folder links. Existing configured libraries retain their saved connection choices.
 
-An empty library normally opens on Inbox. A library with saved notes normally opens on Reader. **Open folder** in Library opens the selected watched folder in File Explorer. In Reader it opens the selected folder; select a specific folder first if you are viewing all folders.
+An empty library normally opens on Inbox. A library with saved notes normally opens on Reader. **Folder actions ▾ → Open folder** in Library opens the selected watched folder in File Explorer. In Reader, **Open folder** opens the selected folder; select a specific folder first if you are viewing all folders.
 
 The footer describes background work. **View sync details** appears when a check or recovery needs attention and takes you to Library's processing log. In Library, **Show sync details** expands that log and **Hide sync details** collapses it. Unavailable watched folders, PDF read failures, pending notebook exports, and retained previous PDF copies are reported separately. The log includes complete saved recovery paths so you can find those copies in File Explorer.
 
@@ -151,6 +155,8 @@ The footer describes background work. **View sync details** appears when a check
 Hover over a button for a short explanation. Path fields and path entries in tables show the complete location together with their explanation, even when the displayed filename fits. Other clipped table cells reveal their complete text. Long tooltips can widen to fit the available monitor space; moving away, switching tabs, or changing focus dismisses them.
 
 Long filenames in Inbox also show their full current text on hover. Inbox metadata, Help, and annotation history have scrollbars so longer information stays readable. **Escape** follows the same action as a dialog's Cancel or Close button. In Settings, this discards draft changes, including a pending key removal; a save already in progress must finish first.
+
+Double-click or press **Enter** on an actual local file/folder row to open that item: folders use File Explorer and PDFs use the default PDF viewer. With multiple copies selected, activation opens only the clicked or focused item. Library paper rows instead use the internal Reader shortcut described above. Review findings and interrupted filings reveal their copies or locations; cloud-only and unmapped items explain what is unavailable without starting a download. In Inbox, use **Review selected** for naming/filing; double-click opens the downloaded file. Library **Actions ▾ → Send selected PDF…** contains the explicit tablet transfer action.
 
 Drag the divider between column headings to resize a column. **Double-click that divider** to fit the column to its current rows. A manually sized column keeps its size through refreshes. Horizontal scrollbars appear when needed; **Shift + mouse wheel** pans across a wide table. Dividers between the Reader list and preview can also be dragged.
 
@@ -217,15 +223,15 @@ Each watched folder is an independent project with its own processing settings a
 
 Changes are watched while the app is open. Startup and periodic reconciliation scans catch changes made while it was closed. **Library → Sync PDFs** checks local folders on demand. The button in the reMarkable tab performs a separate cloud check.
 
-Select a paper and choose **View notes**, or double-click its row, to open its notes. **Open PDF** prepares one reading PDF with the paper's PC and reMarkable notes together. This happens in the background. Notable first checks that the printed pages and their positions match. Different editions, added or reordered tablet pages, and several independently annotated copies need review before they can be combined. Saved notes and their separate histories remain intact.
+Select a paper and choose **View in Reader**, double-click its row, or press Enter to load its PDF and notes in Reader. This explicit open clears the previous query, collection/tag and note-type filters, uses All scope, and selects the paper immediately, including papers without annotations. **Open externally** prepares one reading PDF with the paper's PC and reMarkable notes together and opens it in the Windows default PDF viewer. This happens in the background. Notable first checks that the printed pages and their positions match. Different editions, added or reordered tablet pages, and several independently annotated copies need review before they can be combined. Saved notes and their separate histories remain intact.
 
 To keep or share that reading PDF, choose **More → Export annotated PDF…** in Library or Reader. Choose a separate destination. This is a lasting export with the combined annotations; the temporary reading view is not intended as your working original. Continue making PC annotations in your main original and tablet annotations on your tablet, then sync to refresh the combined view.
 
-Handwriting can extend beyond an article's original page edge. **Open PDF** and **Export annotated PDF** add white space around supported margin notes so the whole note stays visible, including handwriting already saved in a PC PDF or an older tablet reading copy. The article stays at its original size, and its text stays searchable. Only the generated reading or export PDF gets the extra space; your original file keeps its existing page size. A wider page can make the article look smaller when your viewer uses **Fit page** or **Fit width**; zoom in for a larger reading size. These reading PDFs use the same temporary cache as combined notes and can be rebuilt when needed.
+Handwriting can extend beyond an article's original page edge. Reading views and **Export annotated PDF** add white space around supported margin notes so the whole note stays visible, including handwriting already saved in a PC PDF or an older tablet reading copy. The article stays at its original size, and its text stays searchable. Only the generated reading or export PDF gets the extra space; your original file keeps its existing page size. A wider page can make the article look smaller when your viewer uses **Fit page** or **Fit width**; zoom in for a larger reading size. These reading PDFs use the same temporary cache as combined notes and can be rebuilt when needed.
 
 The combined view belongs to Notable. Your tablet keeps its own editable document and tablet notes. PC annotations appear together with those notes in Notable and its PDF export; this update does not add them to the existing document on the tablet. Sending an exported combined PDF back would create another imported copy, so it is not part of the normal workflow.
 
-The generated Word notebook collects linked PC and tablet notes under one paper. After a paper has been verified and refreshed for this version, its PDF links open the main original at the verified page, so those links do not depend on a temporary reading view. The original may not show newer tablet marks. Older tablet copies keep links to their retained reading PDFs until that refresh succeeds. Use **Open PDF** in Notable, or **Export annotated PDF…**, when you want to see all marks on the page.
+The generated Word notebook collects linked PC and tablet notes under one paper. After a paper has been verified and refreshed for this version, its PDF links open the main original at the verified page, so those links do not depend on a temporary reading view. The original may not show newer tablet marks. Older tablet copies keep links to their retained reading PDFs until that refresh succeeds. Use **PDF view** in Notable, or **Export annotated PDF…**, when you want to see all marks on the page.
 
 ### Read and search notes
 
@@ -277,13 +283,13 @@ Feedback beside a tab's controls describes your last action there and clears whe
 
 **PDF page 3 of 12** means the physical, one-based position inside the PDF. That is the page sent to the viewer. An embedded label can appear separately as **PDF label 233**. A verified printed journal number appears as **Journal p. 233**; an embedded PDF label alone does not prove the journal numbering. Automatic verification of journal page numbering is not implemented.
 
-Change the external viewer for Library **Open PDF** in **Settings → Preferences**. New libraries use **Windows default**. Explicit choices include Edge, Chrome, Firefox, Acrobat/Reader, SumatraPDF, and **Other application** for a chosen `.exe`. Saving this choice does not change Windows file associations. Reader **Open externally** always uses the computer's default application for the original source file.
+All external PDF actions use the current Windows default application for `.pdf` files, including Reader **Open externally**, Library **Open externally**, and generated reading PDFs. Change that default in Windows Settings. Older per-library viewer choices no longer override it. Reader opens the original source file; Library can prepare a reading copy with saved notes.
 
-Recognized viewers receive the physical page position. An unrecognized default or custom viewer can open the PDF normally, with an explanation of the page to navigate to. A missing explicitly selected viewer produces an error and directions to change the preference. Page jumps depend on the viewer honoring its parameter; every viewer has not been checked live.
+The launcher asks the Windows association API for the effective PDF default each time, rather than reading a potentially stale registry handler. Recognized viewers receive the physical page position. An unrecognized default opens through Windows normally, with an explanation of the page to navigate to. Page jumps depend on the viewer honoring its parameter; every viewer has not been checked live.
 
 ### Inspect handwriting and drawing context
 
-The PDF reader shows drawing and handwriting in their full page context. **Note view** also provides a saved close-up of the source page containing its text, figures, and marks. Nearby letters and strokes are grouped into blocks, with surrounding context. Library **Open PDF** and **Full page context** use the combined reading view. Supported margin handwriting can expand that view's page boundaries without changing your original PDF.
+The PDF reader shows drawing and handwriting in their full page context. **Note view** also provides a saved close-up of the source page containing its text, figures, and marks. Nearby letters and strokes are grouped into blocks, with surrounding context. Library **Open externally** and **Full page context** use the combined reading view. Supported margin handwriting can expand that view's page boundaries without changing your original PDF.
 
 **Enlarge image** opens the saved close-up. **Full page context** opens the complete physical PDF page, including supported margin context. In either image window:
 
@@ -355,13 +361,15 @@ Review uses locally saved tablet information. A folder refresh is not the same a
 
 ### 3. Review a few findings
 
-1. Open **Review library…** from Inbox or Library.
+1. Open **Review library…** from Inbox, or **Library actions ▾ → Review library…** in Library.
 2. Choose the PC folder to inspect and choose **Check library**. This scan uses local PDFs and saved tablet information; it does not download, upload, delete, move, or link papers.
 3. Use the box marked **Search**, beside the magnifying glass, and the finding filter to work on one topic or type of finding. Search checks names, explanations, and file locations. Click a column heading to sort the rows.
-4. Select one finding. Read its complete explanation, local paths, and tablet IDs in the scrollable details area. Select text to copy it, or right-click and choose **Copy all text**. Choose the copy in the path selector, then use **Open PDF** and **Open containing folder** to inspect its contents and location before deciding. Hover over the path selector to read the whole location, or use its small copy button to copy it.
+4. Select one finding. Read its complete explanation, local paths, and tablet IDs in the scrollable details area. Select copies in the lower list; **Ctrl-click** toggles individual copies and **Shift-click** selects a range. **Link selected copies…** uses only selected sources, including selectable tablet sources. Select one local PDF to use **Open PDF**; **More…** contains Open containing folder, Copy selected paths, Review again, Undo last link, and Delete selected PDFs. Batch deletion reviews the exact selected paths in one scrollable confirmation and uses Windows Recycle Bin; saved notes and history remain available.
 5. Decide whether this is the same paper, a different edition, supplementary material, or an independent item. DOI/title similarity is a suggestion to inspect, not a reason to merge automatically. A matching baseline is stronger evidence, but different annotations still need preservation.
 
 Generated **Notebook backups** and **notes_media** folders, plus the hidden **.git** folder used for source code history, are left out of these findings. The app's private tablet cache and review areas are also excluded. These support folders are not ordinary paper folders to link to the tablet.
+
+Both lists display **Checking library…** while a check runs. The compact action row keeps **Map and sync…** visible when the selected finding needs a folder mapping; its folder picker names the tablet folder being mapped. **Send selected PDF…** also appears only for applicable findings. Review extra PDFs, supplementary-file lists, and filing recovery show loading messages inside their lists while their checks run.
 
 Then choose the action that fits:
 
@@ -521,7 +529,7 @@ Let the download complete, then refresh again after it stops changing. The file 
 
 Read the full error in **View sync details**. Restore a missing source or close an application that is holding it, then use **Library → Sync PDFs**. A failed scan does not replace the last successful saved notes.
 
-Inspect **Open PDF** to see the combined annotations. Flattened marks are ordinary page content and cannot reliably be separated from the printed page; different flattened versions need review. A highlight without extractable text keeps a source link and a review warning. For split/merged handwriting, adjust Folder settings and sync, then check a small sample before applying the approach broadly.
+Inspect **PDF view** to see the combined annotations. Flattened marks are ordinary page content and cannot reliably be separated from the printed page; different flattened versions need review. A highlight without extractable text keeps a source link and a review warning. For split/merged handwriting, adjust Folder settings and sync, then check a small sample before applying the approach broadly.
 
 ### The generated notebook did not update
 
@@ -547,7 +555,7 @@ The dialog stays open with the error, and the previous saved settings/key remain
 
 ### Open PDF opens at the wrong page
 
-The page shown by Notable is the physical file position, which can differ from printed journal numbering. Choose a recognized viewer in Preferences. Some Windows-default or custom viewers ignore page parameters; navigate to the displayed physical page manually.
+The page shown by Notable is the physical file position, which can differ from printed journal numbering. Notable uses your current Windows PDF default. Some viewers ignore page parameters; navigate to the displayed physical page manually when necessary.
 
 ## Reference and development
 

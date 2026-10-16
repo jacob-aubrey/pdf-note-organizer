@@ -95,7 +95,7 @@ def open_labels(app):
             app.refresh_notes()
             app.refresh_label_choices()
             window.destroy()
-        background(app, lambda: save_labels(app.store, paper[0], draft), completed, failed)
+        background(app, lambda: save_labels(app.store, paper[0], draft), completed, failed, task='Saving paper tags and collections…')
     actions = ttk.Frame(frame)
     actions.pack(fill="x")
     save = Button(actions, text="Save labels", command=save, state="disabled", style="Primary.TButton")
@@ -121,7 +121,7 @@ def open_labels(app):
                 field.configure(state="normal")
             save.configure(state="normal")
             status.set("Labels are local to this library. Use Collection or tag in Reader to filter notes and PDFs within your current folder and paper selection. All papers clears this label filter.")
-    background(app, load, loaded, failed)
+    background(app, load, loaded, failed, task='Loading paper tags and collections…')
     fit_dialog(window, app.root)
 
 
@@ -207,7 +207,7 @@ def open_saved_searches(app):
                     saved[key] = draft
                 db.execute("INSERT OR REPLACE INTO preferences VALUES('saved_searches',?)", (json.dumps(saved),))
             return saved
-        background(app, write, render, failed)
+        background(app, write, render, failed, task='Saving searches…')
     def apply():
         if busy[0]:
             return
@@ -241,6 +241,6 @@ def open_saved_searches(app):
     close = Button(frame, text="Close", command=window.destroy)
     close.pack(anchor="e", pady=(12, 0))
     Tooltip(close, "Close this window without applying a saved search. Any save or deletion already requested will finish.")
-    background(app, lambda: app.store.preference("saved_searches", {}), render, failed)
+    background(app, lambda: app.store.preference("saved_searches", {}), render, failed, task='Loading saved searches…')
     annotate_buttons(window)
     fit_dialog(window, app.root)

@@ -131,6 +131,25 @@ class ReaderNavigationUITests(unittest.TestCase):
         connection.send.assert_not_called()
         app.pdf_reader.connection = None
 
+    def test_same_result_navigation_sends_one_match_without_rebuilding_preview(self):
+        app = self.replace(self.rows())
+        app.pdf_reader.loaded = True
+        with patch.object(app, "preview") as preview, patch.object(app.pdf_reader, "select_match") as select:
+            app.navigate_match(1)
+        preview.assert_not_called()
+        select.assert_called_once()
+        self.assertEqual(select.call_args.args[0]["index"], 1)
+        self.assertTrue(select.call_args.args[0]["fitWidth"])
+
+    def test_new_result_navigation_sends_only_its_requested_match(self):
+        app = self.replace(self.rows())
+        with patch.object(app.pdf_reader, "select_match") as select:
+            app.navigate_match(2)
+            self.root.update()
+        select.assert_called_once()
+        self.assertEqual(app.notes.selection(), ("1",))
+        self.assertEqual(select.call_args.args[0]["index"], 0)
+
     def test_current_result_click_reclaims_main_search_without_reloading_document(self):
         app = self.replace(self.rows())
         self.show()

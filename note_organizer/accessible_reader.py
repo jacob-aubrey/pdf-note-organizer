@@ -64,4 +64,4 @@ def open_reader(app):
             old.unlink(missing_ok=True)
         return path
     background(app, prepare, lambda path: (webbrowser.open(path.as_uri()), app.notify("Accessible reading view opened in your browser.")),
-               lambda error: app.notify(f"Could not prepare reading view: {error}"))
+               lambda error: app.notify(f"Could not prepare reading view: {error}"), task='Preparing the accessible reading view…')

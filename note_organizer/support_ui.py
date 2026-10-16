@@ -230,7 +230,7 @@ class UpdatesWindow:
         self.release_button.configure(state="disabled")
         self.download_button.configure(state="disabled")
         self.notes.set("")
-        background(self.app, check_updates, self.loaded, self.failed)
+        background(self.app, check_updates, self.loaded, self.failed, task='Finishing the update check…')
 
     def loaded(self, result):
         if not self.alive():

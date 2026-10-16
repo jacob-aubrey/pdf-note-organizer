@@ -4,12 +4,22 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
 from urllib.parse import urlsplit
 
 from note_organizer.reader_server import ReaderServer
 
 
 class ReaderServerTests(unittest.TestCase):
+    def test_browser_shutdown_may_abort_an_inflight_asset_request(self):
+        handler = Mock()
+        handler.path = urlsplit(self.server.url).path
+        handler.headers = {"Host": urlsplit(self.server.origin).netloc}
+        handler.close_connection = False
+        with patch.object(self.server, "_serve_file", side_effect=ConnectionAbortedError("browser closed")):
+            self.server._serve(handler, head=False)
+        self.assertTrue(handler.close_connection)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.folder = Path(self.temp.name)

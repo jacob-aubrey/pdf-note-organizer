@@ -220,6 +220,39 @@ class ReaderDocumentTargetTests(unittest.TestCase):
         self.app.pdf_worker.materialize_source.assert_not_called()
         self.app.pdf_worker.reader_location.assert_not_called()
 
+    def test_same_paper_navigation_reuses_preparation_and_revalidates_changed_sources(self):
+        self.source.write_bytes(b"original source")
+        self.resolved.write_bytes(b"prepared reading copy")
+        self.app.store.path.write_bytes(b"library version")
+        self.app.query_generation = 1
+        entry = self.entry(source_digest="source-v1", source_note_revision=1)
+        self.app.load_reader_document(entry, self.cancelled)
+        self.app.load_reader_document({**entry, "key": "next-note", "page": 3}, self.cancelled)
+        self.app.pdf_worker.materialize_cancellable.assert_called_once()
+        self.assertEqual(self.app.pdf_worker.reader_location.call_count, 2)
+        for changed_path in (self.source, self.resolved, self.app.store.path):
+            changed_path.write_bytes(changed_path.read_bytes() + b" changed")
+            before = self.app.pdf_worker.materialize_cancellable.call_count
+            self.app.load_reader_document(entry, self.cancelled)
+            self.assertEqual(self.app.pdf_worker.materialize_cancellable.call_count, before + 1)
+        before = self.app.pdf_worker.materialize_cancellable.call_count
+        self.app.query_generation += 1
+        self.app.load_reader_document(entry, self.cancelled)
+        self.assertEqual(self.app.pdf_worker.materialize_cancellable.call_count, before + 1)
+        self.app.load_reader_document({**entry, "source_note_revision": 2}, self.cancelled)
+        self.assertEqual(self.app.pdf_worker.materialize_cancellable.call_count, before + 2)
+
+    def test_source_changed_during_preparation_is_not_cached_as_current(self):
+        self.source.write_bytes(b"original source")
+        self.resolved.write_bytes(b"prepared reading copy")
+        def prepare(*args):
+            self.source.write_bytes(self.source.read_bytes() + b" changed")
+            return str(self.resolved)
+        self.app.pdf_worker.materialize_cancellable.side_effect = prepare
+        self.app.load_reader_document(self.entry(), self.cancelled)
+        self.app.load_reader_document(self.entry(key="next-note"), self.cancelled)
+        self.assertEqual(self.app.pdf_worker.materialize_cancellable.call_count, 2)
+
     def test_managed_tablet_notes_keep_page_only_navigation_without_trusted_extraction_geometry(self):
         for metadata in ({"managed_cloud_id": "tablet-id"}, {"tablet_layers_only": True}):
             with self.subTest(metadata=metadata):
@@ -259,6 +292,13 @@ class ReaderDocumentTargetTests(unittest.TestCase):
         opened.assert_called_once_with(str(self.source), 2, {"viewer": "system"})
         self.app.pdf_worker.materialize_cancellable.assert_not_called()
         self.app.notify.assert_called_once_with("Opened default PDF viewer", "notes")
+
+    def test_library_launch_uses_windows_default_even_with_a_legacy_override(self):
+        self.app.viewer_preference = {"viewer": "adobe"}
+        self.app.notify = Mock()
+        with patch("note_organizer.ui.open_pdf_page", return_value=("Opened in Edge", True)) as opened:
+            self.app.launch_pdf(self.source, 3)
+        opened.assert_called_once_with(self.source, 3, {"viewer": "system"})
 
 
 class ReaderExactSourceWorkerTests(unittest.TestCase):

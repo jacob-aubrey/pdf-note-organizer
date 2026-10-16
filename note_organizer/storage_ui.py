@@ -6,7 +6,7 @@ from .icons import Button
 from .screens import work_area
 from .source_storage import plan_legacy_cleanup
 from .theme import BACKGROUND
-from .widgets import SelectionDetails, ReadOnlyText, Tooltip, bind_dialog_close, fit_dialog
+from .widgets import SelectionDetails, ReadOnlyText, Tooltip, bind_dialog_close, fit_dialog, bind_item_open
 from .workflow_ui import background
 
 
@@ -61,6 +61,7 @@ class LegacyCleanupDialog:
                              height=9, content_columns=())
         self.tree.configure(selectmode="extended")
         self.tree.bind("<<TreeviewSelect>>", self.selected)
+        bind_item_open(self.tree, lambda row: self.app.open_file_or_folder(self.rows[row]["path"]) if not self.busy and row in self.rows else None)
         self.tree.tooltip.value = lambda row, column: self.rows[row].get("path", "") if column == "name" else self.tree.set(row, column)
         self.tree.tooltip.extra = lambda row, column: "\n".join(self.rows[row].get("reasons", []))
         self.details = SelectionDetails(frame, title="Selected copies", height=5)
@@ -124,13 +125,15 @@ class LegacyCleanupDialog:
         self.acknowledged.set(False)
         self.select_ready.set(False)
         self.summary.set("Checking saved sources, notes and notebook links…")
+        self.tree.set_status("Checking extra PDF copies…")
         self.update_controls()
-        background(self.app, lambda: plan_legacy_cleanup(self.app.store), self.loaded, self.failed)
+        background(self.app, lambda: plan_legacy_cleanup(self.app.store), self.loaded, self.failed, task='Reviewing stored PDF copies…')
 
     def loaded(self, plans):
         if not self.alive():
             return
         self.busy = ""
+        self.tree.set_status()
         self.rows = {str(index): plan for index, plan in enumerate(plans)}
         self.tree.delete(*self.tree.get_children())
         for key, plan in self.rows.items():
@@ -220,7 +223,7 @@ class LegacyCleanupDialog:
         self.busy = "removing"
         self.summary.set("Rechecking the selected sources and removing eligible extra copies…")
         self.update_controls()
-        background(self.app, lambda: self.app.service.storage_action("cleanup", plans), self.completed, self.failed)
+        background(self.app, lambda: self.app.service.storage_action("cleanup", plans), self.completed, self.failed, task='Finishing removal of verified extra PDF copies…')
 
     def completed(self, results):
         if not self.alive():
@@ -242,6 +245,7 @@ class LegacyCleanupDialog:
     def failed(self, error):
         if self.alive():
             self.busy = ""
+            self.tree.set_status(None if self.tree.get_children() else "Check failed. See the details below.")
             self.summary.set("Cleanup review paused. Copies requiring attention remain in place.")
             self.report.set(str(error))
             self.update_controls()

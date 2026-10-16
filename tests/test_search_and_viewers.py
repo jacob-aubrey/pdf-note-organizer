@@ -1,7 +1,7 @@
 import tempfile
 from pathlib import Path
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from note_organizer.search import compile_search, positive_terms, match_spans, SearchSyntaxError
 from note_organizer.storage import Store, matches_search
@@ -60,6 +60,46 @@ class BooleanSearchTests(unittest.TestCase):
 
 
 class ViewerTests(unittest.TestCase):
+    def test_effective_windows_association_overrides_stale_registry_handler(self):
+        import ctypes
+        from ctypes import wintypes
+        from note_organizer.viewers import default_executable
+        executable = r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+        def query(flags, kind, extension, verb, buffer, size):
+            self.assertEqual((flags, kind, extension, verb), (0, 2, ".pdf", "open"))
+            ctypes.cast(size, ctypes.POINTER(wintypes.DWORD)).contents.value = len(executable) + 1
+            if buffer is None:
+                return 1
+            buffer.value = executable
+            return 0
+        native = Mock()
+        native.AssocQueryStringW.side_effect = query
+        with patch("ctypes.WinDLL", return_value=native), \
+                patch("note_organizer.viewers.registry_read", return_value="Acrobat.Document.DC") as registry:
+            self.assertEqual(default_executable(), executable)
+        registry.assert_not_called()
+
+    def test_failed_association_query_never_guesses_from_stale_registry(self):
+        from note_organizer.viewers import default_executable
+        native = Mock()
+        native.AssocQueryStringW.return_value = -1
+        with patch("ctypes.WinDLL", return_value=native), \
+                patch("note_organizer.viewers.registry_read", return_value="Acrobat.Document.DC") as registry:
+            self.assertEqual(default_executable(), "")
+        registry.assert_not_called()
+
+    def test_windows_default_is_resolved_again_for_each_page_request(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "paper # with spaces.pdf"
+            path.touch()
+            with patch("note_organizer.viewers.default_executable", side_effect=["msedge.exe", "Acrobat.exe"]), \
+                    patch("note_organizer.viewers.Path.is_file", return_value=True), \
+                    patch("note_organizer.viewers.subprocess.Popen") as launch:
+                open_pdf_page(path, 4)
+                open_pdf_page(path, 7)
+            self.assertEqual(launch.call_args_list[0].args[0], ["msedge.exe", path.as_uri() + "#page=4"])
+            self.assertEqual(launch.call_args_list[1].args[0], ["Acrobat.exe", "/A", "page=7", str(path)])
+
     def test_acrobat_and_sumatra_get_page_and_path_as_separate_arguments(self):
         path = Path('paper with spaces & special # characters.pdf').resolve()
         self.assertEqual(viewer_command("Acrobat.exe", path, 3), ["Acrobat.exe", "/A", "page=3", str(path)])

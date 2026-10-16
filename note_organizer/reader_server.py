@@ -179,7 +179,7 @@ class ReaderServer:
             self._serve_file(handler, target, head=head)
         except (UnicodeError, ValueError):
             self._error(handler, 404)
-        except (BrokenPipeError, ConnectionResetError, TimeoutError):
+        except (ConnectionError, TimeoutError):
             handler.close_connection = True
 
     @staticmethod

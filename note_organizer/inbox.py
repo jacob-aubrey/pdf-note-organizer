@@ -162,6 +162,7 @@ class InboxController:
         self._executor = None
         self._closed = False
         self._initialized = False
+        self.activity_state = None
         self._saved_config = {}
         self._metadata_generation = 0
         self.stable_seconds = 2.0
@@ -499,11 +500,14 @@ class InboxController:
 
     def prepare_async(self, path, force=False):
         def work():
+            self.activity_state = {"phase": "Identifying Inbox document", "detail": Path(path).name}
             try:
                 return self.prepare(path, force=force)
             except Exception as error:
                 self._emit("inbox_error", {"path": str(path), "error": str(error)})
                 raise
+            finally:
+                self.activity_state = None
         return self._submit(work)
 
     def _exclusive_copy(self, source, desired, auto_suffix=False):
@@ -751,6 +755,13 @@ class InboxController:
             self._executor.shutdown(wait=wait, cancel_futures=True)
             if wait:
                 self._executor = None
+
+    def wait_stopped(self):
+        """Finish all Inbox cleanup off the UI thread during app shutdown."""
+        self.stop(wait=True)
+        thread = self._thread
+        if thread and thread is not threading.current_thread():
+            thread.join()
 
     def preview_sorter_settings(self, path):
         """Read an explicit legacy file; preview never decrypts or mutates keys."""

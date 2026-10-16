@@ -24,12 +24,12 @@ from .research_search import search_library, enrich_note_matches
 from .reader_navigation import navigation_target, current_target
 from .reader_results import paper_identity, paper_labels, result_title, title_source, result_excerpt, result_tooltip, result_type, ordered_rows
 from .match_preview import excerpt_display
-from .viewers import open_pdf_page, VIEWERS
+from .viewers import open_pdf_page
 from .theme import apply_theme, BACKGROUND, PANEL
 from .remarkable_cloud import PAIR_URL
 from .remarkable_sync import scoped_folders, effective_config
 from .icons import Button, menu_action
-from .widgets import Tooltip, PathField, ReadOnlyText, DataTable, WrapToolbar, annotate_buttons, fit_dialog, bind_dialog_close, dismiss_tooltips, CellTooltip, SelectionDetails
+from .widgets import Tooltip, PathField, ReadOnlyText, DataTable, WrapToolbar, annotate_buttons, fit_dialog, bind_dialog_close, dismiss_tooltips, CellTooltip, SelectionDetails, bind_item_open
 from .dialogs import PreferencesDialog, ProcessingFields
 from .pages import page_description, page_tooltip
 from .view_state import LibraryView, read_view, cloud_destinations
@@ -88,6 +88,8 @@ class App(WorkspaceLayouts):
         self.query_generation = 0
         self.query_cancel = threading.Event()
         self.query_future = None
+        self.query_progress = [None]
+        self.search_progress_state = None
         self.notes_after = None
         self.refresh_needed = False
         self.next_refresh = 0
@@ -142,6 +144,7 @@ class App(WorkspaceLayouts):
         self.work_progress = ttk.Progressbar(footer, length=95, mode="indeterminate")
         self.work_phase = tk.StringVar()
         self.work_label = ttk.Label(footer, textvariable=self.work_phase, style="Muted.TLabel")
+        Tooltip(self.work_label, lambda: (self.service.activity_state or {}).get("detail", ""))
         self.work_visible = False
         self.tabs = ttk.Notebook(self.root)
         self.tabs.pack(fill="both", expand=True, padx=20, pady=(8, 4))
@@ -173,13 +176,10 @@ class App(WorkspaceLayouts):
         enabled = self.cloud_config()["integration_enabled"]
         if enabled:
             self.tabs.add(self.remarkable_tab, text="reMarkable")
-            self.library_send_button.master.set_visible(self.library_send_button, True)
         elif self.tabs.tab(self.remarkable_tab, "state") != "hidden":
             if self.tabs.select() == str(self.remarkable_tab):
                 self.tabs.select(self.library_tab)
             self.tabs.hide(self.remarkable_tab)
-        if not enabled:
-            self.library_send_button.master.set_visible(self.library_send_button, False)
 
     def review_library(self):
         existing = self.reconciliation_window
@@ -226,16 +226,27 @@ class App(WorkspaceLayouts):
             for button in (original, destination):
                 button.configure(state="normal" if row else "disabled")
         table.bind("<<TreeviewSelect>>", selected)
+        def inspect_filing(row):
+            table.selection_set(row)
+            selected()
+            details.text.focus_set()
+        bind_item_open(table, inspect_filing)
         def loaded(values):
             if not window.winfo_exists():
                 return
+            table.set_status()
             rows.update({row["job_id"]: row for row in values})
             self.update_rows(table, [(key, (Path(row["source"]).name, row["error"])) for key, row in rows.items()])
             if not rows:
                 message.configure(text="No interrupted filings currently need review.")
             selected()
             fit_dialog(window, self.root)
-        background(self, self.inbox.list_recovery_errors, loaded)
+        def failed(error):
+            if window.winfo_exists():
+                table.set_status("Could not load interrupted filings.")
+                details.set(str(error), selected=False)
+        table.set_status("Checking interrupted filings…")
+        background(self, self.inbox.list_recovery_errors, loaded, failed, task='Checking filing recovery…')
         annotate_buttons(window)
         return window
 
@@ -345,6 +356,17 @@ class App(WorkspaceLayouts):
                 self.set_cloud_mapping(folder_reviews[selection[0]]["id"])
         mapping.configure(command=map_selected)
         table.bind("<<TreeviewSelect>>", selected)
+        def open_transfer(row):
+            job = current_jobs.get(row)
+            if job and job.get("path"):
+                self.open_file_or_folder(job["path"])
+            elif row in folder_reviews:
+                table.selection_set(row)
+                selected()
+                messagebox.showinfo("Folder needs mapping", "Choose Map and sync to select the PC folder for this tablet folder.", parent=window)
+            else:
+                self.open_file_or_folder("")
+        bind_item_open(table, open_transfer)
         def refresh():
             if self.closing or not window.winfo_exists():
                 return
@@ -397,7 +419,7 @@ class App(WorkspaceLayouts):
 
     def refresh_label_choices(self):
         from .research_tools import labels
-        background(self, lambda: labels(self.store), lambda values: self.label_picker.configure(values=["All papers", *values]) if not self.closing else None)
+        background(self, lambda: labels(self.store), lambda values: self.label_picker.configure(values=["All papers", *values]) if not self.closing else None, task='Loading research labels…')
 
     def bind_shortcuts(self):
         def focus_search():
@@ -602,6 +624,7 @@ class App(WorkspaceLayouts):
         self.cloud_folders_empty_label = ttk.Label(folders, textvariable=self.cloud_folders_empty, style="Muted.TLabel", wraplength=340)
         self.mapping_details = SelectionDetails(folders, "Selected mapping", height=2)
         self.cloud_folders = self.tree(folders, [("name", "Cloud folder", 180), ("local", "PC destination", 280)])
+        bind_item_open(self.cloud_folders, self.open_cloud_folder)
         self.cloud_folders.tooltip.extra = lambda row, column: "This tablet folder's corresponding PC location. Select the row to inspect and copy its locations."
         self.cloud_folders.tooltip.full_with_help = True
         self.cloud_folders.bind("<<TreeviewSelect>>", self.cloud_selection_changed)
@@ -626,7 +649,7 @@ class App(WorkspaceLayouts):
         self.cloud_review.tooltip.value = self.review_cell_value
         self.cloud_review.tooltip.extra = lambda row, column: "Select this tablet PDF to inspect and copy its saved locations." if column == "folder" else ""
         self.cloud_review.tooltip.full_with_help = True
-        self.cloud_review.bind("<Double-1>", lambda event: self.open_cloud_review())
+        bind_item_open(self.cloud_review, self.open_cloud_review)
         self.cloud_review_detail = tk.StringVar()
 
         self.cloud_review.bind("<<TreeviewSelect>>", self.cloud_review_selected)
@@ -799,8 +822,10 @@ class App(WorkspaceLayouts):
         self.refresh_cloud_folders()
         return True
 
-    def set_cloud_mapping(self, folder_id):
-        path = filedialog.askdirectory(title="PC folder corresponding to this cloud folder", parent=self.root)
+    def set_cloud_mapping(self, folder_id, *, parent=None):
+        folder = next((folder for folder in self.view.preference("remarkable_folders", []) if folder["id"] == folder_id), {})
+        folder_name = folder.get("path") or folder.get("name") or folder_id
+        path = filedialog.askdirectory(title=f"Choose PC folder for tablet folder: {folder_name}", parent=parent or self.root)
         if not path:
             return
         source_id, _ = self.cloud_routing_values()
@@ -847,8 +872,16 @@ class App(WorkspaceLayouts):
             item = self.view.remarkable_items().get(selection[0], {})
             self.set_cloud_mapping(item.get("parent", ""))
 
-    def open_cloud_review(self):
-        selection = self.cloud_review.selection()
+    def open_cloud_folder(self, row):
+        values = self.cloud_folders.item(row, "values")
+        path = values[1] if len(values) > 1 and Path(values[1]).is_absolute() else ""
+        if path:
+            self.open_file_or_folder(path)
+        else:
+            messagebox.showinfo("Folder needs mapping", f"No PC folder is available for {values[0] if values else 'this tablet folder'}. Choose Map and sync first.", parent=self.root)
+
+    def open_cloud_review(self, row=None):
+        selection = (row,) if row else self.cloud_review.selection()
         if selection:
             item = self.view.remarkable_items().get(selection[0], {})
             path = item.get("review_pdf")
@@ -1121,6 +1154,8 @@ class App(WorkspaceLayouts):
             "Remove folder…": "Remove this watched folder and its saved annotation history from the library. PDFs and Word notebooks remain on disk.",
             "Locate moved folder…": "Reconnect a moved folder while retaining saved history.",
             "Folder settings": "Change this folder's extraction and Word settings.",
+            "Send selected PDF…": "Review sending this original PDF to its linked tablet destination. Enable PDF sending in Settings → Connections first.",
+            "Open folder": "Open the selected available watched folder in File Explorer. Use Locate moved folder if its location has changed.",
             "Filing recovery…": "Inspect copies retained after interrupted filing.",
             "Review library…": "Compare duplicate papers and PC/tablet folder differences before changing relationships.",
         }
@@ -1219,7 +1254,7 @@ class App(WorkspaceLayouts):
         return result_tooltip(entry)
 
     def note_tooltip_help(self, row, column):
-        return "Select to read this paper here. Double-click or press Enter to open its reading copy in your configured external viewer." if self.entries[int(row)].get("pdf_document") else "Select to read this result. Double-click or press Enter opens its PDF page in your configured external viewer."
+        return "Select to read this paper here. Double-click or press Enter to open its reading copy in your Windows default PDF viewer." if self.entries[int(row)].get("pdf_document") else "Select to read this result. Double-click or press Enter opens its PDF page in your Windows default PDF viewer."
 
     def reader_document_details(self):
         entry = self.selected_entry()
@@ -1289,10 +1324,36 @@ class App(WorkspaceLayouts):
             self.update_match_navigation()
 
     def view_notes(self, event=None):
-        self.all_projects.set(False)
+        project = self.selected_project()
+        paper = next(iter(self.papers.selection()), None)
+        if not project:
+            self.notify("Select a watched folder first.", "library")
+            return
+        if paper in self.failed_papers:
+            self.notify("This PDF has no readable library entry yet. Use Open externally to inspect it, or Sync PDFs to retry.", "library")
+            return
+        # An explicit open must not inherit filters that hide the chosen paper.
+        self.reader_handoff = True
+        try:
+            self.all_projects.set(False)
+            self.search.set("")
+            self.label_filter.set("All papers")
+            self.note_type = "All notes"
+            self.search_scope.set("All")
+        finally:
+            self.reader_handoff = False
         self.sync_reader_filters()
-        self.refresh_notes()
+        self.update_search_options_summary()
+        self.query_signature = None
+        self.notes.selection_remove(self.notes.selection())
+        self.refresh_notes(target={"document_id": paper, "key": "pdf-document"} if paper else None)
+        self.reader_views.select(self.pdf_reader)
         self.tabs.select(self.notes_tab)
+
+    def open_library_reader(self, row):
+        self.papers.selection_set(row)
+        self.papers.focus(row)
+        self.view_notes()
 
     def sync_reader_filters(self):
         p = self.selected_project()
@@ -1306,7 +1367,7 @@ class App(WorkspaceLayouts):
         self.reader_paper.current(self.reader_paper_ids.index(sel[0])+1 if sel and not self.all_projects.get() else 0)
         self.notebook_button.configure(state="normal" if p and not self.all_projects.get() else "disabled")
         available = bool(p and p["root"] in self.view.directories)
-        self.library_folder_button.configure(state="normal" if available else "disabled")
+        self.folder_actions_button.action_menu.entryconfigure("Open folder", state="normal" if available else "disabled")
         self.notes_folder_button.configure(state="normal" if available and not self.all_projects.get() else "disabled")
         self.reader_folder_path_access.refresh()
         self.reader_paper_path_access.refresh()
@@ -1358,7 +1419,8 @@ class App(WorkspaceLayouts):
         self.paper_details.set(details, selected=bool(path), paths=paths)
         self.library_source_button.configure(state="normal" if path and (failed or not document["missing"]) else "disabled")
         role = document.get("paper_source", {}).get("metadata", {}).get("role") if document else None
-        self.library_send_button.configure(state="normal" if document and not document["missing"] and role != "tablet_render" else "disabled")
+        self.library_paper_actions.action_menu.entryconfigure("Send selected PDF…", state="normal"
+            if self.cloud_config()["integration_enabled"] and document and not document["missing"] and role != "tablet_render" else "disabled")
 
 
     def selected_project(self):
@@ -1529,6 +1591,15 @@ class App(WorkspaceLayouts):
                 parent=self.root, default="no", icon="warning"):
             self.service.command("rebuild", p["id"])
 
+    def open_file_or_folder(self, path):
+        """Open an existing local item; PDF files use the system viewer adapter."""
+        if not path:
+            messagebox.showinfo("No local copy", "This item has no available local file or folder. Sync it or review its folder mapping first.", parent=self.root)
+        elif Path(path).is_file() and Path(path).suffix.casefold() == ".pdf":
+            self.open_pdf(path, source_only=True)
+        else:
+            self.open_path(path)
+
     def open_path(self, path):
         try:
             if not Path(path).exists():
@@ -1627,7 +1698,7 @@ class App(WorkspaceLayouts):
             self.notify("Exporting citations…", section)
             background(self, lambda: export_citations(self.store, ids, target),
                        lambda count: self.notify(f"Exported {count} citation(s) to {target}", section),
-                       lambda error: self.notify(f"Could not export citations: {error}", section))
+                       lambda error: self.notify(f"Could not export citations: {error}", section), task=f'Exporting citations: {Path(target).name}')
 
     def settings(self):
         project = self.selected_project()
@@ -1706,8 +1777,9 @@ class App(WorkspaceLayouts):
                 if widget.winfo_exists():
                     widget.configure(state=state)
             self.initial_controls.clear()
-            preference = view.preference("pdf_viewer", {"viewer": "system"})
-            self.viewer_preference = preference if isinstance(preference, dict) and preference.get("viewer") in VIEWERS else {"viewer": "system"}
+            # All external PDF actions follow the current Windows association,
+            # including libraries with an older per-app viewer override.
+            self.viewer_preference = {"viewer": "system"}
             config = self.cloud_config()
             if config["pc_root"] and config.get("source_folder_id") and self.cloud_setup_expanded:
                 self.toggle_cloud_setup()
@@ -1718,7 +1790,7 @@ class App(WorkspaceLayouts):
             self.status.set("Saved library loaded. Checking for changes in the background…")
             self.service.start()
             if view.preference("inbox", {}):
-                background(self, self.inbox.pending_filings, self.resume_filings)
+                background(self, self.inbox.pending_filings, self.resume_filings, task='Checking pending Inbox filings…')
             if self.inbox.config().get("enabled"):
                 self.inbox.start()
                 self.inbox_view.refresh()
@@ -1733,7 +1805,7 @@ class App(WorkspaceLayouts):
             if result.get("is_pdf") and result.get("job_id") not in handled:
                 self.service.command("filed_pdf", result)
             else:
-                background(self, lambda job_id=result["job_id"]: self.inbox.acknowledge_filing(job_id), lambda _: None)
+                background(self, lambda job_id=result["job_id"]: self.inbox.acknowledge_filing(job_id), lambda _: None, task='Saving the completed Inbox filing…')
 
     @staticmethod
     def update_rows(tree, rows):
@@ -1864,14 +1936,16 @@ class App(WorkspaceLayouts):
         self.update_search_options_summary()
         self.refresh_notes()
 
-    def refresh_notes(self):
+    def refresh_notes(self, *, target=None):
         """Query off the Tk thread without loading every crop; cancel stale searches."""
+        if self.closing or getattr(self, "reader_handoff", False):
+            return
         if self.search_after:
             self.root.after_cancel(self.search_after)
         self.search_after = None
         p = self.selected_project()
         paper = self.papers.selection()
-        current = self.selected_entry()
+        current = target or self.selected_entry()
         options = dict(project_id=p["id"] if p and not self.all_projects.get() else None,
                        document_id=paper[0] if paper and not self.all_projects.get() else None,
                        query=self.search.get(), fields=list(self.search_fields),
@@ -1892,17 +1966,25 @@ class App(WorkspaceLayouts):
             self.root.after_cancel(self.notes_after)
             self.notes_after = None
         self.set_reader_search_busy(True)
+        # Each query owns its slot, so a cancelled worker cannot overwrite the
+        # next query's progress. Poll only the latest snapshot on the Tk thread.
+        self.query_progress = progress_slot = [None]
+        def report_progress(state):
+            progress_slot[0] = state
         scope = self.search_scope.get()
         self.note_count.set(({"Notes": "Searching notes…", "PDFs": "Searching PDFs…", "All": "Searching notes and PDFs…"}[scope])
                             if self.search.get().strip() else "Loading results…")
         self.export_button.configure(state="disabled")
         self.query_future = self.query_executor.submit(search_library, self.store, self.pdf_worker,
-                                                       self.search_scope.get(), **options, cancelled=cancelled.is_set)
+                                                       self.search_scope.get(), **options, cancelled=cancelled.is_set,
+                                                       progress=report_progress)
         self.query_future.add_done_callback(lambda future: self.query_results.put((generation, current, future)))
 
     def set_reader_search_busy(self, busy):
         self.reader_search_busy = busy
         if busy:
+            self.search_progress_state = None
+            self.search_progress.configure(mode="indeterminate", maximum=100, value=0)
             if not self.search_progress.winfo_manager():
                 self.search_progress.pack(side="right", before=self.search_options_button, padx=(8, 0))
             if not getattr(self, "search_progress_after", None):
@@ -1913,11 +1995,29 @@ class App(WorkspaceLayouts):
                 self.search_progress_after = None
             self.search_progress.pack_forget()
 
+    def update_search_progress(self, state):
+        if not self.reader_search_busy or self.closing:
+            return
+        self.search_progress_state = state
+        total, current = state["total"], state["current"]
+        self.search_progress.configure(mode="determinate", maximum=max(1, total), value=current)
+        self.note_count.set(f"{current} / {total} {state['unit']}")
+
+    def search_progress_help(self):
+        state = self.search_progress_state
+        busy = getattr(self, "reader_search_busy", False)
+        if busy and state:
+            detail = state.get("detail", "")
+            return state["phase"] + ("\n" + detail if detail else "")
+        return ("Searching the selected scope. The previous results remain visible until the new search finishes."
+                if busy else self.note_count.get())
+
     def animate_reader_search(self):
         self.search_progress_after = None
         if self.closing or not self.reader_search_busy:
             return
-        self.search_progress.step(4)
+        if str(self.search_progress["mode"]) == "indeterminate":
+            self.search_progress.step(4)
         # Use a Python-owned timer so normal Tk teardown can cancel it, unlike
         # ttk's Tcl-owned Autoincrement callback (which can be a tuple).
         self.search_progress_after = self.root.after(60, self.animate_reader_search)
@@ -1925,6 +2025,7 @@ class App(WorkspaceLayouts):
     def finish_query(self, generation, current, future):
         if self.closing or generation != self.query_generation:
             return
+        self.query_progress = [None]
         try:
             entries = future.result()
         except SearchSyntaxError as exc:
@@ -1981,6 +2082,8 @@ class App(WorkspaceLayouts):
                 if current and (e["document_id"], e["key"]) == (current["document_id"], current["key"]):
                     selected[0] = str(i)
             if end < len(entries):
+                self.update_search_progress({"phase": "Displaying results", "unit": "results",
+                                             "current": end, "total": len(entries)})
                 self.notes_after = self.root.after(1, lambda: insert_rows(end))
                 return
             if entries:
@@ -2004,7 +2107,7 @@ class App(WorkspaceLayouts):
             self.preview()
         insert_rows()
 
-    def preview(self, event=None):
+    def preview(self, event=None, *, sync_match=True):
         e = self.selected_entry()
         self.note_document_title.set_title(result_title(e) if e else "")
         self.pdf_reader.set_entry(e, getattr(self, "result_terms", ()))
@@ -2099,7 +2202,7 @@ class App(WorkspaceLayouts):
         self.preview_text.yview_moveto(0)
         self.image_size = None
         self.draw_image()
-        if e:
+        if e and sync_match:
             self.sync_main_match()
 
     def toggle_note_details(self):
@@ -2136,12 +2239,29 @@ class App(WorkspaceLayouts):
             self.reader_expand_button.configure(text="Exit reading mode")
 
     def load_reader_document(self, entry, cancelled):
+        from .reader_source import ReaderSource, file_version
         reference, page = self.entry_pdf_target(entry)
         if entry.get("missing"):
             raise FileNotFoundError("This PDF is unavailable. Locate it in Library, or choose another paper.")
         if cancelled():
             raise InterruptedError("Reader selection changed")
-        if entry.get("kind") == "pdf" and not entry.get("logical_paper_id"):
+        exact = entry.get("kind") == "pdf" and not entry.get("logical_paper_id")
+        source_key = (getattr(self, "query_generation", None), str(self.store.path), str(reference), exact,
+                      entry.get("source_digest"), entry.get("source_note_revision"))
+        prepared = getattr(self, "reader_prepared_source", None)
+        reuse = prepared is not None and prepared.reusable(source_key)
+        if not reuse:
+            dependencies = [self.store.path, str(self.store.path) + "-wal", entry["path"]]
+            if entry.get("combined_view_path"):
+                dependencies.append(entry["combined_view_path"])
+            if entry.get("logical_paper_id") and hasattr(self.store, "connect"):
+                from .paper_registry import Registry
+                dependencies.extend(source["locator"] for source in Registry(self.store).sources(entry["logical_paper_id"])
+                                    if source["kind"] == "local")
+            versions = {Path(item): file_version(item) for item in dependencies}
+        if reuse:
+            path = prepared.path
+        elif exact:
             path = Path(self.pdf_worker.materialize_source(self.store.path, reference, cancelled))
         else:
             path = Path(self.pdf_worker.materialize_cancellable(self.store.path, reference, cancelled))
@@ -2153,6 +2273,8 @@ class App(WorkspaceLayouts):
         managed = entry.get("metadata", {}).get("managed_cloud_id") or entry.get("metadata", {}).get("tablet_layers_only")
         location = self.pdf_worker.reader_location(path, page, entry.get("path"), entry.get("page"),
             entry.get("rect") if entry.get("kind") != "pdf" and not managed else None, cancelled)
+        if not reuse:
+            self.reader_prepared_source = ReaderSource(source_key, path, versions)
         return {"path": str(path.resolve()), "title": result_title(entry), "page": page,
                 "rect": location["rect"], "hasSelection": not entry.get("pdf_document", False),
                 "mainHits": entry.get("search_hits", []),
@@ -2240,10 +2362,13 @@ class App(WorkspaceLayouts):
                                    getattr(self, "current_match_index", None), step)
         if not target:
             return
-        self.notes.selection_set(target.row)
-        self.notes.focus(target.row)
-        self.notes.see(target.row)
-        self.preview()
+        if not selected or selected[0] != target.row:
+            self.notes.selection_set(target.row)
+            self.notes.focus(target.row)
+            self.notes.see(target.row)
+            # Send the requested occurrence once, after preparing the row.
+            # preview() would otherwise send its first hit before this one.
+            self.preview(sync_match=False)
         self.current_match_index = target.hit_index
         self.highlight_main_match()
         self.update_match_navigation()
@@ -2444,7 +2569,7 @@ class App(WorkspaceLayouts):
         page_label = ttk.Label(header, text=page_description(entry), style="Section.TLabel")
         source = Button(header, text="Open PDF", command=lambda: self.open_entry_pdf(entry))
         source.pack(side="right")
-        Tooltip(source, f"{self.entry_paper_path(entry)}\n\nOpen this complete page with combined PC and tablet notes in your chosen PDF viewer.")
+        Tooltip(source, f"{self.entry_paper_path(entry)}\n\nOpen this complete page with combined PC and tablet notes in your Windows default PDF viewer.")
         info = ttk.Label(window, text="Loading full page…", style="Muted.TLabel", padding=12)
         info.pack(fill="x")
         info.bind("<Configure>", lambda event: info.configure(wraplength=max(100, event.width - 24)))
@@ -2559,7 +2684,7 @@ class App(WorkspaceLayouts):
 
     def launch_pdf(self, path, page=1, section="notes"):
         try:
-            status, page_supported = open_pdf_page(path, page, self.viewer_preference)
+            status, page_supported = open_pdf_page(path, page, {"viewer": "system"})
             self.notify(status, section)
             if not page_supported:
                 messagebox.showinfo("PDF page navigation", status, parent=self.root)
@@ -2627,8 +2752,8 @@ class App(WorkspaceLayouts):
                 self.notify(f"Annotated PDF saved: {destination}", section)
             self.pdf_export_future = background(self,
                 lambda: self.write_annotated_pdf(reference, target, expected_digest, expected_digest is None),
-                completed, failure)
-        self.pdf_export_future = background(self, inspect_target, prepared, failure)
+                completed, failure, task=f'Saving annotated PDF: {Path(target).name}')
+        self.pdf_export_future = background(self, inspect_target, prepared, failure, task='Checking the PDF export destination…')
 
     def send_paper(self):
         selection = self.papers.selection()
@@ -2737,8 +2862,8 @@ class App(WorkspaceLayouts):
             "Reader: choose Folder, Paper, and Collection or tag in the equal-width dropdowns, then browse or search notes and PDFs below. The dropdown beside Search chooses Notes, PDFs, or All. An empty search lists notes and one row per PDF; entering a query finds matching pages. Clear search or Escape in the search field restores browsing without changing other filters. Results group by Paper; Type sorts Drawing, Highlight, Note and PDF in either direction. Search filters contains matching rules and note fields. Drag a column divider to see more text, or double-click it to fit the column to its rows.\n\n"
             "Reader views: Note view shows extracted text, comments, labeled search excerpts and drawing close-ups. PDF view shows the full document. Switching views keeps the result selection, PDF zoom and position. Previous/Next match follows actual main-search occurrences in source reading order, including columns, across results and papers. Blue marks identify main-search hits; green marks identify Find in PDF hits. Only enabled note fields count as main hits. Surrounding printed text is off by default in Search filters; opt-in matches identify that source. Annotation color includes original note color names in the search: for example, tantalum AND yellow. It does not set search-mark colors. Paper titles come from saved citation/PDF metadata; when those are unavailable or unusable the filename is shown. Citation details lets you review and save a better title.\n\n"
             "PDF reader: select a result to jump to its page, or scroll freely and use Back to selection to return. Reading mode hides filters and results for more PDF width and height; Exit reading mode restores your previous view. Find in PDF or Ctrl+F inside the PDF searches only this document without changing the main result list. Selecting a result, using the main match arrows, changing the main search, or closing Find restores main-search navigation. Ctrl + click-and-drag pans the PDF or an image preview; ordinary dragging selects PDF text. Ctrl + mouse wheel zooms; Ctrl + double-click resets zoom and pan (125% in Reading mode or Fit width normally, plus the current-page start for PDFs; opening zoom and top-left for images). Ctrl+0 restores the same mode default. Main-match arrows use 125% in Reading mode and Fit width normally. The reader requires Windows WebView2 Runtime and uses bundled PDF.js resources locally. Retry reader recovers a failed start. PDF scripting, forms and annotation editing are disabled.\n\n"
-            "Open externally opens the original source PDF in the computer's default application, where you can edit it. Sync PDFs afterwards to refresh extracted notes. Library Open PDF uses your saved external viewer preference and prepares a verified combined reading copy.\n\n"
-            "Open PDF combines PC and tablet notes when the paper version and page positions are verified. Uncertain matches need review first. Export annotated PDF saves this combined view as a separate PDF. Your original sources stay intact.\n\n"
+            "Reader Open externally opens the original source PDF in the computer's default application, where you can edit it. Sync PDFs afterwards to refresh extracted notes. Library Open externally uses the same Windows default application and prepares a verified combined reading copy.\n\n"
+            "Library View in Reader, double-click, or Enter opens the selected paper's PDF and notes here with fresh results. Other file/folder lists use double-click or Enter to open the clicked item externally. Grouped findings reveal their copies. Library Actions contains Send selected PDF. Combined reading views require verified paper versions and page positions; uncertain matches need review first. Export annotated PDF saves the combined view separately.\n\n"
             "Highlights keep their text and PDF link. Drawings and handwriting retain context previews, also in Word notebooks. After a tablet paper is verified and refreshed, Word PDF links open its saved original. Older tablet copies keep their existing links until that refresh succeeds. Use Notable to open or export the combined annotated view.\n\n"
             "PDF page is the physical file position used by Open PDF. PDF labels are separate; journal pages appear only when verified.\n\n"
             "Settings: configure sorting, your own optional Gemini key, PDF viewing and processing defaults. Gemini starts off; Local only makes no naming requests. Key removal stays pending until Save; Undo removal or Cancel keeps the saved key. Library & diagnostics identifies saved libraries.\n\n"
@@ -2812,7 +2937,7 @@ class App(WorkspaceLayouts):
             if event == "inbox_filed" and payload.get("is_pdf"):
                 self.service.command("filed_pdf", payload)
             elif event == "inbox_filed":
-                background(self, lambda job_id=payload["job_id"]: self.inbox.acknowledge_filing(job_id), lambda _: None)
+                background(self, lambda job_id=payload["job_id"]: self.inbox.acknowledge_filing(job_id), lambda _: None, task='Saving the completed Inbox filing…')
             if event in {"inbox_changed", "inbox_filed", "inbox_prepared", "inbox_skipped", "inbox_config_changed"} and not self.closing:
                 self.inbox_view.load_rows()
             if event == "inbox_error" and not self.closing:
@@ -2860,6 +2985,9 @@ class App(WorkspaceLayouts):
             self.refresh_needed = False
             self.next_refresh = now + 2
             self.refresh()
+        progress = self.query_progress[0]
+        if progress is not None and progress is not self.search_progress_state:
+            self.update_search_progress(progress)
         for _ in range(10):
             try:
                 generation, current, future = self.query_results.get_nowait()
@@ -2887,10 +3015,15 @@ class App(WorkspaceLayouts):
             self.root.after(100, self.poll)
 
     def show_work_progress(self):
+        if self.closing:
+            return
         state = self.service.activity_state
         phase = state["phase"] if state else "Loading library" if not self.library_loaded else ""
         if phase:
-            count = (f" {state['current']}/{state['total']}" if state and state.get("total")
+            measured = bool(state and state.get("total") is not None and state.get("current") is not None)
+            count = (f" · {state['current']} / {state['total']}" if measured
+                     else f" · {state['current']} found" if state and state.get("current")
+                     and phase == "Finding local PDFs"
                      else f" · {state['current']} checked" if state and state.get("current")
                      and phase == "Checking local PDFs" else
                      f" {state['current']}" if state and state.get("current") else "")
@@ -2898,18 +3031,39 @@ class App(WorkspaceLayouts):
             if not self.work_visible:
                 self.work_label.pack(side="right", padx=8)
                 self.work_progress.pack(side="right", padx=8)
-                self.work_progress.start(80)
                 self.work_visible = True
+            mode = "determinate" if measured else "indeterminate"
+            if str(self.work_progress["mode"]) != mode:
+                self.work_progress.stop()
+                self.work_progress.configure(mode=mode, maximum=100, value=0)
+            if measured:
+                self.work_progress.configure(maximum=max(1, state["total"]), value=state["current"])
+            elif not getattr(self, "work_animating", False):
+                self.work_progress.start(80)
+            self.work_animating = not measured
         elif self.work_visible:
             self.work_progress.stop()
             self.work_progress.pack_forget()
             self.work_label.pack_forget()
             self.work_visible = False
+            self.work_animating = False
 
     def close(self):
+        if self.closing:
+            if getattr(self, "shutdown_dialog", None):
+                self.shutdown_dialog.present()
+            return
+        from .shutdown import ShutdownDialog, ShutdownTasks
         self.closing = True
+        self.shutdown_dialog = ShutdownDialog(self.root)
+        for name in ("search_after", "notes_after", "image_after", "search_progress_after"):
+            timer = getattr(self, name, None)
+            if timer:
+                self.root.after_cancel(timer)
+                setattr(self, name, None)
+        self.reader_search_busy = False
+        self.work_progress.stop()
         self.pdf_reader.close()
-        self.status.set("Finishing the current PDF safely before closing…")
         self.service.stop()
         self.query_cancel.set()
         self.preview_cancel.set()
@@ -2919,14 +3073,59 @@ class App(WorkspaceLayouts):
         self.inbox.stop(wait=False)
         if self.reconciliation_window:
             self.reconciliation_window.cancelled.set()
-        if not self.service.thread:
-            self.pdf_worker.shutdown(wait=False)
+        if self.context_window and self.context_window.winfo_exists():
+            self.context_window.destroy()
+        steps = []
+        if self.service.thread:
+            steps.append(("service", "Stopping library sync and folder watching…", self.service.thread.join))
+        steps.extend([
+            ("workflow", "Finishing library actions…", lambda: self.workflow_executor.shutdown(wait=True, cancel_futures=True)),
+            ("search", "Stopping searches and library lookups…", lambda: self.query_executor.shutdown(wait=True, cancel_futures=True)),
+            ("context", "Finishing PDF preparation and page previews…", lambda: self.context_executor.shutdown(wait=True, cancel_futures=True)),
+            ("inbox", "Stopping Inbox document processing…", self.inbox.wait_stopped),
+            ("pdf", "Closing the PDF processing worker…", self.pdf_worker.shutdown),
+            ("reader", "Closing the embedded PDF reader…", self.pdf_reader.wait_closed),
+        ])
+        self.shutdown_tasks = ShutdownTasks(steps)
         self.wait_close()
 
+    def shutdown_detail(self):
+        key, label = self.shutdown_tasks.stage
+        if key == "service":
+            state = self.service.activity_state
+            if state:
+                label = state["phase"]
+                if state.get("total"):
+                    label += f" · {state.get('current') or 0}/{state['total']}"
+                if state.get("detail"):
+                    label += "\n" + state["detail"]
+        elif key == "workflow":
+            tasks = list(dict.fromkeys(getattr(future, "shutdown_label", "Finishing a library action…")
+                                       for future in self.workflow_futures if not future.done()))
+            if tasks:
+                label = "\n".join(tasks[:3])
+                if len(tasks) > 3:
+                    label += f"\nAnd {len(tasks) - 3} other tasks."
+        elif key in {"search", "context"}:
+            names = (("query_future", "Stopping the current note/PDF search…"),
+                     ("preview_future", "Finishing the selected note preview…"),
+                     ("library_future", "Finishing the library snapshot…"),
+                     ("cloud_path_future", "Finishing reMarkable folder lookup…")) if key == "search" else (
+                         ("pdf_open_future", "Finishing preparation of the external PDF…"),
+                         ("context_future", "Finishing the full-page PDF preview…"))
+            active = [description for name, description in names
+                      if getattr(self, name, None) is not None and not getattr(self, name).done()]
+            if active:
+                label = "\n".join(active)
+        elif key == "inbox" and self.inbox.activity_state:
+            state = self.inbox.activity_state
+            label = state["phase"] + "\n" + state.get("detail", "")
+        return label
+
     def wait_close(self):
-        if ((self.service.thread and self.service.thread.is_alive())
-                or any(not future.done() for future in self.workflow_futures)
-                or any(reaper.is_alive() for reaper in self.pdf_reader.reapers)):
+        if not self.shutdown_tasks.finished.is_set():
+            self.shutdown_dialog.update(self.shutdown_detail())
             self.root.after(100, self.wait_close)
         else:
+            self.shutdown_dialog.destroy()
             self.root.destroy()

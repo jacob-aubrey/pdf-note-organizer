@@ -25,7 +25,7 @@ BUTTON_HELP = {
     "Add folder…": "Watch an existing PC folder for new and changed annotated PDFs.",
     "Sync PDFs": "Check watched PC folders for new or changed PDFs and update their notes and notebooks.",
     "Folder settings": "Change extraction and Word layout for the selected watched folder.",
-    "View notes": "Read the notes from the selected folder or paper.",
+    "View in Reader": "Open the selected folder or paper in Reader with its PDF and saved notes.",
     "Export view…": "Save the notes currently displayed by your folder, paper and search filters to a separate Word file.",
     "Open notebook": "Open the selected folder's generated Word notebook.",
     "Enlarge image": "Inspect the selected drawing close-up. Fit its width or height; Ctrl+drag pans, Ctrl+wheel zooms, and Ctrl+double-click resets the opening view.",
@@ -151,15 +151,55 @@ class EntryPlaceholder:
             pass
 
 
+def bind_item_open(tree, open_item):
+    """Activate a real clicked/focused row; leave headings and blank space alone."""
+    def activate(event):
+        if getattr(tree, "status_message", None) is not None:
+            return "break"
+        if getattr(event, "keysym", "") in {"Return", "KP_Enter"}:
+            selected = tree.selection()
+            row = tree.focus() if tree.focus() in selected else next(iter(selected), "")
+        else:
+            if tree.identify_region(event.x, event.y) not in {"cell", "tree"}:
+                return
+            row = tree.identify_row(event.y)
+        if row and tree.exists(row):
+            open_item(row)
+            return "break"
+    tree.bind("<Double-Button-1>", activate)
+    tree.bind("<Return>", activate)
+    tree.bind("<KP_Enter>", activate)
+    return activate
+
+
 class DataTable(ttk.Treeview):
     """A table with a quiet empty state that never becomes a selectable row."""
 
     def __init__(self, parent, empty_text="No items to show", **kwargs):
         super().__init__(parent, **kwargs)
         self.empty_label = ttk.Label(self, text=empty_text, style="Empty.TLabel", anchor="center", justify="center")
+        self.status_message = None
+        self.status_label = ttk.Label(self, style="Empty.TLabel", anchor="center", justify="center")
         self.bind("<Configure>", self.update_empty, add="+")
 
+    def set_status(self, message=None):
+        """Cover the table body during work, retaining its rows and selection."""
+        self.status_message = message
+        self.status_label.configure(text=message or "")
+        self.update_empty()
+
     def update_empty(self, event=None):
+        if self.status_message is not None:
+            self.empty_label.place_forget()
+            # Keep headings visible, including in short one-row tables.
+            headings = [y for y in range(1, min(100, self.winfo_height()))
+                        if self.identify_region(10, y) == "heading"]
+            top = max(headings) + 1 if headings else 1
+            self.status_label.configure(wraplength=max(60, self.winfo_width() - 24))
+            self.status_label.place(x=1, y=top, relwidth=1, width=-2, relheight=1, height=-top-1)
+            self.status_label.lift()
+            return
+        self.status_label.place_forget()
         if self.get_children():
             self.empty_label.place_forget()
         elif self.winfo_height() > 80:

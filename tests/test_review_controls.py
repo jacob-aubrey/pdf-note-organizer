@@ -149,7 +149,7 @@ class ReviewControlTests(unittest.TestCase):
     def test_older_scan_completion_cannot_replace_newer_findings_or_status(self):
         review = self.review()
         pending = []
-        def defer(app, function, success, error=None):
+        def defer(app, function, success, error=None, *, task=None):
             pending.append((success, error))
         with patch("note_organizer.workflow_ui.background", side_effect=defer):
             review.check()
@@ -216,6 +216,8 @@ class ReviewControlTests(unittest.TestCase):
         row = next(row for row in review.rows.values() if row["kind"] == "local_duplicate")
         review.tree.selection_set(row["id"])
         review.selected()
+        review.local_copies.selection_set(review.local_copies.get_children())
+        review.copy_selected()
         with patch("note_organizer.workflow_ui.messagebox.askokcancel", return_value=True):
             review.link_button.invoke()
             self.wait(lambda: getattr(review, "undo_operation", None) is not None
@@ -248,7 +250,7 @@ class ReviewControlTests(unittest.TestCase):
             self.app.projects.selection_set(str(project))
             self.app.project_selected()
             with patch.object(self.app, "open_path") as opened:
-                self.app.library_folder_button.invoke()
+                self.app.folder_actions_button.action_menu.invoke("Open folder")
                 self.app.notes_folder_button.invoke()
             self.assertEqual([canonical(call.args[0]) for call in opened.call_args_list],
                              [canonical(expected), canonical(expected)])
@@ -260,7 +262,7 @@ class ReviewControlTests(unittest.TestCase):
         opened.assert_not_called()
         self.app.projects.selection_set(str(missing))
         self.app.project_selected()
-        self.assertTrue(self.app.library_folder_button.instate(["disabled"]))
+        self.assertEqual(self.app.folder_actions_button.action_menu.entrycget("Open folder", "state"), "disabled")
         self.assertTrue(self.app.notes_folder_button.instate(["disabled"]))
 
     def test_old_async_library_snapshot_cannot_replace_new_inbox_configuration(self):

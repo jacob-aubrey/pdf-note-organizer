@@ -60,7 +60,7 @@ class MaintenanceWindow:
                 f"{self.restored_path}\n\nOpen this restored library in a separate app window with its own recovered originals and settings.")
         annotate_buttons(window)
         fit_dialog(window, app.root)
-        background(app, lambda: stats(app.store), self.loaded, self.failed)
+        background(app, lambda: stats(app.store), self.loaded, self.failed, task='Reading library storage details…')
 
     def loaded(self, result):
         if self.window.winfo_exists():
@@ -86,8 +86,8 @@ class MaintenanceWindow:
         def completed(result):
             self.set_busy(False)
             self.status.set(f"Verified backup saved: {target}" + ("\nLibrary compacted and verified." if action == "compact" else ""))
-            background(self.app, lambda: stats(self.app.store), self.loaded, self.failed)
-        background(self.app, lambda: self.app.service.storage_action(action, target), completed, self.failed)
+            background(self.app, lambda: stats(self.app.store), self.loaded, self.failed, task='Refreshing library storage details…')
+        background(self.app, lambda: self.app.service.storage_action(action, target), completed, self.failed, task='Creating and verifying a library backup…' if action == 'backup' else 'Backing up and compacting the library…')
 
     def restore(self):
         if self.busy:
@@ -106,7 +106,7 @@ class MaintenanceWindow:
             self.set_busy(False)
             self.status.set(f"Restored and verified: {result}\nOpen restored library launches this separate recovery, using its own original file snapshots. Inbox watching and cloud services start paused for setup review. Your current library stays open.")
             self.app.open_path(result)
-        background(self.app, lambda: self.app.service.storage_action("restore", (source, destination)), completed, self.failed)
+        background(self.app, lambda: self.app.service.storage_action("restore", (source, destination)), completed, self.failed, task='Finishing library restoration…')
 
     def open_restored(self):
         if self.restored_path:

@@ -17,17 +17,14 @@ class SettingsPathConsistencyTests(unittest.TestCase):
     setUp = test_preferences_ui.PreferencesUITests.setUp
     tearDown = test_preferences_ui.PreferencesUITests.tearDown
 
-    def test_active_library_and_viewer_share_compact_path_controls(self):
+    def test_active_library_keeps_compact_path_controls(self):
         self.dialog.cancel()
         self.app.data_dir = Path(long_path(self.folder, "Active library"))
         self.dialog = PreferencesDialog(self.app)
-        viewer = long_path(self.folder, "PDF viewer.exe")
-        self.dialog.viewer_path.set(viewer)
         self.root.update()
         for entry, button, value, explanation in (
                 (self.dialog.library_path_entry, self.dialog.library_path_copy,
-                 str(self.app.data_dir.resolve()), "reads and writes this library"),
-                (self.dialog.path_entry, self.dialog.viewer_path_copy, viewer, "Other application")):
+                 str(self.app.data_dir.resolve()), "reads and writes this library"),):
             self.assertIsInstance(entry, ttk.Entry)
             self.assertIn(value, entry.tooltip.text())
             self.assertIn(explanation, entry.tooltip.text())

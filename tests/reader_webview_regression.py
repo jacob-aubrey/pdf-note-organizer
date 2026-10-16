@@ -548,6 +548,16 @@ def main():
                         assert repeated_state['scaleValue'] == 'page-width' and repeated_state['scroll']['left'] < 1, repeated_state
                         repeated_states.append(repeated_state)
                     assert len(repeated_states) == 4
+                    # Ordinary result callbacks and late duplicate selections
+                    # must obey the same fit/centering policy as arrow clicks.
+                    js('main-find-pan-before-selection', 'document.getElementById("zoom").value="2";document.getElementById("zoom").dispatchEvent(new Event("change"));document.getElementById("viewerContainer").scrollLeft=160;true', .2)
+                    js('main-find-duplicate-selection', 'NotableReader.selectMatch({index:2,fitWidth:true});NotableReader.selectMatch({index:2});true', .4)
+                    centered = js('main-find-duplicate-state', '''(()=>{
+                        const s=NotableReader.state(),v=document.getElementById('viewerContainer').getBoundingClientRect();
+                        const p=document.querySelectorAll('.page')[s.selectedMatch.pageIdx].getBoundingClientRect();
+                        return {...s,pageFits:p.left>=v.left-1 && p.right<=v.right+1};
+                    })()''')
+                    assert centered['scaleValue'] == 'page-width' and centered['scroll']['left'] < 1 and centered['pageFits'], centered
                     js('local-find-zoom', 'document.getElementById("zoom").value="2";document.getElementById("zoom").dispatchEvent(new Event("change"));document.getElementById("findToggle").click();document.getElementById("findInput").value="passage";document.getElementById("findInput").dispatchEvent(new Event("input"));true', .5)
                     js('local-find-next', 'document.getElementById("findNext").click();true', .4)
                     local_find_state = js('local-find-fit-width-state', 'NotableReader.state()')
@@ -560,7 +570,9 @@ def main():
                             const page=document.querySelectorAll('.page')[s.selectedMatch.pageIdx];
                             const marks=Array.from(page?.querySelectorAll('.textLayer .highlight.selected') || []);
                             const v=document.getElementById('viewerContainer').getBoundingClientRect();
+                            const p=page?.getBoundingClientRect();
                             return {...s, selectedText:marks.map(m=>m.textContent).join(''),
+                                pageFits:!!p && p.left>=v.left-1 && p.right<=v.right+1,
                                 visible:marks.length>0 && marks.every(m=>{
                                     const r=m.getBoundingClientRect();
                                     return r.height>0 && r.top>=v.top && r.bottom<=v.bottom;
@@ -570,6 +582,8 @@ def main():
                         assert state['matches'] == {'current':occurrence + 1,'total':12}, state
                         assert state['selectedText'] == 'passage' and state['visible'], state
                         assert state['scaleValue'] == scale_value and state['scroll']['left'] < 1, state
+                        if scale_value == 'page-width':
+                            assert state['pageFits'], state
                         assert not state['lastWarning'], state
                         return state
                     check_local_hit('local-find-first-next-visible', 1)

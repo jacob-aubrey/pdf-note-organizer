@@ -151,3 +151,23 @@ def recycle_pdf(store, selection):
             db.execute("UPDATE projects SET dirty=1 WHERE id=?", (row["project_id"],))
         db.execute("DELETE FROM scan_errors WHERE path=?", (proof["path"],))
     return proof["path"]
+
+
+def recycle_pdfs(store, selections, progress=None):
+    """Recheck a reviewed batch before any deletion; report individual failures."""
+    from .remarkable_sync import excluded
+    proofs = {}
+    for selection in selections:
+        proof = reviewed_pdf(selection["path"], selection["root"], selection["digest"])
+        if excluded(store, proof["path"]):
+            raise ValueError("Managed cache and tablet files cannot be deleted from this review.")
+        proofs[proof["path"]] = proof
+    result = {"deleted": [], "failed": []}
+    for index, proof in enumerate(proofs.values(), 1):
+        try:
+            result["deleted"].append(recycle_pdf(store, proof))
+        except Exception as exc:
+            result["failed"].append({"path": proof["path"], "error": str(exc)})
+        if progress:
+            progress(index, len(proofs), proof["path"])
+    return result

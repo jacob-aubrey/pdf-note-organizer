@@ -16,7 +16,6 @@ from note_organizer.dialogs import PreferencesDialog
 from note_organizer.service import Service
 from note_organizer.storage import DEFAULT_SETTINGS, Store
 from note_organizer.theme import apply_theme
-from note_organizer.viewers import VIEWERS
 from note_organizer.widgets import Tooltip, fit_dialog
 
 
@@ -116,32 +115,19 @@ class PreferencesUITests(unittest.TestCase):
         self.assertFalse(self.dialog.window.winfo_exists())
         self.assertFalse(self.errors)
 
-    def test_other_viewer_enables_path_and_browse_with_explanation(self):
-        self.assertTrue(self.dialog.path_entry.instate(["disabled"]))
-        self.assertTrue(self.dialog.browse_button.instate(["disabled"]))
-        self.dialog.viewer.set(VIEWERS["custom"])
-        self.assertFalse(self.dialog.path_entry.instate(["disabled"]))
-        self.assertFalse(self.dialog.browse_button.instate(["disabled"]))
-        self.assertIn("opens the file normally", self.dialog.viewer_help.get())
-        self.assertIn("PDF page", self.dialog.viewer_help.get())
-        with patch("note_organizer.dialogs.filedialog.askopenfilename", return_value=str(self.folder / "viewer.exe")) as chooser:
-            self.dialog.browse_button.invoke()
-        self.assertEqual(self.dialog.viewer_path.get(), str(self.folder / "viewer.exe"))
-        self.assertEqual(chooser.call_args.kwargs["filetypes"], [("Windows application", "*.exe")])
-        self.dialog.viewer.set(VIEWERS["system"])
-        self.assertTrue(self.dialog.path_entry.instate(["disabled"]))
-        self.assertTrue(self.dialog.browse_button.instate(["disabled"]))
+    def test_pdf_viewer_explains_windows_default_without_an_app_override(self):
+        self.assertIn("Windows default PDF application", self.dialog.viewer_help.get())
+        self.assertIn("physical page", self.dialog.viewer_help.get())
+        self.assertFalse(hasattr(self.dialog, "viewer_path"))
 
-    def test_custom_viewer_save_commits_resolved_path_without_executing_it(self):
-        executable = self.folder / "Viewer.exe"
-        executable.write_bytes(b"test placeholder; never executed")
-        self.dialog.viewer.set(VIEWERS["custom"])
-        self.dialog.viewer_path.set(str(executable))
+    def test_save_replaces_legacy_viewer_override_with_windows_default(self):
+        self.app.viewer_preference = {"viewer": "adobe"}
+        self.store.set_preference("pdf_viewer", self.app.viewer_preference)
         self.dialog.save()
         self.settle_save()
+        self.assertEqual(self.app.viewer_preference, {"viewer": "system"})
+        self.assertEqual(self.store.preference("pdf_viewer"), {"viewer": "system"})
         self.assertEqual(self.queued_commands(), [])
-        self.assertFalse(self.dialog.window.winfo_exists())
-        self.assertEqual(self.store.preference("pdf_viewer"), {"viewer": "custom", "path": str(executable.resolve())})
 
     def test_failed_save_keeps_dialog_and_all_preferences(self):
         with self.store.connect() as db:
@@ -159,28 +145,6 @@ class PreferencesUITests(unittest.TestCase):
         self.assertIsNone(self.store.preference("default_settings"))
         self.assertEqual(self.app.viewer_preference, {"viewer": "system"})
         self.assertEqual(self.queued_commands(), [])
-
-    def test_invalid_custom_viewer_keeps_dialog_and_preferences(self):
-        for path in (self.folder / "Missing.exe", self.folder / "document.txt"):
-            with self.subTest(path=path):
-                if path.suffix == ".txt":
-                    path.write_text("not an executable")
-                self.dialog.viewer.set(VIEWERS["custom"])
-                self.dialog.viewer_path.set(str(path))
-                with patch("note_organizer.dialogs.messagebox.showerror") as error:
-                    self.dialog.save()
-                error.assert_called_once()
-                self.assertTrue(self.dialog.window.winfo_exists())
-                self.assertFalse(self.queued_commands())
-                self.assertEqual(self.app.viewer_preference, {"viewer": "system"})
-
-    def test_unavailable_known_viewer_is_explained_before_save(self):
-        self.dialog.viewer.set(VIEWERS["adobe"])
-        with patch("note_organizer.dialogs.find_viewer", return_value=""), patch("note_organizer.dialogs.messagebox.showerror") as error:
-            self.dialog.save()
-        self.assertIn("installed viewer", error.call_args.args[1])
-        self.assertFalse(self.queued_commands())
-        self.assertTrue(self.dialog.window.winfo_exists())
 
     def test_whole_page_disables_distance_and_explains_choice(self):
         gap = next(w for w in descendants(self.dialog.window) if isinstance(w, ttk.Spinbox) and str(w.cget("textvariable")) == str(self.dialog.processing.gap))

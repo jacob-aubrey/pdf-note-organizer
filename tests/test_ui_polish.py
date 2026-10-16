@@ -336,7 +336,7 @@ class UIPolishTests(unittest.TestCase):
         app.activity_toggle.invoke()
         self.assertEqual(app.activity_toggle.cget("text"), "Hide sync details")
         self.assertEqual(app.activity_toggle.icon_name, "chevron-up")
-        views = [w for w in descendants(self.root) if isinstance(w, Button) and w.cget("text") == "View notes"]
+        views = [w for w in descendants(self.root) if isinstance(w, Button) and w.cget("text") == "View in Reader"]
         self.assertEqual(len(views), 1)
         self.assertNotEqual(app.enlarge_button.icon_name, app.full_page_button.icon_name)
 

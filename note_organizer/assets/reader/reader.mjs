@@ -12,6 +12,8 @@ let mainPageMatches = [];
 let mainPageMatchesLength = [];
 let mainSelected = { pageIdx: -1, matchIdx: -1 };
 let mainScrollMatches = false;
+let mainMapping = null;
+let mainMappingBuilds = 0;
 // Keep PDF-local Find's full candidate set separate from the main search's
 // actual enabled-field occurrences. TextHighlighter reads this display facade,
 // so a late PDF.js extraction cannot paint unrelated query words.
@@ -67,7 +69,6 @@ let missingMainMatchPage = null;
 let lastWarning = "";
 let pan = null;
 let readingSnapshot = null;
-let centeredMainMatch = false;
 let suppressLinkClickUntil = 0;
 let suppressedPopups = new Set();
 
@@ -97,16 +98,17 @@ findController.scrollMatchIntoView = function (request) {
   }
   if (!mainScrollMatches || !element || pageIndex !== this.selected.pageIdx ||
       matchIndex !== this.selected.matchIdx) return;
-  mainScrollMatches = false;
-  if (!centeredMainMatch) {
-    element.scrollIntoView({ block: "start", inline: "center" });
+  const document = pdfDocument, selection = mainSelected;
+  requestAnimationFrame(() => {
+    if (inPdfFind || pdfDocument !== document || mainSelected !== selection ||
+        !mainScrollMatches || !element.isConnected ||
+        pageIndex !== this.selected.pageIdx || matchIndex !== this.selected.matchIdx) return;
+    mainScrollMatches = false;
+    const container = $("viewerContainer");
+    container.scrollTop += element.getBoundingClientRect().top - container.getBoundingClientRect().top - 65;
+    container.scrollLeft = 0;
     reportState();
-    return;
-  }
-  const container = $("viewerContainer");
-  container.scrollTop += element.getBoundingClientRect().top - container.getBoundingClientRect().top - 65;
-  container.scrollLeft = 0;
-  reportState();
+  });
 };
 
 function report(kind, values = {}) {
@@ -132,6 +134,7 @@ function diagnosticState() {
     selectedMatch: { ...findController.selected },
     pageMatches: findController.pageMatches.map(matches => matches?.length ?? 0),
     matches: { ...matchCount }, findMode: inPdfFind ? "pdf" : "library",
+    mainMappingBuilds,
     findQuery: $("findInput").value, expanded,
     panning: pan !== null,
     scroll: { left: $("viewerContainer").scrollLeft, top: $("viewerContainer").scrollTop },
@@ -193,6 +196,15 @@ function validMainHits(hits) {
   return (Array.isArray(hits) ? hits : []).filter(hit => hit && typeof hit === "object").map(hit => ({ ...hit }));
 }
 
+function matchRequest(value) {
+  const request = value && typeof value === "object" ? value : { index: value };
+  const result = { index: Math.max(0, Number.parseInt(request.index, 10) || 0), fitWidth: true };
+  for (const field of ["term", "text", "normalized_text", "context", "before", "after", "field"]) {
+    if (typeof request[field] === "string") result[field] = request[field];
+  }
+  return result;
+}
+
 function mainCandidateTerms() {
   // Search the actual enabled-field spellings rather than every query term.
   // Full union spans preserve overlapping Boolean terms; original spellings
@@ -206,6 +218,7 @@ function resetMainHighlights() {
   mainPageMatchesLength = [];
   mainSelected = { pageIdx: -1, matchIdx: -1 };
   mainScrollMatches = false;
+  mainMapping = null;
 }
 
 function updateSearchAuthority() {
@@ -217,6 +230,8 @@ function defaultScale() { return expanded ? "1.25" : "page-width"; }
 function applyMainDefault(page) {
   viewer.currentPageNumber = Math.min(Math.max(1, page), pdfDocument.numPages);
   viewer.currentScaleValue = defaultScale();
+  // Fitting may restore PDF.js's previous cached location. Keep this target.
+  viewer.currentPageNumber = Math.min(Math.max(1, page), pdfDocument.numPages);
   $("viewerContainer").scrollLeft = 0;
 }
 
@@ -292,8 +307,7 @@ function runFind(query, type = "", previous = false) {
 function useLibraryTerms() {
   if (!ready) return;
   inPdfFind = false;
-  centeredMainMatch = requestedMatch.fitWidth === true;
-  if (centeredMainMatch) applyMainDefault(active.page);
+  applyMainDefault(active.page);
   missingMainMatchPage = null;
   resetMainHighlights();
   updateSearchAuthority();
@@ -399,6 +413,11 @@ function contextualMatchIndex(request, matches, lengths, text) {
   return best;
 }
 
+function matchContextKey(request) {
+  return JSON.stringify([request.index, request.normalized_text || request.text || request.term,
+    request.context || request.snippet, request.before, request.after, request.field]);
+}
+
 function quoteCandidatesInSelection(pageIdx, matches, lengths) {
   if (!active.rect) return null;
   const page = viewer.getPageView(pageIdx);
@@ -495,26 +514,39 @@ function applyPendingMatch() {
   const raw = rawPageText.get(pageIdx);
   if (raw instanceof Promise) return false;
   const lengths = findController.candidateLengths[pageIdx];
-  const hasQuote = active.mainHits.some(hit => hit.field === "quote");
-  const quoteCandidates = hasQuote ? quoteCandidatesInSelection(pageIdx, matches, lengths) : null;
-  if (quoteCandidates === undefined) return false;
-  const mapped = new Map();
-  active.mainHits.forEach((hit, index) => {
-    if (!["quote", "context", "pdf"].includes(hit.field)) return;
-    const candidate = contextualMatchIndex({ ...hit, index, strict: true,
-      allowedCandidates: hit.field === "quote" ? quoteCandidates : null }, matches, lengths, raw || "");
-    if (candidate !== null) {
-      if (!mapped.has(candidate)) mapped.set(candidate, []);
-      mapped.get(candidate).push(index);
-    }
-  });
-  const candidateIndices = [...mapped.keys()].sort((left, right) => left - right);
-  mainPageMatches[pageIdx] = candidateIndices.map(index => matches[index]);
-  mainPageMatchesLength[pageIdx] = candidateIndices.map(index => lengths[index]);
+  // Mapping enabled-field hits back to PDF.js text is expensive. Reuse it
+  // while navigating this result instead of comparing every hit on every key.
+  if (!mainMapping || mainMapping.pageIdx !== pageIdx || mainMapping.matches !== matches ||
+      mainMapping.lengths !== lengths || mainMapping.hits !== active.mainHits) {
+    const hasQuote = active.mainHits.some(hit => hit.field === "quote");
+    const quoteCandidates = hasQuote ? quoteCandidatesInSelection(pageIdx, matches, lengths) : null;
+    if (quoteCandidates === undefined) return false;
+    const candidates = new Set(), selections = new Map();
+    active.mainHits.forEach((hit, index) => {
+      if (!["quote", "context", "pdf"].includes(hit.field)) return;
+      const descriptor = { ...hit, index, strict: true,
+        allowedCandidates: hit.field === "quote" ? quoteCandidates : null };
+      const candidate = contextualMatchIndex(descriptor, matches, lengths, raw || "");
+      selections.set(matchContextKey(descriptor), candidate);
+      if (candidate !== null) candidates.add(candidate);
+    });
+    const candidateIndices = [...candidates].sort((left, right) => left - right);
+    mainMapping = { pageIdx, matches, lengths, hits: active.mainHits,
+      quoteCandidates, candidateIndices, selections };
+    mainMappingBuilds++;
+    mainPageMatches[pageIdx] = candidateIndices.map(index => matches[index]);
+    mainPageMatchesLength[pageIdx] = candidateIndices.map(index => lengths[index]);
+  }
+  const { quoteCandidates, candidateIndices, selections } = mainMapping;
   const hit = active.mainHits[request.index];
-  const selectedCandidate = hit && ["quote", "context", "pdf"].includes(hit.field) ?
-    contextualMatchIndex({ ...hit, ...request, strict: true,
-      allowedCandidates: hit.field === "quote" ? quoteCandidates : null }, matches, lengths, raw || "") : null;
+  let selectedCandidate = null;
+  if (hit && ["quote", "context", "pdf"].includes(hit.field)) {
+    const descriptor = { ...hit, ...request, strict: true,
+      allowedCandidates: hit.field === "quote" ? quoteCandidates : null };
+    const key = matchContextKey(descriptor);
+    if (!selections.has(key)) selections.set(key, contextualMatchIndex(descriptor, matches, lengths, raw || ""));
+    selectedCandidate = selections.get(key);
+  }
   const matchIdx = selectedCandidate === null ? null : candidateIndices.indexOf(selectedCandidate);
   const previousPage = findController.selected.pageIdx;
   if (matchIdx === null || matchIdx < 0) {
@@ -612,9 +644,12 @@ async function open(payload) {
       hasSelection: payload.hasSelection === true };
     updateDocumentTitle(active.title || "PDF document");
     resetMainHighlights();
-    requestedMatch = { index: 0 };
+    requestedMatch = matchRequest(payload.match);
     if (pdfDocument && ready && oldUrl === active.url) {
       applySelection();
+      // The host can reveal the existing surface immediately. Debounced
+      // progress reports still follow as highlighting/rendering settles.
+      report("state", diagnosticState());
       return diagnosticState();
     }
     // Find belongs to the current document. A different paper starts with its
@@ -738,7 +773,6 @@ function findInPdf(type = "", previous = false) {
   updateSearchAuthority();
   viewer.currentScaleValue = defaultScale();
   $("viewerContainer").scrollLeft = 0;
-  centeredMainMatch = false;
   missingMainMatchPage = null;
   pendingMatch = null;
   runFind(query, type, previous);
@@ -750,6 +784,7 @@ eventBus.on("pagesinit", () => {
   pendingOpen = null;
   viewer.currentScaleValue = defaultScale();
   applySelection();
+  report("state", diagnosticState());
   reportState();
 });
 eventBus.on("pagechanging", () => { updateControls(); reportState(); });
@@ -940,17 +975,17 @@ window.NotableReader = {
   selectMatch(value) {
     if (!active?.url) return false;
     const request = value && typeof value === "object" ? value : { index: value };
-    requestedMatch = { index: Math.max(0, Number.parseInt(request.index, 10) || 0) };
-    requestedMatch.fitWidth = request.fitWidth === true;
-    for (const field of ["term", "text", "normalized_text", "context", "before", "after", "field"]) {
-      if (typeof request[field] === "string") requestedMatch[field] = request[field];
+    requestedMatch = matchRequest(request);
+    let hitsChanged = false;
+    if (Array.isArray(request.mainHits) && JSON.stringify(request.mainHits) !== JSON.stringify(active.mainHits)) {
+      active.mainHits = validMainHits(request.mainHits);
+      hitsChanged = true;
     }
-    if (Array.isArray(request.mainHits)) active.mainHits = validMainHits(request.mainHits);
     if (!ready) return false;
-    if (requestedMatch.fitWidth) {
-      applyMainDefault(active.page);
-    }
-    restoreMainSearch();
+    // Staying in main-search mode only changes the selected occurrence. Avoid
+    // restarting Find, clearing all highlights and remapping the same result.
+    if (inPdfFind || !$("findbar").hidden || hitsChanged) restoreMainSearch();
+    requestedMatch.fitWidth = true;
     pendingMatch = { page: active.page, ...requestedMatch };
     requestedMatch.fitWidth = false;
     return applyPendingMatch();

@@ -6,7 +6,6 @@ from tkinter import filedialog, messagebox, ttk
 
 from .library_paths import library_diagnostics
 from .theme import BACKGROUND
-from .viewers import VIEWERS, find_viewer
 from .icons import Button
 from .widgets import Tooltip, PathField, SelectionDetails, ScrollFrame, WrapToolbar, annotate_buttons, bind_dialog_close, fit_dialog
 
@@ -130,27 +129,10 @@ class PreferencesDialog:
             connections_tab = page("Connections")
             self.sorting = SortingFields(app, sorting_content)
             self.integration = IntegrationFields(app, connections_tab)
-        Tooltip(tabs, "Preferences sets the PDF viewer and defaults for future folders. Sorting configures filing and optional naming services; Connections enables optional reMarkable features. Library & diagnostics identifies saved libraries.")
+        Tooltip(tabs, "Preferences explains the Windows PDF viewer default and sets defaults for future folders. Sorting configures filing and optional naming services; Connections enables optional reMarkable features. Library & diagnostics identifies saved libraries.")
         ttk.Label(general, text="PDF viewer", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
-        self.viewer = tk.StringVar(value=VIEWERS[app.viewer_preference["viewer"]])
-        picker = ttk.Combobox(general, textvariable=self.viewer, values=list(VIEWERS.values()), state="readonly", width=44)
-        picker.pack(anchor="w")
-        Tooltip(picker, "Choose the application used by Library's Open PDF and exported PDF actions. Supported viewers receive the physical PDF page position. Reader's Open externally always uses the computer default viewer.")
-        self.viewer_path = tk.StringVar(value=app.viewer_preference.get("path", ""))
-        row = ttk.Frame(general)
-        row.pack(fill="x", pady=8)
-        self.path_entry = ttk.Entry(row, textvariable=self.viewer_path, width=1)
-        self.browse_button = Button(row, text="Browse…", command=self.browse_viewer)
-        self.browse_button.pack(side="right")
-        self.viewer_path_access = PathField(self.path_entry, "For Other application, enter the full path to its .exe file.")
-        self.viewer_path_copy = self.viewer_path_access.add_copy_button(row)
-        self.viewer_path_copy.pack(side="right", padx=(0, 8))
-        self.path_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
-        Tooltip(self.browse_button, "Choose Other application first, then select its PDF viewer executable.")
-        self.viewer_help = tk.StringVar()
+        self.viewer_help = tk.StringVar(value="All external PDF actions use your current Windows default PDF application. Change the .pdf default in Windows Settings. Supported viewers also receive the requested physical page number.")
         ttk.Label(general, textvariable=self.viewer_help, wraplength=510, style="Muted.TLabel").pack(anchor="w", pady=(0, 14))
-        self.viewer.trace_add("write", self.viewer_changed)
-        self.viewer_changed()
         ttk.Label(general, text="Defaults for new watched folders", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
         fields = ttk.Frame(general)
         fields.pack(anchor="w")
@@ -205,18 +187,6 @@ class PreferencesDialog:
         fit_dialog(window, app.root)
         window.minsize(window.winfo_width(), min(400, window.winfo_height()))
 
-    def browse_viewer(self):
-        path = filedialog.askopenfilename(parent=self.window, title="Choose PDF viewer application", filetypes=[("Windows application", "*.exe")])
-        if path:
-            self.viewer_path.set(path)
-
-    def viewer_changed(self, *_):
-        custom = self.viewer.get() == VIEWERS["custom"]
-        for widget in (self.path_entry, self.browse_button):
-            widget.configure(state="normal" if custom else "disabled")
-        self.viewer_help.set("This viewer opens the file normally; the requested PDF page stays visible in Reader." if custom else
-                             "Supported viewers receive the physical PDF page. Windows default uses the registered application when possible.")
-
     def copy_path(self):
         self.window.clipboard_clear()
         self.window.clipboard_append(str(self.app.data_dir.resolve()))
@@ -253,17 +223,7 @@ class PreferencesDialog:
         settings = self.processing.values(self.window)
         if settings is None:
             return
-        viewer = next(key for key, label in VIEWERS.items() if label == self.viewer.get())
-        preference = {"viewer": viewer}
-        if viewer == "custom":
-            path = Path(self.viewer_path.get().strip())
-            if not path.is_file() or path.suffix.lower() != ".exe":
-                messagebox.showerror("Choose an application", "Browse to the PDF viewer's .exe file.", parent=self.window)
-                return
-            preference["path"] = str(path.resolve())
-        elif viewer != "system" and not find_viewer(viewer):
-            messagebox.showerror("Viewer unavailable", "Choose an installed viewer or browse to Other application.", parent=self.window)
-            return
+        preference = {"viewer": "system"}
         integration_changes = self.integration.changes() if self.integration else {}
         draft = self.sorting.values() if self.sorting else {}
         def complete(_=None):
@@ -289,7 +249,7 @@ class PreferencesDialog:
             self.sorting.help.set("Saving preferences…")
         self.lock_controls(self.window)
         background(self.app, lambda: self.app.service.save_preferences(draft, preference, settings, integration_changes),
-                   complete, failed)
+                   complete, failed, task='Saving preferences…')
 
     def cancel(self):
         if not self.saving:

@@ -264,13 +264,16 @@ def main():
             "restored citation title reaches native heading")
         passed("title refresh reaches Note/PDF headings without reloading, moving the page, or resetting search")
 
-        select(lambda entry: entry["key"] == "Alpha-second")
-        loaded(2)
+        with patch.object(app.pdf_worker, "materialize_cancellable",
+                          wraps=app.pdf_worker.materialize_cancellable) as prepare:
+            select(lambda entry: entry["key"] == "Alpha-second")
+            loaded(2)
+        prepare.assert_not_called()
         assert app.pdf_reader.process is process
         with patch("note_organizer.ui.open_pdf_page", return_value=("Opened original", True)) as opened:
             app.source_button.invoke()
         opened.assert_called_once_with(str(next(path for path in sources if path.name.startswith("Alpha"))).lower(), 2, {"viewer": "system"})
-        passed("same-document note page jumps reuse the native reader; external action targets the original PDF")
+        passed("same-document note page jumps reuse preparation and the native reader; external action targets the original PDF")
 
         before_switch = inspect()
         app.reader_views.select(app.note_details)

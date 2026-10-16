@@ -184,6 +184,11 @@ class PDFReader(ttk.Frame):
                 self.pending = {**payload, "title": self.title,
                                 "mainHits": self.entry.get("search_hits", []) if self.entry else [], "id": generation,
                                 "terms": self.terms, "expanded": self.expanded}
+                if self.pending_match is not None:
+                    # Select the requested hit as part of opening the result;
+                    # avoid waiting for a loaded-state round trip to send it.
+                    self.pending["match"] = self.pending_match
+                    self.pending_match = None
                 if self.process:
                     self.send({"command": "open", "payload": self.pending})
                 elif self.host.winfo_ismapped():

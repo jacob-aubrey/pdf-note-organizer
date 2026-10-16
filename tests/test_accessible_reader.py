@@ -62,7 +62,7 @@ class AccessibleReaderTests(unittest.TestCase):
             app.notes.get_children.return_value = ("1", "0")
             saved = []
             with patch("note_organizer.accessible_reader.background",
-                       side_effect=lambda _app, prepare, *_: saved.append(prepare())):
+                       side_effect=lambda _app, prepare, *_, **__: saved.append(prepare())):
                 open_reader(app)
             page = saved[0].read_text(encoding="utf-8")
             self.assertLess(page.index("First displayed result"), page.index("First backend result"))

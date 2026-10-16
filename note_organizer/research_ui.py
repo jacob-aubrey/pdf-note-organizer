@@ -11,7 +11,7 @@ from .supplements import find_supplements, download_and_attach, attach_file, att
 from .supplement_library import find_existing, proposed_name
 from .icons import Button
 from .theme import BACKGROUND
-from .widgets import Tooltip, ReadOnlyText, PathField, WrapToolbar, bind_dialog_close, fit_dialog, annotate_buttons
+from .widgets import Tooltip, ReadOnlyText, PathField, WrapToolbar, bind_dialog_close, fit_dialog, annotate_buttons, bind_item_open
 from .workflow_ui import background
 
 
@@ -100,7 +100,7 @@ class CitationWindow:
                 "Close without saving draft citation changes.")
         annotate_buttons(window)
         fit_dialog(window, app.root)
-        background(app, lambda: citation_for(app.store, document_id), self.loaded, self.failed)
+        background(app, lambda: citation_for(app.store, document_id), self.loaded, self.failed, task='Loading citation details…')
 
     def alive(self):
         return not self.app.closing and self.window.winfo_exists()
@@ -152,7 +152,7 @@ class CitationWindow:
             self.fill({**self.draft(), **{key: value for key, value in record.items() if value}})
             self.busy(False)
             self.status.set("DOI details loaded. Check that they describe this paper, then Save citation.")
-        background(self.app, lambda: lookup_citation(doi), found, self.failed)
+        background(self.app, lambda: lookup_citation(doi), found, self.failed, task='Finishing citation lookup…')
 
     def copy_text(self):
         try:
@@ -177,7 +177,7 @@ class CitationWindow:
             self.app.refresh_notes()
             if self.alive():
                 self.window.destroy()
-        background(self.app, lambda: save_citation(self.app.store, self.document_id, record), saved, self.failed)
+        background(self.app, lambda: save_citation(self.app.store, self.document_id, record), saved, self.failed, task='Saving citation details…')
 
 
 class SupplementsWindow:
@@ -186,6 +186,7 @@ class SupplementsWindow:
         self.cancelled = threading.Event()
         self.links, self.saved, self.landing = [], [], ""
         self.local_links, self.web_links = [], []
+        self.candidate_generation = self.attachment_generation = 0
         self.window = window = tk.Toplevel(app.root)
         window.title("Supplementary files — " + self.paper_path.stem)
         window.configure(background=BACKGROUND)
@@ -206,6 +207,7 @@ class SupplementsWindow:
                              empty_text="No candidate files", pack=False)
         self.tree.master.grid(row=1, column=0, sticky="nsew")
         self.tree.bind("<<TreeviewSelect>>", self.selection_changed)
+        bind_item_open(self.tree, self.open_candidate)
         self.selected_url = tk.StringVar()
         link_field = ttk.Entry(frame, textvariable=self.selected_url, state="readonly")
         link_field.grid(row=2, column=0, sticky="ew", pady=(6, 0))
@@ -250,8 +252,7 @@ class SupplementsWindow:
         self.open_attachment_file = controls.add(Button(controls, text="Open attached file", command=self.open_saved_file, state="disabled"))
         Tooltip(self.open_attachment_file, lambda: "Select an attached file below first." if self.open_attachment_file.instate(["disabled"]) else
                 "Open the selected supplementary file in its computer default application.")
-        self.attached.bind("<Return>", lambda _: self.open_saved_file())
-        self.attached.bind("<Double-1>", lambda _: self.open_saved_file())
+        bind_item_open(self.attached, lambda row: self.app.open_file_or_folder(self.saved[int(row)]["path"]))
         close = Button(frame, text="Close", command=window.destroy)
         close.grid(row=9, column=0, sticky="e", pady=(10, 0))
         Tooltip(close, "Close this supplementary-file review. A pending download is stopped before publishing its completed file.")
@@ -278,25 +279,28 @@ class SupplementsWindow:
             self.failed(error)
 
     def selection_changed(self, event=None):
-        selected = bool(self.tree.selection())
+        selected = bool(self.tree.selection()) and self.tree.status_message is None
         link = self.links[int(self.tree.selection()[0])] if selected else {}
         local = bool(link.get("path"))
         self.open.configure(state="normal" if selected and not local else "disabled")
         self.download.configure(state="normal" if selected and not local and not getattr(self, "downloading", False) else "disabled")
         self.use_existing.configure(state="normal" if local else "disabled")
-        self.open_file.configure(state="normal" if self.attached.selection() else "disabled")
-        self.open_attachment_file.configure(state="normal" if self.attached.selection() else "disabled")
+        attached = bool(self.attached.selection()) and self.attached.status_message is None
+        self.open_file.configure(state="normal" if attached else "disabled")
+        self.open_attachment_file.configure(state="normal" if attached else "disabled")
         self.article.configure(state="normal" if self.landing else "disabled")
         self.selected_url.set(link.get("path") or link.get("url", ""))
-        self.attached_path.set(self.saved[int(self.attached.selection()[0])]["path"] if self.attached.selection() else "")
+        self.attached_path.set(self.saved[int(self.attached.selection()[0])]["path"] if attached else "")
         self.path_access.refresh()
 
     def discover(self):
+        generation = self.start_candidates("Finding supplementary files…")
         self.find.configure(state="disabled")
         self.status.set("Checking PDF links, DOI metadata, and publisher page…")
         def found(result):
-            if not self.alive():
+            if not self.alive() or generation != self.candidate_generation:
                 return
+            self.tree.set_status()
             self.local_links, remote = result
             self.web_links, warnings, self.landing = remote
             self.show_links()
@@ -306,7 +310,19 @@ class SupplementsWindow:
                              "No supplementary links found. You can download files in your browser and use Add file….") +
                             ("\n" + "\n".join(warnings) if warnings else ""))
         background(self.app, lambda: (find_existing(self.app.store, self.document_id, self.cancelled.is_set),
-                                     find_supplements(self.app.store, self.app.pdf_worker, self.document_id)), found, self.failed)
+                                     find_supplements(self.app.store, self.app.pdf_worker, self.document_id)), found,
+                   lambda error: self.candidates_failed(error, generation), task='Finding supplementary files…')
+
+    def start_candidates(self, message):
+        self.candidate_generation += 1
+        self.tree.set_status(message)
+        self.selection_changed()
+        return self.candidate_generation
+
+    def candidates_failed(self, error, generation):
+        if self.alive() and generation == self.candidate_generation:
+            self.tree.set_status(None if self.tree.get_children() else "File search failed. See the details below.")
+            self.failed(error)
 
     def show_links(self):
         self.links = self.local_links + self.web_links
@@ -316,8 +332,10 @@ class SupplementsWindow:
         self.selection_changed()
 
     def refresh_existing(self, message=None):
+        generation = self.start_candidates("Checking existing library files…")
         def loaded(rows):
-            if self.alive():
+            if self.alive() and generation == self.candidate_generation:
+                self.tree.set_status()
                 self.local_links = rows
                 self.show_links()
                 self.refresh_attached()
@@ -325,42 +343,59 @@ class SupplementsWindow:
                     self.status.set(message)
                 elif not self.web_links:
                     self.status.set(f"{len(rows)} existing library candidate(s). Review and Use existing file, or choose Find files to check publisher links.")
-        background(self.app, lambda: find_existing(self.app.store, self.document_id, self.cancelled.is_set), loaded, self.failed)
+        background(self.app, lambda: find_existing(self.app.store, self.document_id, self.cancelled.is_set), loaded,
+                   lambda error: self.candidates_failed(error, generation), task='Checking supplementary files…')
 
     def use_local(self):
-        if self.tree.selection():
+        if self.tree.selection() and self.tree.status_message is None:
             link = self.links[int(self.tree.selection()[0])]
             if link.get("path"):
                 background(self.app, lambda: attach_file(self.app.store, self.document_id, link["path"]),
-                           lambda _: self.refresh_existing() if self.alive() else None, self.failed)
+                           lambda _: self.refresh_existing() if self.alive() else None, self.failed, task='Attaching a supplementary file…')
+
+    def open_candidate(self, row):
+        link = self.links[int(row)]
+        if link.get("path"):
+            self.app.open_file_or_folder(link["path"])
+        elif link.get("url"):
+            webbrowser.open(link["url"])
 
     def open_link(self):
-        if self.tree.selection():
+        if self.tree.selection() and self.tree.status_message is None:
             webbrowser.open(self.links[int(self.tree.selection()[0])]["url"])
 
     def refresh_attached(self):
+        self.attachment_generation += 1
+        generation = self.attachment_generation
+        self.attached.set_status("Loading attached files…")
+        self.selection_changed()
         def loaded(rows):
-            if not self.alive():
+            if not self.alive() or generation != self.attachment_generation:
                 return
+            self.attached.set_status()
             self.saved = rows
             self.attached.delete(*self.attached.get_children())
             for i, row in enumerate(rows):
                 self.attached.insert("", "end", iid=str(i), values=(row["path"],))
             self.selection_changed()
-        background(self.app, lambda: attachments(self.app.store, self.document_id), loaded, self.failed)
+        def failed(error):
+            if self.alive() and generation == self.attachment_generation:
+                self.attached.set_status(None if self.attached.get_children() else "Could not load attached files.")
+                self.failed(error)
+        background(self.app, lambda: attachments(self.app.store, self.document_id), loaded, failed, task='Loading attached files…')
 
     def add_file(self):
         path = filedialog.askopenfilename(parent=self.window, title="Attach supplementary file")
         if path:
             background(self.app, lambda: attach_file(self.app.store, self.document_id, path),
-                       lambda _: self.refresh_existing() if self.alive() else None, self.failed)
+                       lambda _: self.refresh_existing() if self.alive() else None, self.failed, task='Attaching a supplementary file…')
 
     def open_attachment(self):
-        if self.attached.selection():
+        if self.attached.selection() and self.attached.status_message is None:
             self.app.open_path(Path(self.saved[int(self.attached.selection()[0])]["path"]).parent)
 
     def open_saved_file(self):
-        if self.attached.selection():
+        if self.attached.selection() and self.attached.status_message is None:
             path = Path(self.saved[int(self.attached.selection()[0])]["path"])
             if path.is_file():
                 self.app.open_path(path)
@@ -368,6 +403,8 @@ class SupplementsWindow:
                 self.status.set("This attachment moved or is unavailable. Use Find files to reconnect it.")
 
     def download_selected(self):
+        if self.tree.status_message is not None:
+            return
         if not self.tree.selection():
             return
         link = dict(self.links[int(self.tree.selection()[0])])
@@ -380,7 +417,7 @@ class SupplementsWindow:
         self.downloading = True
         self.selection_changed()
         background(self.app, lambda: proposed_name(self.app.store, self.document_id, suffix),
-                   lambda name: self.choose_download(link, name), self.download_failed)
+                   lambda name: self.choose_download(link, name), self.download_failed, task='Preparing an attachment download…')
 
     def choose_download(self, link, filename):
         if not self.alive():
@@ -407,4 +444,4 @@ class SupplementsWindow:
                 self.downloading = False
                 self.selection_changed()
                 self.refresh_existing(("Reused existing file: " if result["reused"] else "Downloaded and attached: ") + result["path"])
-        background(self.app, job, saved, self.download_failed)
+        background(self.app, job, saved, self.download_failed, task='Finishing attachment download…')

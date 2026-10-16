@@ -71,9 +71,9 @@ class CurrentTooltipAuditTests(unittest.TestCase):
             self.app.global_settings()
         window = self.app.preferences_window
         self.assert_explained(window)
-        pickers = [widget for widget in descendants(window) if isinstance(widget, ttk.Combobox)]
-        viewer = next(widget for widget in pickers if "Windows default" in str(widget.cget("values")))
-        self.assertIn("Open externally", help_text(viewer))
+        viewer_help = self.app.preferences_dialog.viewer_help.get()
+        self.assertIn("current Windows default PDF application", viewer_help)
+        self.assertIn("Windows Settings", viewer_help)
         window.destroy()
 
     def test_feedback_help_names_actual_recipient_and_does_not_claim_private_form(self):
@@ -135,6 +135,7 @@ class CurrentTooltipAuditTests(unittest.TestCase):
         self.assertIn("web candidate", help_text(dialog.open))
         self.assertIn("attached file", help_text(dialog.open_attachment_file))
         dialog.web_links = [{"label": "Supplement", "source": "Publisher", "url": "https://example.org/si.pdf"}]
+        dialog.tree.set_status()
         dialog.show_links()
         dialog.tree.selection_set("0")
         dialog.selection_changed()

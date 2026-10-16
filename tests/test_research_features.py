@@ -78,6 +78,55 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(len(self.search("iodine", "PDFs")), 1)
         self.worker.text_pages.assert_called_once()
 
+    def test_pdf_progress_counts_completed_files_including_cached_and_failed_files(self):
+        self.search("gold", "PDFs")
+        self.worker.reset_mock()
+        other = self.folder / "second.pdf"
+        self.make_pdf(other, ["Gold in another paper"])
+        self.scan(other)
+        missing = self.folder / "missing.pdf"
+        self.make_pdf(missing, ["Gold"])
+        self.scan(missing)
+        missing.unlink()
+        states = []
+        results = self.search("gold", "All", progress=states.append)
+        self.assertEqual({state["total"] for state in states}, {3})
+        completed = list(dict.fromkeys(state["current"] for state in states))
+        self.assertEqual(completed, [0, 1, 2, 3])
+        self.assertEqual(states[-1]["cached"], 1)
+        self.assertEqual(states[-1]["indexed"], 1)
+        self.assertEqual(states[-1]["issues"], 1)
+        self.assertEqual(len(results.warnings), 1)
+        self.worker.text_pages.assert_called_once()
+
+    def test_pdf_progress_does_not_finish_cancelled_or_truncated_documents(self):
+        states = []
+        def cancel_after_first(state):
+            states.append(state)
+            return state["current"] == 1
+        with self.assertRaises(InterruptedError):
+            self.search("gold", "PDFs", progress=cancel_after_first,
+                        cancelled=lambda: bool(states and states[-1]["current"] == 1))
+        self.assertEqual(states[-1]["current"], 1)
+        states.clear()
+        with patch("note_organizer.research_search.MAX_PDF_RESULTS", 1):
+            result = self.search("gold", "PDFs", progress=states.append)
+        self.assertEqual(states[-1]["current"], 0)
+        self.assertTrue(result.warnings)
+
+    def test_pdf_progress_advances_after_extraction_and_counts_each_source_once(self):
+        overlapping = self.store.add_project(self.folder.parent)
+        self.store.save_scan(overlapping, self.path, digest_file(self.path), "sig", "settings", {}, [])
+        states = []
+        def extract(path, digest):
+            self.assertEqual(states[-1]["current"], 0)
+            self.assertEqual(states[-1]["total"], 1)
+            return _text_pages(path, digest)
+        self.worker.text_pages.side_effect = extract
+        self.search("gold", "PDFs", progress=states.append)
+        self.assertEqual(states[-1]["current"], 1)
+        self.worker.text_pages.assert_called_once()
+
     def test_empty_queries_browse_notes_and_one_row_per_pdf_without_reading_files(self):
         with patch("note_organizer.research_search.file_version") as version, \
              patch("note_organizer.research_search.indexed_pages") as index:
@@ -212,7 +261,7 @@ class ResearchTests(unittest.TestCase):
             self.search("gold", "PDFs", cancelled=lambda: True)
         self.worker.text_pages.assert_not_called()
 
-    def test_citation_edits_survive_rescan_and_are_searchable(self):
+    def test_citation_edits_survive_rescan_and_remain_separate_from_note_text_search(self):
         self.assertEqual(citation_for(self.store, self.document_id)["pages"], "")
         record = {"title": "Reviewed citation", "authors": "Doe, Jane; Müller, A.",
                   "year": "2025", "journal": "Research", "doi": "https://doi.org/10.1234/test", "pages": "12-19"}
@@ -220,9 +269,10 @@ class ResearchTests(unittest.TestCase):
         self.scan(self.path)
         self.assertEqual(citation_for(Store(self.store.path), self.document_id)["authors"], ["Doe, Jane", "Müller, A."])
         self.assertEqual(citation_for(self.store, self.document_id)["pages"], "12-19")
-        # Restore an annotation to check the existing note search fields.
+        # Citation metadata remains available without becoming note-text hits.
         self.scan(self.path, [{"key": "note", "kind": "highlight", "page": 1, "rect": [0, 0, 1, 1], "quote": "text"}])
-        self.assertEqual(len(self.store.entries(query="Reviewed AND Müller")), 1)
+        self.assertEqual(self.store.entries(query="Reviewed AND Müller"), [])
+        self.assertEqual(len(self.store.entries(query="text")), 1)
         metadata = self.store.entries()[0]["metadata"]
         self.assertEqual(metadata["pages"], 2)
         self.assertEqual(metadata["citation_pages"], "12-19")

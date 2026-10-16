@@ -262,6 +262,7 @@ class AuditTests(unittest.TestCase):
                 root.update()
                 self.assertFalse(app.papers.selection())
                 self.assertFalse(app.all_projects.get())
+                app.search_scope.set("Notes")
                 app.search_fields = ["ocr"]
                 app.search.set("control experiment")
                 app.refresh_notes()

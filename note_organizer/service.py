@@ -200,7 +200,8 @@ class Service:
         phase = "Updating saved notes" if old and old["settings"] != fingerprint else "Reading PDF"
         self.post(f"{phase}: {Path(path).name}…")
         started = time.perf_counter()
-        with self.activity(phase, Path(path).name):
+        batch = self.activity_state or {}
+        with self.activity(phase, Path(path).name, current=batch.get("current"), total=batch.get("total")):
             # Desktop launches isolate native PDF work in one shared process;
             # standalone services retain the directly callable extractor.
             digest, sig, metadata, entries = (self.pdf_worker.extract(path, settings) if self.pdf_worker is not None else
@@ -250,7 +251,9 @@ class Service:
     def _sync(self, projects, force):
         summary = {"at": timestamp(), "unavailable_folders": 0, "unreadable_folders": 0,
                    "pdf_errors": 0, "export_waiting": 0, "details": [], "cancelled": False}
-        checked = 0
+        checked, discovered = 0, 0
+        inventory = []
+        self.activity_state = {"phase": "Finding local PDFs", "detail": "", "current": None, "total": None}
         for project in projects:
             if self.stop_event.is_set():
                 return
@@ -262,7 +265,7 @@ class Service:
                                            "message": "Watched folder unavailable; saved notes are retained."})
                 self.post(f"Folder unavailable: {project['root']}. Saved notes retained.")
                 continue
-            seen, walk_errors = set(), []
+            paths, walk_errors = [], []
             for folder, dirs, files in os.walk(project["root"], onerror=walk_errors.append):
                 dirs[:] = [d for d in dirs if d not in {"Notebook backups", "notes_media", ".git"}
                            and not self.is_excluded(Path(folder) / d)]
@@ -274,30 +277,49 @@ class Service:
                     path = canonical(Path(folder) / name)
                     if self.is_excluded(path) or self.retained_reading_copy(path):
                         continue
-                    seen.add(path)
-                    checked += 1
-                    self.activity_state = {"phase": "Checking local PDFs", "detail": name,
-                                           "current": checked, "total": None}
-                    try:
-                        self.scan(project, path, force)
-                    except Exception as exc:
-                        if self.stop_event.is_set():
-                            return
-                        summary["pdf_errors"] += 1
-                        summary["details"].append({"kind": "pdf_error", "path": path, "message": str(exc)})
-                        logging.exception("Scan failed: %s", path)
-                        self.scan_context["errors"][project["id"]].add(path)
-                        self.store.scan_result(project["id"], path, str(exc))
-                        self.post(f"Could not read {name}: {exc}")
-                        self.enqueue(path)
+                    paths.append(path)
+                    discovered += 1
+                    self.activity_state = {"phase": "Finding local PDFs", "detail": name,
+                                           "current": discovered, "total": None}
+            inventory.append((project, paths, walk_errors))
+        # Process the same inventory we counted, without walking folders twice.
+        for project, paths, walk_errors in inventory:
+            for path in paths:
+                if self.stop_event.is_set():
+                    return
+                name = Path(path).name
+                self.activity_state = {"phase": "Checking local PDFs", "detail": name,
+                                       "current": checked, "total": discovered}
+                try:
+                    self.scan(project, path, force)
+                except Exception as exc:
+                    if self.stop_event.is_set():
+                        return
+                    summary["pdf_errors"] += 1
+                    summary["details"].append({"kind": "pdf_error", "path": path, "message": str(exc)})
+                    logging.exception("Scan failed: %s", path)
+                    self.scan_context["errors"][project["id"]].add(path)
+                    self.store.scan_result(project["id"], path, str(exc))
+                    self.post(f"Could not read {name}: {exc}")
+                    self.enqueue(path)
+                if self.stop_event.is_set():
+                    return
+                checked += 1
+                self.activity_state = {"phase": "Checking local PDFs", "detail": name,
+                                       "current": checked, "total": discovered}
+            if self.stop_event.is_set():
+                return
             if walk_errors:
                 summary["unreadable_folders"] += len(walk_errors)
                 summary["details"].extend({"kind": "unreadable_folder", "path": str(exc.filename or project["root"]),
                                            "message": str(exc)} for exc in walk_errors)
                 self.post(f"Some folders could not be read under {project['root']}; saved notes retained.")
             else:
-                self.sync_cloud_notes(project, force)
-                self.store.mark_missing(project["id"], seen)
+                with self.activity("Refreshing saved tablet notes", Path(project["root"]).name):
+                    self.sync_cloud_notes(project, force)
+                self.store.mark_missing(project["id"], set(paths))
+        self.activity_state = {"phase": "Checking local PDFs", "detail": "",
+                               "current": checked, "total": discovered}
         self.export_pending()
         if self.stop_event.is_set():
             return
@@ -367,18 +389,19 @@ class Service:
                  if e["kind"] == "drawing" else ""} for e in entries]
 
     def _export_pending(self):
-        for project in self.store.projects():
+        projects = [project for project in self.store.projects()
+                    if (project["dirty"] or not Path(project["output"]).exists())
+                    and Path(project["root"]).is_dir()]
+        for completed, project in enumerate(projects):
             if self.stop_event.is_set():
                 return
-            if not project["dirty"] and Path(project["output"]).exists():
-                continue
-            # Do not recreate an offline/missing watched root merely to export.
+            # A watched drive can disappear after the inventory was collected.
             if not Path(project["root"]).is_dir():
                 continue
             try:
                 started = time.perf_counter()
                 self.activity_state = {"phase": "Saving notebook", "detail": Path(project["output"]).name,
-                                       "current": None, "total": None}
+                                       "current": completed, "total": len(projects)}
                 entries = self.export_images(self.store.entries(project_id=project["id"], include_images=False))
                 value, backup = export_notebook(project["output"], f"Notes on {Path(project['root']).name}", entries, project["export_hash"],
                                                layout=json.loads(project["settings"]).get("notebook_style", "Reading"))
@@ -392,6 +415,9 @@ class Service:
                 error = f"Export pending: {exc}. Close Word if it has this file open; retry is automatic."
                 self.store.export_result(project["id"], error=error)
                 self.post(error, True)
+            finally:
+                self.activity_state = {"phase": "Saving notebooks", "detail": Path(project["output"]).name,
+                                       "current": completed + 1, "total": len(projects)}
 
     def check_cloud(self, force=False, listing_only=False):
         self.cloud_busy = True
@@ -490,7 +516,7 @@ class Service:
         """Serialize an explicitly reviewed cleanup with sync and notebook writes."""
         if self.stop_event.is_set():
             raise InterruptedError("The app is closing; extra PDFs were retained.")
-        if action in {"backup", "compact", "restore", "archive_cleanup", "recycle_pdf"}:
+        if action in {"backup", "compact", "restore", "archive_cleanup", "recycle_pdf", "recycle_pdfs"}:
             if self.thread is not None and self.thread.is_alive() and threading.current_thread() != self.thread:
                 future = Future()
                 self.command("storage_maintenance", action, values, future)
@@ -501,6 +527,13 @@ class Service:
                 if action == "recycle_pdf":
                     from .library_files import recycle_pdf
                     return recycle_pdf(self.store, values)
+                if action == "recycle_pdfs":
+                    from .library_files import recycle_pdfs
+                    def progress(current, total, path):
+                        self.activity_state = {"phase": "Removing reviewed PDFs", "current": current,
+                                               "total": total, "detail": Path(path).name}
+                    with self.activity("Removing reviewed PDFs", current=0, total=len(values)):
+                        return recycle_pdfs(self.store, values, progress)
                 if action == "archive_cleanup":
                     from .archive_storage import cleanup
                     return cleanup(self.store, values)
@@ -582,7 +615,8 @@ class Service:
                             if not future.set_running_or_notify_cancel():
                                 continue
                             try:
-                                result = self.apply_paper_identity(action, values)
+                                with self.activity("Saving paper relationships"):
+                                    result = self.apply_paper_identity(action, values)
                             except Exception as exc:
                                 future.set_exception(exc)
                             else:
@@ -592,7 +626,12 @@ class Service:
                             if not future.set_running_or_notify_cancel():
                                 continue
                             try:
-                                with self.activity("Library maintenance"):
+                                phase = {"backup": "Creating and verifying a library backup",
+                                         "compact": "Backing up and compacting the library",
+                                         "restore": "Restoring a library backup",
+                                         "archive_cleanup": "Cleaning up duplicate recovery archives",
+                                         "recycle_pdf": "Removing the reviewed PDF", "recycle_pdfs": "Removing reviewed PDFs"}.get(action, "Library maintenance")
+                                with self.activity(phase):
                                     result = self.storage_action(action, values)
                             except Exception as exc:
                                 future.set_exception(exc)
@@ -603,7 +642,8 @@ class Service:
                             if not future.set_running_or_notify_cancel():
                                 continue
                             try:
-                                result = self.storage_action("cleanup", values)
+                                with self.activity("Removing verified extra PDF copies"):
+                                    result = self.storage_action("cleanup", values)
                             except Exception as exc:
                                 future.set_exception(exc)
                             else:
@@ -613,7 +653,8 @@ class Service:
                             if not future.set_running_or_notify_cancel():
                                 continue
                             try:
-                                result = self.apply_preferences(*values)
+                                with self.activity("Saving preferences"):
+                                    result = self.apply_preferences(*values)
                             except Exception as exc:
                                 future.set_exception(exc)
                             else:
@@ -792,11 +833,13 @@ class Service:
         finally:
             try:
                 if self.observer:
-                    self.observer.stop()
-                    self.observer.join(timeout=3)
+                    with self.activity("Stopping folder watching"):
+                        self.observer.stop()
+                        self.observer.join(timeout=3)
             finally:
                 if self.pdf_worker is not None:
-                    self.pdf_worker.shutdown(wait=True)
+                    with self.activity("Closing the PDF processing worker"):
+                        self.pdf_worker.shutdown(wait=True)
 
     def stop(self):
         self.stop_event.set()

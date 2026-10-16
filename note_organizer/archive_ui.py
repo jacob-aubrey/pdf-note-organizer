@@ -42,7 +42,7 @@ class ArchiveReviewWindow:
                 "Close the recovery-archive review. Every unreviewed archive remains in place.")
         annotate_buttons(window)
         fit_dialog(window, app.root)
-        background(app, lambda: plan(app.store), self.loaded, self.failed)
+        background(app, lambda: plan(app.store), self.loaded, self.failed, task='Reviewing recovery archives…')
 
     def loaded(self, rows):
         if not self.window.winfo_exists():
@@ -76,7 +76,7 @@ class ArchiveReviewWindow:
             self.rows = []
             self.status.set("Cleanup finished. Original baseline and tablet layer assets remain available.")
             self.update()
-        background(self.app, lambda: self.app.service.storage_action("archive_cleanup", values), completed, self.failed)
+        background(self.app, lambda: self.app.service.storage_action("archive_cleanup", values), completed, self.failed, task='Finishing recovery archive cleanup…')
 
     def failed(self, error):
         if self.window.winfo_exists():

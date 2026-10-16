@@ -4,7 +4,7 @@ from tkinter import ttk
 from .storage import SEARCH_FIELDS, DEFAULT_SEARCH_FIELDS
 from .theme import PANEL, text_options
 from .icons import Button, icon, menu_action
-from .widgets import Tooltip, PathField, PathTextTooltip, SelectionDetails, WrapToolbar, EntryPlaceholder
+from .widgets import Tooltip, PathField, PathTextTooltip, SelectionDetails, WrapToolbar, EntryPlaceholder, bind_item_open
 from .pdf_reader import PDFReader
 from .reader_title import DocumentTitle
 
@@ -15,10 +15,8 @@ class WorkspaceLayouts:
         heading = WrapToolbar(tab)
         heading.pack(fill="x", pady=(0, 8))
         heading.add(Button(heading, text="Add folder…", command=self.add))
-        review_library = Button(heading, text="Review library…", command=self.review_library)
-        heading.add(review_library)
-        heading.add(self.more_button(heading, [("Library storage & backups…", self.storage_maintenance)], text="Library actions ▾"))
-        Tooltip(review_library, "Find duplicate papers and folder differences using local files and saved tablet information. Review proposed links before changing anything.")
+        heading.add(self.more_button(heading, [("Review library…", self.review_library),
+            ("Library storage & backups…", self.storage_maintenance)], text="Library actions ▾"))
         self.build_feedback(tab, "library")
         self.library_actions = []
         self.local_sync_summary = tk.StringVar()
@@ -65,23 +63,13 @@ class WorkspaceLayouts:
         ttk.Label(folders, text="Watched folders", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
         folder_actions = ttk.Frame(folders)
         folder_actions.pack(fill="x", pady=(0, 8))
-        self.folder_actions_button = settings = self.more_button(folder_actions, [("Folder settings", self.settings),
+        self.folder_actions_button = settings = self.more_button(folder_actions, [("Open folder", self.open_selected_folder), ("Folder settings", self.settings),
             ("Locate moved folder…", self.locate_folder), ("Rebuild notebook…", self.rebuild),
             ("Remove folder…", self.remove)], text="Folder actions ▾")
         folder_actions.columnconfigure(0, weight=1)
         settings.grid(row=0, column=0, sticky="w")
         self.library_actions.append(settings)
-        self.library_folder_button = Button(folder_actions, text="Open folder", command=self.open_selected_folder, state="disabled")
-        self.library_folder_button.grid(row=1, column=0, sticky="w", pady=(8, 0))
-        folder_action_width = settings.winfo_reqwidth() + self.library_folder_button.winfo_reqwidth() + 8
-        def arrange_folder_actions(event):
-            compact = event.width < folder_action_width
-            self.library_folder_button.configure(compound="image" if compact else "left",
-                                                  style="Compact.TButton" if compact else "TButton")
-            self.library_folder_button.grid_configure(row=0, column=1, padx=(8, 0), pady=0)
-        folder_actions.bind("<Configure>", arrange_folder_actions)
-        Tooltip(self.library_folder_button, lambda: f"{self.selected_project()['root']}\n\nOpen the selected watched folder in File Explorer." if not self.library_folder_button.instate(["disabled"]) and self.selected_project() else
-                "Select an available watched folder. For a moved folder, right-click it and choose Locate moved folder.")
+        settings.action_menu.entryconfigure("Open folder", state="disabled")
         self.folder_details = SelectionDetails(folders, "Watched folder", height=2)
         self.folder_details.pack(side="bottom", fill="x", pady=(8, 0))
         self.projects = self.tree(folders, [("name", "Folder", 170), ("state", "Status", 145)], empty_text="No watched folders")
@@ -89,6 +77,7 @@ class WorkspaceLayouts:
         self.projects.tooltip.extra = lambda row, column: "Select this watched folder to inspect and copy its full path." if column == "name" else ""
         self.projects.tooltip.full_with_help = True
         self.projects.bind("<<TreeviewSelect>>", self.project_selected)
+        bind_item_open(self.projects, lambda row: self.open_file_or_folder(self.watched_folder_path(row)))
         self.folder_menu = tk.Menu(self.projects, tearoff=False)
         menu_action(self.folder_menu, "Rebuild notebook…", self.rebuild)
         menu_action(self.folder_menu, "Remove folder…", self.remove)
@@ -106,33 +95,27 @@ class WorkspaceLayouts:
         Tooltip(paper_heading, lambda: self.paper_heading.get())
         paper_actions = WrapToolbar(papers)
         paper_actions.pack(fill="x", pady=(0, 8))
-        view = Button(paper_actions, text="View notes", command=self.view_notes, style="Primary.TButton")
+        view = Button(paper_actions, text="View in Reader", command=self.view_notes, style="Primary.TButton")
         paper_actions.add(view)
         self.library_actions.append(view)
-        Tooltip(view, lambda: "Read notes from the selected folder and paper." if self.selected_project() else "Select a watched folder first.")
-        self.library_source_button = Button(paper_actions, text="Open PDF", command=self.open_paper, state="disabled")
+        Tooltip(view, lambda: "Open the selected folder or paper in Reader with fresh, unfiltered PDF and note results." if self.selected_project() else "Select a watched folder first.")
+        self.library_source_button = Button(paper_actions, text="Open externally", command=self.open_paper, state="disabled")
         paper_actions.add(self.library_source_button)
-        Tooltip(self.library_source_button, lambda: f"{self.library_paper_path(self.papers.selection()[0])}\n\nOpen the selected paper with its combined PC and tablet notes. Uncertain versions need review first." if self.papers.selection() else "Select a paper to open its PDF and saved notes.")
-        paper_actions.add(self.more_button(paper_actions, [("Export annotated PDF…", self.export_paper_pdf),
+        Tooltip(self.library_source_button, lambda: f"{self.library_paper_path(self.papers.selection()[0])}\n\nOpen the selected paper in your computer's default PDF viewer, with its combined PC and tablet notes. Uncertain versions need review first." if self.papers.selection() else "Select a paper to open externally.")
+        self.library_paper_actions = self.more_button(paper_actions, [("Export annotated PDF…", self.export_paper_pdf),
             ("Citation details…", self.citation_details), ("Export citations…", self.export_citation_selection),
             ("Find supplementary files…", self.supplementary_files),
-            ("Review extra PDFs…", self.review_extra_pdfs)]))
-        self.library_send_button = Button(paper_actions, text="Send selected PDF…", command=self.send_paper, state="disabled")
-        paper_actions.add(self.library_send_button, visible=False)
-        send_width = self.library_send_button.winfo_reqwidth()
-        def arrange_paper_actions(event):
-            width = sum(control.winfo_reqwidth() for control in paper_actions.controls[:-1]) + send_width + 3 * paper_actions.gap
-            self.library_send_button.configure(compound="image" if event.width < width else "left")
-        paper_actions.bind("<Configure>", arrange_paper_actions, add="+")
-        Tooltip(self.library_send_button, "Send a selected existing original PDF after reviewing duplicates and enabling PDF transfers in Settings → Connections.")
+            ("Review extra PDFs…", self.review_extra_pdfs), ("Send selected PDF…", self.send_paper)])
+        paper_actions.add(self.library_paper_actions)
+        self.library_paper_actions.action_menu.entryconfigure("Send selected PDF…", state="disabled")
         self.paper_details = SelectionDetails(papers, "Selected paper", height=2)
         self.paper_details.pack(side="bottom", fill="x", pady=(8, 0))
         self.papers = self.tree(papers, [("name", "Paper", 320), ("count", "Notes", 65), ("state", "Status", 115)], empty_text="No papers in this folder")
         self.papers.tooltip.value = lambda row, column: self.library_paper_path(row) if column == "name" else self.papers.set(row, column)
-        self.papers.tooltip.extra = lambda row, column: "Select this PDF to inspect and copy its full path." if column == "name" else ""
+        self.papers.tooltip.extra = lambda row, column: "Double-click or press Enter to open this paper in Reader. Open externally uses your default PDF viewer." if column == "name" else ""
         self.papers.tooltip.full_with_help = True
         self.papers.bind("<<TreeviewSelect>>", self.paper_selected)
-        self.papers.bind("<Double-1>", self.view_notes)
+        bind_item_open(self.papers, self.open_library_reader)
         self.library_pane.add(papers, weight=3)
         self.initial_split(self.library_pane, .30)
 
@@ -220,8 +203,9 @@ class WorkspaceLayouts:
         self.note_count = tk.StringVar()
         self.note_count_label = ttk.Label(searchbar, textvariable=self.note_count, style="Muted.TLabel", anchor="e")
         self.note_count_label.pack(side="right", padx=(10, 0))
-        self.search_progress = ttk.Progressbar(searchbar, mode="indeterminate", length=42)
-        Tooltip(self.note_count_label, lambda: "Searching the selected scope. The previous results remain visible until the new search finishes." if getattr(self, "reader_search_busy", False) else self.note_count.get())
+        self.search_progress = ttk.Progressbar(searchbar, mode="indeterminate", length=70)
+        Tooltip(self.note_count_label, self.search_progress_help)
+        Tooltip(self.search_progress, self.search_progress_help)
         self.search_options_button.pack(side="right", padx=(8, 0))
         self.clear_search_button = Button(searchbar, text="Clear search", command=self.clear_search, style="Compact.TButton", state="disabled")
         self.clear_search_button.pack(side="right", padx=(8, 0))
@@ -245,8 +229,7 @@ class WorkspaceLayouts:
         self.notes.heading("page", command=lambda: self.sort_reader("page"))
         self.notes.bind("<<TreeviewSelect>>", self.preview)
         self.notes.bind("<ButtonRelease-1>", self.activate_reader_result, add="+")
-        self.notes.bind("<Double-1>", lambda event: self.open_source())
-        self.notes.bind("<Return>", lambda event: self.open_source())
+        bind_item_open(self.notes, lambda row: self.open_entry_pdf(self.entries[int(row)]))
         self.notes.tooltip.extra = self.note_tooltip_help
         self.notes.tooltip.value = self.note_cell_value
         self.notes.tooltip.full_with_help = True

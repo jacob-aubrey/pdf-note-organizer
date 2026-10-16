@@ -42,11 +42,27 @@ def registry_read(hive_name, key, name="", view=0):
 
 
 def default_executable():
-    progid = registry_read("HKEY_CURRENT_USER",
-                           r"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.pdf\UserChoice", "ProgId")
-    progid = progid or registry_read("HKEY_CLASSES_ROOT", ".pdf")
-    command = registry_read("HKEY_CLASSES_ROOT", progid + r"\shell\open\command") if progid else ""
-    return executable_from_command(command)
+    # Ask the shell for the effective association. UserChoice and HKCR can
+    # retain stale handlers that differ from Windows Settings / Explorer.
+    # On failure, let the shell open the file; never guess another reader.
+    if os.name != "nt":
+        return ""
+    import ctypes
+    from ctypes import wintypes
+    try:
+        query = ctypes.WinDLL("shlwapi").AssocQueryStringW
+        query.argtypes = [wintypes.DWORD, ctypes.c_int, wintypes.LPCWSTR, wintypes.LPCWSTR,
+                          wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+        query.restype = ctypes.c_long
+        size = wintypes.DWORD()
+        if query(0, 2, ".pdf", "open", None, ctypes.byref(size)) not in (0, 1) or not 0 < size.value <= 32768:
+            return ""
+        buffer = ctypes.create_unicode_buffer(size.value)
+        if query(0, 2, ".pdf", "open", buffer, ctypes.byref(size)) != 0:
+            return ""
+        return buffer.value
+    except (OSError, AttributeError):
+        return ""
 
 
 def registry_candidates(names):
@@ -104,14 +120,14 @@ def open_pdf_page(path, page, preference=None):
     preference = preference or {"viewer": "system"}
     viewer = preference.get("viewer", "system")
     if viewer not in VIEWERS:
-        raise ValueError("Choose a PDF viewer in Settings → Preferences.")
+        raise ValueError("Check the PDF default in Windows Settings.")
     executable = preference.get("path", "") if viewer == "custom" else find_viewer(viewer)
     if viewer == "system" and (not executable or viewer_type(executable) == "custom"):
         # Let Windows honor the complete association (including DDE or app-specific flags).
         open_system_pdf(path)
         return f"Opened in your default viewer. Navigate to PDF page {page}; this viewer's page-jump command is not supported.", False
     if not executable or (viewer == "custom" and not Path(executable).is_file()):
-        raise FileNotFoundError(f"{VIEWERS[viewer]} was not found. Choose another viewer or browse to its application in Settings → Preferences.")
+        raise FileNotFoundError(f"{VIEWERS[viewer]} was not found. Check the PDF default in Windows Settings.")
     subprocess.Popen(viewer_command(executable, path, page), close_fds=True)
     kind = viewer_type(executable)
     if kind == "custom":
