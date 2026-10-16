@@ -477,6 +477,21 @@ def bind_dialog_close(window, callback=None):
         (callback or window.destroy)()
         return "break"
     window.bind("<Escape>", close)
+    owner = window.master
+    if isinstance(owner, (tk.Tk, tk.Toplevel)):
+        def place_on_owner():
+            if not window.winfo_exists() or not owner.winfo_exists():
+                return
+            window.update_idletasks()
+            left, top, right, bottom = work_area(owner)
+            width = min(max(window.winfo_width(), window.winfo_reqwidth()), right - left - 16)
+            height = min(max(window.winfo_height(), window.winfo_reqheight()), bottom - top - 16)
+            x = owner.winfo_rootx() + (owner.winfo_width() - width) // 2
+            y = owner.winfo_rooty() + (owner.winfo_height() - height) // 2
+            x = max(left + 8, min(x, right - width - 8))
+            y = max(top + 8, min(y, bottom - height - 8))
+            window.geometry(f"{width}x{height}+{x}+{y}")
+        window.after_idle(place_on_owner)
 
 
 def dismiss_tooltips(event=None):

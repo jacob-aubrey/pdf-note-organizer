@@ -8,6 +8,7 @@ from tkinter import messagebox
 from . import APP_NAME
 from .library_paths import resolve_data_directory, should_import_legacy
 from .branding import set_process_identity, apply_app_icon
+from .screens import launch_source_work_area
 
 
 def main():
@@ -39,12 +40,19 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(threadName)s %(message)s",
                         handlers=[RotatingFileHandler(data / "app.log", maxBytes=2_000_000, backupCount=3, encoding="utf-8")])
     logging.info("Active library: %s", data)
+    launch_area = launch_source_work_area()
     try:
         from tkinterdnd2 import TkinterDnD
         root = TkinterDnD.Tk()
     except (ImportError, tk.TclError):
         root = tk.Tk()
     root.withdraw()
+    if launch_area:
+        left, top, right, bottom = launch_area
+        width = min(1250, right - left - 80)
+        height = min(820, bottom - top - 100)
+        root.geometry(f"{width}x{height}+{left + (right-left-width)//2}+{top + (bottom-top-height)//2}")
+    root.launch_area = launch_area
     app = None
     startup = None
 
@@ -68,7 +76,7 @@ def main():
 
     try:
         from .startup import StartupSplash
-        startup = StartupSplash(root, prepare_library, build_workspace, startup_failed)
+        startup = StartupSplash(root, prepare_library, build_workspace, startup_failed, launch_area)
         root.mainloop()
     except Exception as exc:
         if startup is not None:

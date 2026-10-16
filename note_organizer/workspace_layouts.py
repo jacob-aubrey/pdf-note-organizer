@@ -130,6 +130,7 @@ class WorkspaceLayouts:
         header_actions = WrapToolbar(toolbar)
         header_actions.pack(side="left", fill="x", expand=True, padx=(16, 0))
         more = self.more_button(header_actions, [("Save editable copy…", self.editable_copy),
+                                   ("Export view…", self.export_view),
                                    ("Export annotated PDF…", self.export_note_pdf),
                                    ("Citation details…", self.citation_details),
                                    ("Export citations…", self.export_citation_selection),
@@ -138,12 +139,13 @@ class WorkspaceLayouts:
                                    ("Document details…", self.reader_document_details),
                                    ("Saved searches…", self.saved_searches),
                                    ("Accessible reading view…", self.accessible_reader)])
-        self.notebook_button = Button(header_actions, text="Open notebook", command=self.open_notebook, style="Primary.TButton")
+        self.reader_actions_button = more
+        # Retain the existing state hook while Export view is now a menu action.
         self.export_button = Button(header_actions, text="Export view…", command=self.export_view)
-        Tooltip(self.export_button, lambda: "Export the notes currently shown to a separate Word document." if self.entries else "Choose a folder or search with matching notes before exporting.")
+        self.notebook_button = Button(header_actions, text="Open notebook", command=self.open_notebook, style="Primary.TButton")
         Tooltip(self.notebook_button, lambda: "Open this folder's generated Word notebook." if not self.notebook_button.instate(["disabled"]) else "Select one folder instead of All folders to open its notebook.")
         self.notes_folder_button = Button(header_actions, text="Open folder", command=lambda: self.open_selected_folder(notes=True), state="disabled")
-        for button in (self.notes_folder_button, self.export_button, self.notebook_button, more):
+        for button in (self.notes_folder_button, self.notebook_button, more):
             header_actions.add(button)
         Tooltip(self.notes_folder_button, lambda: f"{self.reader_folder_path()}\n\nOpen the PC folder selected below in File Explorer." if not self.notes_folder_button.instate(["disabled"]) else
                 "Select one available folder instead of All folders.")

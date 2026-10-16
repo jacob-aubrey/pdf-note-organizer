@@ -106,7 +106,14 @@ class App(WorkspaceLayouts):
         set_process_identity()
         apply_app_icon(root)
         root.title(f"{APP_NAME} {__version__}")
-        root.geometry(f"{min(1250, root.winfo_screenwidth()-80)}x{min(820, root.winfo_screenheight()-100)}")
+        area = getattr(root, "launch_area", None)
+        if area:
+            left, top, right, bottom = area
+            width = min(1250, right - left - 80)
+            height = min(820, bottom - top - 100)
+            root.geometry(f"{width}x{height}+{left + (right-left-width)//2}+{top + (bottom-top-height)//2}")
+        else:
+            root.geometry(f"{min(1250, root.winfo_screenwidth()-80)}x{min(820, root.winfo_screenheight()-100)}")
         root.minsize(940, 620)
         root.protocol("WM_DELETE_WINDOW", self.close)
         self.build()
@@ -1137,6 +1144,8 @@ class App(WorkspaceLayouts):
             menu_action(menu, label, action)
         button.action_menu = menu
         help_text = {
+            "Set up Inbox…": "Choose the incoming-document and library folders in Settings → Sorting.",
+            "Export view…": "Save the notes currently shown to a separate Word document.",
             "Reconnect…": "Pair this PC with reMarkable again using a new code.", "Disconnect": "Remove this PC's reMarkable pairing token; local PDFs and notes remain.",
             "Open source PDF": "Open the selected paper's PDF.",
             "Save editable copy…": "Make a separate Word notebook for your writing.", "Change history": "Read saved annotation changes for the selected note's actual PDF copy.",
@@ -1975,6 +1984,7 @@ class App(WorkspaceLayouts):
         self.note_count.set(({"Notes": "Searching notes…", "PDFs": "Searching PDFs…", "All": "Searching notes and PDFs…"}[scope])
                             if self.search.get().strip() else "Loading results…")
         self.export_button.configure(state="disabled")
+        self.reader_actions_button.action_menu.entryconfigure("Export view…", state="disabled")
         self.query_future = self.query_executor.submit(search_library, self.store, self.pdf_worker,
                                                        self.search_scope.get(), **options, cancelled=cancelled.is_set,
                                                        progress=report_progress)
@@ -2104,6 +2114,8 @@ class App(WorkspaceLayouts):
             self.note_count.set("Check search" if self.search_error.get() else count)
             self.set_reader_search_busy(False)
             self.export_button.configure(state="normal" if len(entries) > pdf_count else "disabled")
+            self.reader_actions_button.action_menu.entryconfigure(
+                "Export view…", state="normal" if len(entries) > pdf_count else "disabled")
             self.preview()
         insert_rows()
 
@@ -2959,6 +2971,8 @@ class App(WorkspaceLayouts):
                 self.service.command("filed_pdf", payload)
             elif event == "inbox_filed":
                 background(self, lambda job_id=payload["job_id"]: self.inbox.acknowledge_filing(job_id), lambda _: None, task='Saving the completed Inbox filing…')
+            if event == "inbox_config_changed" and hasattr(self, "inbox_view"):
+                self.inbox_view.refresh_setup_action()
             if event in {"inbox_changed", "inbox_filed", "inbox_prepared", "inbox_skipped", "inbox_config_changed"} and not self.closing:
                 self.inbox_view.load_rows()
             if event == "inbox_error" and not self.closing:

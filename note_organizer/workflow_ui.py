@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from .icons import Button, icon, menu_action
-from .theme import BACKGROUND
+from .theme import BACKGROUND, BLUE, TEXT
 from .widgets import Tooltip, PathField, ReadOnlyText, ScrollFrame, WrapToolbar, EntryPlaceholder, annotate_buttons, bind_dialog_close, fit_dialog, bind_item_open
 
 
@@ -58,9 +58,12 @@ class InboxView:
         ttk.Label(parent, text="Incoming documents", style="Section.TLabel").pack(anchor="w", pady=(0, 10))
         toolbar = WrapToolbar(parent)
         toolbar.pack(fill="x", pady=(0, 12))
-        setup = Button(toolbar, text="Set up Inbox…", command=lambda: app.setup_inbox())
-        Tooltip(setup, "Choose incoming documents and library folders directly in Sorting settings.")
-        more = app.more_button(toolbar, [("Filing recovery…", app.filing_recovery), ("Review library…", app.review_library)])
+        more = app.more_button(toolbar, [("Filing recovery…", app.filing_recovery),
+                                          ("Review library…", app.review_library)])
+        self.setup_button = Button(toolbar, text="Set up Inbox…", command=app.setup_inbox, style="Primary.TButton")
+        Tooltip(self.setup_button, "Choose the incoming-document and library folders in Settings → Sorting.")
+        toolbar.add(self.setup_button, visible=False)
+        self.inbox_toolbar = toolbar
         for label, action in (("Add documents…", self.add_documents),
                               ("Refresh inbox", self.refresh),
                               ("Open inbox", lambda: self.open_folder("watch_folder"))):
@@ -72,12 +75,42 @@ class InboxView:
                              "Filing recovery…": "Inspect copies retained after interrupted filing. Open both locations before deciding how to organize the copies.",
                              "Review library…": "Find duplicate papers and compare PC and saved tablet information without changing files."}[label])
         toolbar.add(more)
-        toolbar.add(setup)
+        self.actions_button = more
+        Tooltip(more, "Inbox actions, including setup, filing recovery and library review.")
+        self.refresh_setup_action()
         self.summary = tk.StringVar(value="Choose an inbox and library in Settings → Sorting, or import your sorter settings.")
         summary = ttk.Label(parent, textvariable=self.summary, style="Muted.TLabel", wraplength=900)
         summary.pack(fill="x", pady=(0, 12))
         summary.bind("<Configure>", lambda event: summary.configure(wraplength=max(120, event.width)))
         Tooltip(summary, lambda: self.summary.get())
+        self.parent_listing = parent
+        self.inbox_listing = listing
+        self.inbox_pane = pane
+        self.build_inbox_detail_layout()
+
+    def is_configured(self):
+        config = self.app.inbox.config()
+        return bool(config.get("watch_folder") and config.get("library_root"))
+
+    def refresh_setup_action(self):
+        if hasattr(self, "actions_button"):
+            configured = self.is_configured()
+            try:
+                self.actions_button.action_menu.index("Set up Inbox…")
+                has_menu_setup = True
+            except tk.TclError:
+                has_menu_setup = False
+            if configured and not has_menu_setup:
+                menu_action(self.actions_button.action_menu, "Set up Inbox…", self.app.setup_inbox)
+            elif not configured and has_menu_setup:
+                self.actions_button.action_menu.delete("Set up Inbox…")
+            self.inbox_toolbar.set_visible(self.setup_button, not configured)
+
+    def build_inbox_detail_layout(self):
+        app = self.app
+        parent = self.parent_listing
+        listing = self.inbox_listing
+        pane = self.inbox_pane
         locations = ttk.Frame(parent)
         locations.pack(fill="x", pady=(0, 10))
         self.location_variables = {}
