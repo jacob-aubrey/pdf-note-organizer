@@ -8,7 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import zipfile
 
 from note_organizer.storage import Store, digest_file
@@ -16,6 +16,7 @@ from note_organizer import maintenance
 from note_organizer.citations import CitationConflict, citation_for, save_citation
 from note_organizer.paper_registry import Registry
 from note_organizer.pdf_worker import PDFWorker
+from note_organizer.research_search import file_version, search_library
 from note_organizer.research_tools import save_labels, label_ids
 from note_organizer.search import compile_search, normalize
 from note_organizer.search_index import read as read_index
@@ -153,6 +154,31 @@ class AuditUpgradeTests(unittest.TestCase):
         self.store.cache_pdf_pages(self.document, digest, "new-version", replacement)
         self.assertEqual(self.store.cached_pdf_pages(self.document, digest, "new-version"), replacement)
         self.assertEqual(self.store.cached_pdf_pages(other_id, digest, "version"), pages)
+
+    def test_legacy_pdf_cache_is_promoted_to_fts_before_search(self):
+        pages = [{"page": 1, "pdf_label": "", "text": "Legacy tantalum page"}]
+        digest = digest_file(self.path)
+        version = file_version(self.path)
+        with self.store.connect() as db:
+            db.execute("INSERT OR REPLACE INTO pdf_search_cache VALUES(?,?,?,?)",
+                       (self.document, digest, version, json.dumps(pages)))
+        self.assertEqual(self.store.cached_pdf_pages(self.document, digest, version), pages)
+        self.assertEqual(read_index(self.store, self.document, digest, version, "tantalum", "All words")[0], pages)
+        worker = Mock()
+        results = search_library(self.store, worker, "PDFs", query="tantalum")
+        self.assertEqual([(entry["page"], entry["match_count"]) for entry in results], [(1, 1)])
+        worker.text_pages_cancellable.assert_not_called()
+
+    def test_incomplete_fts_metadata_falls_back_to_legacy_cache(self):
+        pages = [{"page": 1, "pdf_label": "", "text": "Recovered cobalt page"}]
+        digest = digest_file(self.path)
+        with self.store.connect() as db:
+            db.execute("INSERT OR REPLACE INTO pdf_search_cache VALUES(?,?,?,?)",
+                       (self.document, digest, "recovery-version", json.dumps(pages)))
+            db.execute("INSERT OR REPLACE INTO pdf_index_versions VALUES(?,?,?,?,?,?,?)",
+                       (self.document, digest, "recovery-version", 2, 1, 0, 0))
+        self.assertEqual(self.store.cached_pdf_pages(self.document, digest, "recovery-version"), pages)
+        self.assertEqual(read_index(self.store, self.document, digest, "recovery-version", "cobalt", "All words")[0], pages)
 
     def test_tags_and_collections_follow_linked_paper_scope(self):
         save_labels(self.store, self.document, {"tag": "Iodine; iodine; methods", "collection": "Thesis; Experiments"})

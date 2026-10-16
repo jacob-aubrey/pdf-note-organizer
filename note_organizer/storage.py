@@ -9,7 +9,6 @@ import sqlite3
 import threading
 import uuid
 from .search import compile_search, normalize
-from .pages import page_search_text
 from .image_storage import intern as intern_image, expand as expand_image, image as stored_image
 from .paper_projection import (load_paper_sources, annotated_documents, inherited_duplicate_ids,
                                project_papers)
@@ -37,10 +36,9 @@ DEFAULT_SETTINGS = {"grouping": "Nearby blocks", "gap": 24, "ocr": False,
                     "context_padding": 36, "notebook_style": "Reading"}
 
 SEARCH_FIELDS = {
-    "title": "Paper title", "quote": "Highlights and marked text",
+    "quote": "Highlights and marked text",
     "comment": "Typed notes and replies", "ocr": "Handwriting transcription (OCR)",
-    "context": "Surrounding printed text", "filename": "Filename",
-    "author": "Author", "doi": "DOI", "color": "Annotation color", "page": "PDF page, label, or verified journal page",
+    "context": "Surrounding printed text", "color": "Annotation color",
 }
 DEFAULT_SEARCH_FIELDS = tuple(key for key in SEARCH_FIELDS if key != "context")
 NOTE_TYPES = ("All notes", "Highlights and markup", "Drawings and handwriting", "Typed notes")
@@ -48,11 +46,7 @@ NOTE_TYPES = ("All notes", "Highlights and markup", "Drawings and handwriting", 
 
 def search_values(entry):
     """Return the same original field text used by filtering and previews."""
-    meta = entry.get("metadata", {})
-    values = {**{key: entry.get(key, "") for key in ("quote", "comment", "ocr", "context", "color")},
-              "title": entry.get("logical_paper_title") or meta.get("title") or Path(entry["path"]).stem,
-              "filename": Path(entry["path"]).name, "author": meta.get("author", ""),
-              "doi": meta.get("doi", ""), "page": page_search_text(entry)}
+    values = {key: entry.get(key, "") for key in ("quote", "comment", "ocr", "context", "color")}
     return {key: str(value) for key, value in values.items()}
 
 
@@ -68,7 +62,7 @@ def matches_search(entry, query, fields, match_mode, note_type, matcher=None):
         return True
     matcher = matcher or compile_search(query, match_mode)
     values = search_values(entry)
-    haystacks = [normalize(values.get(key, "")) for key in fields]
+    haystacks = [normalize(values.get(key, "")) for key in fields if key in SEARCH_FIELDS]
     return matcher(haystacks)
 
 
@@ -384,14 +378,22 @@ class Store:
         return rows
 
     def cached_pdf_pages(self, document_id, digest, version):
-        from .search_index import read
+        from .search_index import read, write
         indexed = read(self, document_id, digest, version, "", "All words")
         if indexed is not None:
             return indexed[0]
         with self.connect() as db:
             row = db.execute("SELECT pages FROM pdf_search_cache WHERE document_id=? AND digest=? AND version=?",
                              (document_id, digest, version)).fetchone()
-        return json.loads(row[0]) if row else None
+            if not row:
+                return None
+            pages = json.loads(row[0])
+            if not isinstance(pages, list):
+                return None
+            # Promote the pre-FTS cache lazily. This keeps startup cheap while
+            # allowing existing libraries to use their already extracted text.
+            write(db, document_id, digest, version, pages)
+            return pages
 
     def cache_pdf_pages(self, document_id, digest, version, pages):
         with self.connect() as db:

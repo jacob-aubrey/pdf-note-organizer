@@ -26,7 +26,15 @@ class ScopedFindController extends PDFFindController {
 }
 const findLinkService = {
   get page() { return linkService.page; },
-  set page(value) { if (inPdfFind) linkService.page = value; },
+  set page(value) {
+    if (!inPdfFind) return;
+    linkService.page = value;
+    // Fit the destination page before its text layer paints the selected hit,
+    // including documents with pages of different widths.
+    viewer.currentScaleValue = defaultScale();
+    // Scaling may restore PDF.js's cached location on the preceding page.
+    linkService.page = value;
+  },
   get pagesCount() { return linkService.pagesCount; },
 };
 const findController = new ScopedFindController({ eventBus, linkService: findLinkService, delay: 100 });
@@ -65,11 +73,28 @@ let suppressedPopups = new Set();
 
 // PDF.js normally centers the selected word horizontally. Main-result arrows
 // instead reveal the line vertically while keeping the fitted page centered.
-// PDF-local Find keeps the component's normal zoom and scrolling behavior.
-const scrollPdfMatchIntoView = findController.scrollMatchIntoView.bind(findController);
+// PDF-local Find also reveals the selected line while keeping the page centered.
 findController.scrollMatchIntoView = function (request) {
-  if (inPdfFind) return scrollPdfMatchIntoView(request);
   const { element, pageIndex, matchIndex } = request;
+  if (inPdfFind) {
+    if (!this._scrollMatches || !element || pageIndex !== this.selected.pageIdx ||
+        matchIndex !== this.selected.matchIdx) return;
+    // Wait until page fitting and highlight painting finish. A scale change
+    // can replace this text layer; only a connected, still-selected hit may
+    // consume the pending scroll, and it may do so only once.
+    const document = pdfDocument;
+    requestAnimationFrame(() => {
+      if (!inPdfFind || pdfDocument !== document || !this._scrollMatches ||
+          !element.isConnected || pageIndex !== this.selected.pageIdx ||
+          matchIndex !== this.selected.matchIdx) return;
+      this._scrollMatches = false;
+      const container = $("viewerContainer");
+      container.scrollTop += element.getBoundingClientRect().top - container.getBoundingClientRect().top - 65;
+      container.scrollLeft = 0;
+      reportState();
+    });
+    return;
+  }
   if (!mainScrollMatches || !element || pageIndex !== this.selected.pageIdx ||
       matchIndex !== this.selected.matchIdx) return;
   mainScrollMatches = false;
@@ -300,9 +325,9 @@ function updateMatches() {
   $("findPrevious").disabled = !ready || !$("findInput").value;
   $("findNext").disabled = !ready || !$("findInput").value;
   $("findPrevious").title = !$("findInput").value ? "Enter a word or phrase to navigate PDF matches." :
-    "Previous match in this PDF (Shift+Enter). Keeps your chosen zoom.";
+    "Previous match in this PDF (Shift+Enter). Reveals the match and keeps the page centered.";
   $("findNext").title = !$("findInput").value ? "Enter a word or phrase to navigate PDF matches." :
-    "Next match in this PDF (Enter). Keeps your chosen zoom.";
+    "Next match in this PDF (Enter). Reveals the match and keeps the page centered.";
   reportState();
 }
 
@@ -705,10 +730,14 @@ function setFindVisible(visible) {
 }
 
 function findInPdf(type = "", previous = false) {
+  clearTimeout(findTimer);
+  findTimer = null;
   const query = $("findInput").value;
   if (!query) { useLibraryTerms(); return; }
   inPdfFind = true;
   updateSearchAuthority();
+  viewer.currentScaleValue = defaultScale();
+  $("viewerContainer").scrollLeft = 0;
   centeredMainMatch = false;
   missingMainMatchPage = null;
   pendingMatch = null;

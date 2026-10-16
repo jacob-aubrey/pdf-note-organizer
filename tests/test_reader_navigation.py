@@ -74,13 +74,12 @@ class NoteOccurrenceTests(unittest.TestCase):
         self.assertTrue(all(hit["field"] == "ocr" and hit["fields"] == ["ocr"]
                             for hit in entry["search_hits"]))
 
-    def test_case_whitespace_context_and_metadata_remain_distinct_passages(self):
-        entry = note(quote="Gold", comment="gold", ocr="Gold ", context="Gold",
-                     metadata={"title": "Gold"})
-        enrich_note_matches(entry, "gold", ["quote", "comment", "ocr", "context", "title"])
-        self.assertEqual(entry["match_count"], 5)
+    def test_case_whitespace_and_note_fields_remain_distinct_passages(self):
+        entry = note(quote="Gold", comment="gold", ocr="Gold ", context="Gold", metadata={"title": "Gold"})
+        enrich_note_matches(entry, "gold", ["quote", "comment", "ocr", "context"])
+        self.assertEqual(entry["match_count"], 4)
         self.assertEqual([hit["fields"] for hit in entry["search_hits"]],
-                         [["quote"], ["comment"], ["ocr"], ["context"], ["title"]])
+                         [["quote"], ["comment"], ["ocr"], ["context"]])
 
     def test_boolean_and_phrase_offsets_casefold_and_excluded_terms(self):
         entry = note(quote="Straße and Spectral\n  CT and STRASSE; iodine")
@@ -93,14 +92,12 @@ class NoteOccurrenceTests(unittest.TestCase):
         enrich_note_matches(entry, "NOT NOT strasse", ["quote"])
         self.assertEqual(entry["match_count"], 2)
 
-    def test_metadata_only_hits_show_actual_source_without_fabricating_note_text(self):
+    def test_paper_metadata_does_not_create_note_search_hits(self):
         entry = note(quote="Unrelated text", metadata={"title": "Gold imaging", "author": "Gold, Jane"})
         enrich_note_matches(entry, "gold", ["title", "author"])
         self.assertEqual(entry["quote"], "Unrelated text")
-        self.assertEqual([hit["source_label"] for hit in entry["search_hits"]],
-                         ["Match in paper title", "Match in author"])
-        self.assertEqual([group["text"] for group in entry["match_excerpts"]],
-                         ["Gold imaging", "Gold, Jane"])
+        self.assertEqual(entry["search_hits"], [])
+        self.assertEqual(entry["match_excerpts"], [])
 
     def test_enrichment_does_not_change_boolean_match_acceptance(self):
         entry = note(quote="gold", comment="iodine")
@@ -203,6 +200,10 @@ class SearchDefaultTests(unittest.TestCase):
         self.assertEqual(loaded["scope"], "All")
         loaded["fields"].append("quote")
         self.assertEqual(saved["fields"], ["context"])
+
+    def test_saved_search_drops_removed_paper_metadata_fields(self):
+        loaded = saved_search_options({"fields": ["title", "quote", "author", "page", "context"]})
+        self.assertEqual(loaded["fields"], ["quote", "context"])
 
     def test_library_defaults_exclude_surrounding_text_without_changing_explicit_search(self):
         with tempfile.TemporaryDirectory() as folder:

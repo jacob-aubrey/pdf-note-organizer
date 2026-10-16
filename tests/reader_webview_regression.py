@@ -114,7 +114,7 @@ def main():
             page = doc.new_page(width=900 if number == 2 else 612, height=792)
             page.insert_text((45, 55), f'Repeated reader test page {number}', fontsize=18)
             for line in range(4):
-                page.insert_text((45, 110 + line * 32),
+                page.insert_text((45, 110 + line * 190),
                     f'Tantalum imaging passage {line + 1}. A selectable research sentence.', fontsize=12)
         repeated_text = doc.load_page(0).get_text(sort=True)
         repeated_hits = hit_excerpts(repeated_text, 'tantalum', 'Words / Boolean')
@@ -550,9 +550,48 @@ def main():
                     assert len(repeated_states) == 4
                     js('local-find-zoom', 'document.getElementById("zoom").value="2";document.getElementById("zoom").dispatchEvent(new Event("change"));document.getElementById("findToggle").click();document.getElementById("findInput").value="passage";document.getElementById("findInput").dispatchEvent(new Event("input"));true', .5)
                     js('local-find-next', 'document.getElementById("findNext").click();true', .4)
-                    assert abs(js('local-find-zoom-state', 'NotableReader.state()')['scale'] - 2) < .001
+                    local_find_state = js('local-find-fit-width-state', 'NotableReader.state()')
+                    assert local_find_state['scaleValue'] == 'page-width' and local_find_state['scroll']['left'] < 1, local_find_state
+                    # Every arrow must select AND reveal the exact occurrence,
+                    # including offscreen lines, mixed page sizes and wrapping.
+                    def check_local_hit(name, occurrence, scale_value='page-width'):
+                        state = js(name, '''(()=>{
+                            const s=NotableReader.state();
+                            const page=document.querySelectorAll('.page')[s.selectedMatch.pageIdx];
+                            const marks=Array.from(page?.querySelectorAll('.textLayer .highlight.selected') || []);
+                            const v=document.getElementById('viewerContainer').getBoundingClientRect();
+                            return {...s, selectedText:marks.map(m=>m.textContent).join(''),
+                                visible:marks.length>0 && marks.every(m=>{
+                                    const r=m.getBoundingClientRect();
+                                    return r.height>0 && r.top>=v.top && r.bottom<=v.bottom;
+                                })};
+                        })()''')
+                        assert state['selectedMatch'] == {'pageIdx':occurrence // 4,'matchIdx':occurrence % 4}, state
+                        assert state['matches'] == {'current':occurrence + 1,'total':12}, state
+                        assert state['selectedText'] == 'passage' and state['visible'], state
+                        assert state['scaleValue'] == scale_value and state['scroll']['left'] < 1, state
+                        assert not state['lastWarning'], state
+                        return state
+                    check_local_hit('local-find-first-next-visible', 1)
+                    for direction, button in ((1, 'findNext'), (-1, 'findPrevious')):
+                        for step in range(1, 13):
+                            click(button)
+                            check_local_hit(f'local-find-{direction}-{step}', (1 + direction * step) % 12)
+                    # Clicking an arrow before the input debounce expires must
+                    # cancel that delayed search rather than advancing twice.
+                    js('local-find-pending-input', 'document.getElementById("findInput").dispatchEvent(new Event("input"));document.getElementById("findNext").click();true', .5)
+                    check_local_hit('local-find-pending-input-stable', 2)
+                    js('local-find-reading-mode', 'NotableReader.setExpanded(true);true', .3)
+                    for occurrence, button in ((3, 'findNext'), (4, 'findNext'),
+                                               (3, 'findPrevious'), (2, 'findPrevious')):
+                        click(button)
+                        check_local_hit(f'local-find-reading-{occurrence}', occurrence, '1.25')
+                    js('local-find-reading-exit', 'NotableReader.setExpanded(false);true', .4)
+                    js('local-find-rapid-arrows', 'for(let i=0;i<3;i++)document.getElementById("findNext").click();true', .5)
+                    check_local_hit('local-find-rapid-arrows-state', 5)
                     js('local-find-close-keeps-zoom', 'document.getElementById("findClose").click();true', .4)
-                    assert abs(js('local-find-close-zoom-state', 'NotableReader.state()')['scale'] - 2) < .001
+                    local_find_closed = js('local-find-close-fit-width-state', 'NotableReader.state()')
+                    assert local_find_closed['scaleValue'] == 'page-width' and local_find_closed['scroll']['left'] < 1, local_find_closed
                     # Fitting uses the result page's dimensions even after
                     # browsing to a different-sized PDF page in local Find.
                     js('mixed-page-browse', 'document.getElementById("pageNumber").value="2";document.getElementById("pageNumber").dispatchEvent(new Event("change"));true', .2)
@@ -705,4 +744,3 @@ def main():
 if __name__ == '__main__':
     mp.freeze_support()
     main()
-

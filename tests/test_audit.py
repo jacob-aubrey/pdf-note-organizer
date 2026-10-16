@@ -219,14 +219,16 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(len(self.store.entries(note_type="Highlights and markup")), 1)
         self.assertEqual(len(self.store.entries(note_type="Typed notes")), 1)
 
-    def test_bibliographic_fields_and_ocr_are_separate(self):
+    def test_note_fields_and_ocr_are_separate(self):
         entry = {"path": "paper.pdf", "kind": "drawing", "ocr": "Check the concentration",
                  "metadata": {"title": "Contrast imaging", "author": "Jane Scientist", "doi": "10.1234/example"},
                  "page": 2, "label": "iv", "color": "Blue"}
-        for field, query in [("title", "contrast"), ("author", "scientist"), ("doi", "10.1234"),
-                             ("filename", "paper.pdf"), ("page", "iv"), ("color", "blue"), ("ocr", "concentration")]:
+        for field, query in [("color", "blue"), ("ocr", "concentration")]:
             self.assertTrue(matches_search(entry, query, [field], "All words", "All notes"))
             self.assertFalse(matches_search(entry, query, [k for k in SEARCH_FIELDS if k != field], "All words", "All notes"))
+        for field, query in [("title", "contrast"), ("author", "scientist"), ("doi", "10.1234"),
+                             ("filename", "paper.pdf"), ("page", "iv")]:
+            self.assertFalse(matches_search(entry, query, [field], "All words", "All notes"))
 
     def test_library_reader_selection_survives_background_refresh(self):
         root = tk.Tk()

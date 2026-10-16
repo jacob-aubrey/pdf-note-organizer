@@ -58,6 +58,14 @@ def read(store, document_id, digest, version, query, mode):
                           (document_id, digest, version)).fetchone()
         if info is None:
             return None
+        sql = "SELECT COUNT(*), COUNT(DISTINCT page), MAX(CASE WHEN trim(text) <> '' THEN 1 ELSE 0 END) FROM pdf_text_index WHERE document_id=?"
+        params = [document_id]
+        if info[2] and info[3]:
+            sql += " AND rowid BETWEEN ? AND ?"
+            params.extend([info[2], info[3]])
+        count, distinct_pages, has_text = db.execute(sql, params).fetchone()
+        if count != info[0] or distinct_pages != info[0] or bool(has_text) != bool(info[1]):
+            return None
         term = candidates(query, mode)
         sql = "SELECT page,label,text FROM pdf_text_index WHERE document_id=?"
         params = [document_id]

@@ -5,7 +5,7 @@ from .icons import Button
 from .theme import BACKGROUND
 from .widgets import bind_dialog_close, fit_dialog, Tooltip, annotate_buttons, WrapToolbar
 from .workflow_ui import background
-from .storage import DEFAULT_SEARCH_FIELDS
+from .storage import DEFAULT_SEARCH_FIELDS, SEARCH_FIELDS
 
 
 def saved_search_options(value):
@@ -13,7 +13,8 @@ def saved_search_options(value):
     result = {"query": "", "mode": "Words / Boolean", "note_type": "All notes",
               "scope": "Notes", "label": "All papers", **value}
     fields = value.get("fields")
-    result["fields"] = list(DEFAULT_SEARCH_FIELDS if fields is None else fields)
+    selected = DEFAULT_SEARCH_FIELDS if fields is None else fields
+    result["fields"] = [field for field in selected if field in SEARCH_FIELDS]
     return result
 
 

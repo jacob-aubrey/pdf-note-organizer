@@ -2890,7 +2890,10 @@ class App(WorkspaceLayouts):
         state = self.service.activity_state
         phase = state["phase"] if state else "Loading library" if not self.library_loaded else ""
         if phase:
-            count = f" {state['current']}/{state['total']}" if state and state.get("total") else f" {state['current']}" if state and state.get("current") else ""
+            count = (f" {state['current']}/{state['total']}" if state and state.get("total")
+                     else f" · {state['current']} checked" if state and state.get("current")
+                     and phase == "Checking local PDFs" else
+                     f" {state['current']}" if state and state.get("current") else "")
             self.work_phase.set(phase + count)
             if not self.work_visible:
                 self.work_label.pack(side="right", padx=8)

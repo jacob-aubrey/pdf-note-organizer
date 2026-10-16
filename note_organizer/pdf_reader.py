@@ -88,7 +88,7 @@ class PDFReader(ttk.Frame):
         self.pending_match = None
         self.match_selection = None
         self.awaiting_entry = bool(entry)
-        self.show_message("Loading PDF…" if entry else "Select a paper or note to read its PDF.")
+        self.show_message("Preparing PDF…" if entry else "Select a paper or note to read its PDF.")
         if not entry:
             self.send({"command": "clear", "id": generation, "message": self.message.get()})
             return
@@ -127,6 +127,7 @@ class PDFReader(ttk.Frame):
         if os.name != "nt":
             self.show_message("The embedded PDF reader currently requires Windows. Use Open externally to read this PDF.")
             return
+        self.show_message("Starting embedded PDF reader…")
         from .reader_host import run_reader_host, parent_dpi_awareness
         context = multiprocessing.get_context("spawn")
         parent, child = context.Pipe()

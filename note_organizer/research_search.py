@@ -11,11 +11,10 @@ MAX_PDF_RESULTS = 2000
 # Cached pages include both their extraction order and normalized index text.
 # A revision change rebuilds either kind of stale cache on its next search.
 PDF_SEARCH_REVISION = 2
-OCCURRENCE_FIELDS = ("quote", "comment", "ocr", "context", "title", "filename", "author", "doi", "color", "page")
+OCCURRENCE_FIELDS = ("quote", "comment", "ocr", "context", "color")
 MATCH_SOURCES = {"quote": "Match in highlighted text", "comment": "Match in typed note",
                  "ocr": "Match in handwriting transcription", "context": "Match in surrounding text",
-                 "title": "Match in paper title", "filename": "Match in filename", "author": "Match in author",
-                 "doi": "Match in DOI", "color": "Match in annotation color", "page": "Match in page information",
+                 "color": "Match in annotation color",
                  "pdf": "Match in PDF text"}
 
 
