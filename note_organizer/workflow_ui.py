@@ -814,6 +814,10 @@ class ReconciliationWindow:
             self.more_menu.grab_release()
 
     def schedule_layout(self, event=None):
+        # Toplevel bind tags also receive every descendant's Configure event.
+        # Resizing the tables must not schedule another layout of those tables.
+        if event is not None and event.widget not in (self.window, self.review_frame):
+            return
         if self.layout_after is None and self.window.winfo_exists():
             self.layout_after = self.app.root.after_idle(self.fit_review_tables)
 

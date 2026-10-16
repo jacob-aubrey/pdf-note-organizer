@@ -66,8 +66,8 @@ def make_paper(path, title):
     return rect
 
 
-def capture_test_window(root, destination):
-    """Capture only our own inactive-desktop Tk window, never the desktop."""
+def capture_test_window(root, destination, flags=2):
+    """Capture our inactive-desktop window; native menus use PrintWindow flags=0."""
     require_private_desktop()
     user = ctypes.WinDLL("user32", use_last_error=True)
     gdi = ctypes.WinDLL("gdi32", use_last_error=True)
@@ -106,7 +106,7 @@ def capture_test_window(root, destination):
         raise ctypes.WinError(ctypes.get_last_error())
     previous = gdi.SelectObject(dc, bitmap)
     try:
-        if not user.PrintWindow(hwnd, dc, 2):
+        if not user.PrintWindow(hwnd, dc, flags):
             raise ctypes.WinError(ctypes.get_last_error())
         pixels = ctypes.string_at(memory, width * height * 4)
         Image.frombytes("RGB", (width, height), pixels, "raw", "BGRX").save(destination)

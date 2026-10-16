@@ -79,7 +79,7 @@ class ReaderDocumentTitleTests(unittest.TestCase):
         self.replace(self.rows())
         self.assertTrue(app.note_document_title.winfo_ismapped())
 
-    def test_title_only_search_still_has_visible_navigable_occurrences(self):
+    def test_removed_title_note_field_does_not_create_navigation_occurrences(self):
         row = self.rows()[0]
         row["metadata"]["title"] = "Gold nanoparticles and gold contrast agents " + "for diagnosis " * 25
         row["quote"] = "An unrelated highlighted sentence."
@@ -89,13 +89,9 @@ class ReaderDocumentTitleTests(unittest.TestCase):
         self.show()
         app.note_view_button.invoke()
         self.root.update()
-        self.assertEqual(len(app.preview_match_ranges), 2)
+        self.assertEqual(len(app.preview_match_ranges), 0)
         self.assertNotIn("title", app.preview_field_ranges)
-        self.assertIn("paper title", app.preview_text.get("1.0", "end").casefold())
-        for _ in range(2):
-            ranges = app.preview_text.tag_ranges("current_search_match")
-            self.assertEqual(app.preview_text.get(*ranges).casefold(), "gold")
-            app.navigate_match(1)
+        self.assertNotIn("paper title", app.preview_text.get("1.0", "end").casefold())
         self.assertEqual(app.note_document_title.title, row["metadata"]["title"].strip())
 
     def test_reading_mode_keeps_note_heading_and_reader_position(self):

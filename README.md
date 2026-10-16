@@ -2,7 +2,7 @@
 
 Notable helps you organize research documents and collect your PDF annotations into searchable notes and Word notebooks. You can use it entirely on your PC. Document identification through online services and connection to a reMarkable tablet are optional.
 
-For step-by-step navigation with colorful annotated screenshots, see the [Notable 2.5 user manual](output/pdf/Notable-User-Manual.pdf). The 24-page guide covers setup, filing, PDF notes, search, exports, optional tablet syncing, backups, troubleshooting, and keyboard shortcuts.
+For task-by-task walkthroughs with annotated screenshots, see the [Notable 2.5 user manual](output/pdf/Notable-User-Manual.pdf). Each procedure shows which control to click, what appears next, and how to check the result. It covers setup, filing, PDF reading and search, exports, optional tablet syncing, backups, troubleshooting, and keyboard shortcuts.
 
 There are two related workflows:
 
@@ -17,11 +17,21 @@ The current version is **Notable 2.5.0**. This release adds verified backup and 
 
 The [October 13 interface audit](UI_AUDIT_2026-10-13.md) documents the consistency and layout polish, scrollable Settings and Inbox forms, responsive action rows, readable tables and the new open-source notebook-and-pen app icon. Short Library panes condense details to their path controls; enlarge the pane to restore the full explanation and Copy details action.
 
+## Download and open the Windows app
+
+Download **Notable-2.5.0-windows-x64.exe** from the [Notable 2.5.0 release](https://github.com/jacob-aubrey/pdf-note-organizer/releases/tag/v2.5.0). Save it in a permanent folder and double-click it. This portable executable includes Python and the app's dependencies; it does not need a Python installation or an installer. Windows 10/11 x64 and the Microsoft Edge WebView2 Runtime are required for the embedded PDF reader. Most Windows 11 PCs already have WebView2.
+
+The executable is unsigned. Windows may show an unrecognized-app notice; check the download came from the project's release page and compare its SHA-256 hash with `SHA256SUMS.txt` before deciding whether to run it. The release also includes the user manual and PDF README, both accessible inside the app through **Help**.
+
+The packaged app stores its library in `%LOCALAPPDATA%/PDF Note Organizer/`. Existing packaged libraries stay in that location. The source app normally uses the repository's `.local-data/` directory, so it can show a different collection. **Settings → Library & diagnostics** shows the active library. Set `PDF_NOTES_DATA_DIR` before launch only when you intentionally want a different library; keep the executable and its download folder separate from your data.
+
+On launch, a branded splash identifies the startup task and then reveals the settled workspace. A one-file executable can take a few seconds to unpack its runtime before the splash appears. Local PDF checks and cloud sync continue in the background. To update, close Notable safely and replace the executable with a newer release; your separate library data remains in place.
+
 ## Set up and open the source app
 
 ### First setup on Windows
 
-**Development stays in Python and VS Code. Packaging is deferred until explicitly requested.** The older executable in `dist/` belongs to a previous version; use the source launcher or the named VS Code development profile for current behavior.
+Use the source app when developing Notable or running it from VS Code. Release builds live under `dist/releases/v2.5.0/`; the older executable directly inside `dist/` is a retained rollback copy.
 
 The project environment is configured for Python 3.13. Install Python 3.13, open PowerShell in the project folder, and run:
 
@@ -93,7 +103,7 @@ Optional Gemini naming has a model selector and **Test connection** in Sorting s
 .\.venv\Scripts\python.exe -m unittest discover -s tests -q
 ```
 
-Windows CI installs the hashed runtime dependencies, checks Python compilation and runs the source regression suite. It does not build or upload executables. Older executables and legacy source remain deliberate rollback copies. Existing databases in `dist/` are library data, not build debris.
+Windows CI installs the hashed runtime dependencies, checks Python compilation and runs the source regression suite. It does not publish releases automatically. To build the portable Windows executable locally, install PyInstaller in the project environment and run `python scripts/build_release.py`. The script uses a dedicated versioned build/output directory, includes the bundled guides and PDF.js assets, and writes release checksums. Existing databases and older executables directly inside `dist/` are retained copies.
 
 The downloadable README PDF, if present, describes 2.4.1. This Markdown guide and the implementation report document 2.5.0.
 
@@ -122,7 +132,7 @@ Your **paper folders** and the app's **saved data directory** serve different pu
 
 Direct source launches and the PowerShell launcher normally use `.local-data/` beside the source entry point. This location does not depend on the shell's current folder. The development F5 profile explicitly selects `.local-data` and skips importing old watched folders.
 
-An explicitly set `PDF_NOTES_DATA_DIR` overrides the source app and launcher's default. An older packaged app normally uses `%LOCALAPPDATA%/PDF Note Organizer/`; it may therefore show a different saved library from the source version.
+An explicitly set `PDF_NOTES_DATA_DIR` overrides the source app and launcher's default. The packaged app normally uses `%LOCALAPPDATA%/PDF Note Organizer/`; it may therefore show a different saved library from the source version.
 
 Open **Settings → Library & diagnostics** to see the active location in a compact path box. Hover over it to see the whole path and an explanation of what it contains. The small copy button beside it copies the complete location. **Open data folder** opens it in File Explorer. The library summaries underneath can be scrolled and copied too.
 
@@ -259,9 +269,9 @@ For a loaded drawing or handwriting image, choose **Copy image**, right-click th
 
 ### Keep and export citation information
 
-In Library or Reader, select a paper or note and choose **More → Citation details…**. Review or edit its title, authors, year, journal, volume, issue, page range/article number, DOI, and URL. Separate authors with semicolons; commas can remain inside author names. Initial details reuse local PDF metadata and available Inbox filing information. A filename may supply a provisional title, so check the fields before exporting.
+In Library or Reader, select a paper or note and choose **Actions → Citation details…**. Review or edit its title, authors, year, journal, volume, issue, page range/article number, DOI, and URL. Separate authors with semicolons; commas can remain inside author names. Initial details reuse local PDF metadata and available Inbox filing information. A filename may supply a provisional title, so check the fields before exporting.
 
-**Look up DOI** optionally sends only the entered DOI to Crossref/DataCite and fills available fields for review. It does not save automatically. **Save citation** retains reviewed details separately from PDF scans and shares them with currently linked paper sources. Rescanning a paper keeps these edits. Saved titles, authors, and DOIs participate in the existing note search. **Cancel** discards draft edits. **Copy citation** copies the current fields as a plain-text reference, without applying a journal-specific citation style.
+**Look up DOI** optionally sends only the entered DOI to Crossref/DataCite and fills available fields for review. It does not save automatically. **Save citation** retains reviewed details separately from PDF scans and shares them with currently linked paper sources. Rescanning a paper keeps these edits. Saved titles, authors, and DOIs participate in paper searches through PDFs or All scope; they are not annotation-text matches. **Cancel** discards draft edits. **Copy citation** copies the current fields as a plain-text reference, without applying a journal-specific citation style.
 
 Choose **More → Export citations…** to save `.ris` or `.bib` (BibTeX). In Library, the export uses the selected paper, or all papers in the chosen folder when no paper is selected. In Reader, an active query, PDF/All browsing, or a collection/tag or note-type filter exports distinct papers represented by the displayed results. Otherwise the folder/paper filters determine the selection. All folders with no query or additional filters in Notes mode exports the active library. Linked source variants export once. No citation-service request is made during export. Import the resulting file into your reference manager; Zotero documents [RIS and BibTeX imports](https://www.zotero.org/support/kb/importing_standardized_formats).
 
@@ -566,7 +576,7 @@ The page shown by Notable is the physical file position, which can differ from p
 ### Data locations and migration
 
 - Source default: `.local-data/` beside the source entry point.
-- Older packaged default: `%LOCALAPPDATA%/PDF Note Organizer/`.
+- Packaged app default: `%LOCALAPPDATA%/PDF Note Organizer/`.
 - Explicit override: `PDF_NOTES_DATA_DIR`.
 - The project's `.local-data` skips legacy import by default. `PDF_NOTES_SKIP_LEGACY_IMPORT=1` disables it elsewhere; an explicit `0` permits it.
 - Installed/custom libraries can import watched folder paths from nearby `notes_watcher.db` files on first migration. Old annotation hashes are not trusted; PDFs are re-extracted into the current library. The old databases and notebooks are left untouched.
@@ -588,9 +598,19 @@ Browsers receive encoded file URLs with `#page=`. Acrobat/Reader receive `/A pag
 
 The interface uses charcoal panels and blue accents. Blue usually marks the main action or selection. Muted controls are unavailable until their requirements are met; hover help explains many disabled actions. An ellipsis generally means a further choice or confirmation is needed.
 
-Action buttons and menus use locally bundled [Lucide icons](https://lucide.dev/). Icon-only utilities have hover help; workflow buttons combine icons and text. Icons scale with Tk display scaling and include disabled variants. Original SVGs, PNG renders, the pinned upstream revision, and license notices are under `note_organizer/assets/icons/`; no network request is needed to display them. The existing PyInstaller specification includes those assets, but no new executable is part of this source update.
+Action buttons and menus use locally bundled [Lucide icons](https://lucide.dev/). Icon-only utilities have hover help; workflow buttons combine icons and text. Icons scale with Tk display scaling and include disabled variants. Original SVGs, PNG renders, the pinned upstream revision, and license notices are under `note_organizer/assets/icons/`; no network request is needed to display them. The Windows release includes these assets, the app icon, PDF.js, and both guides.
 
 ### Tests and implementation
+
+#### How notes, PDF search, and reMarkable sync work
+
+1. **Notes live in a local SQLite database.** `library.sqlite3` stores extracted highlight text, comments, physical page locations, drawing previews, paper relationships, settings, and annotation history. Identical note images can share storage rather than being saved repeatedly. Generated Word notebooks are exports of that saved information; they are not the primary note database. Source PDFs and managed tablet source files remain separate from the generated notebooks.
+2. **PDF search builds and reuses a local page-text index.** A background PDF worker extracts each page's text. SQLite's full-text index helps find candidate pages, and the app's matching rules check those pages and identify individual occurrences. Cached text is refreshed when the PDF or extraction version changes. Image-only scans need a searchable text layer. **Find in PDF** instead searches the document already loaded in the embedded PDF.js viewer, making navigation within that open PDF especially quick. Ordinary note and PDF searches do not upload the documents or query an online search service.
+3. **reMarkable sync uses your cloud account and selected folder mappings.** Pairing exchanges a one-time code for a token protected by your Windows account. The app checks the chosen cloud scope, detects changed document revisions, downloads the original PDF and tablet annotation layers, and prepares local annotated reading views while retaining source material. Unresolved folder routes or conflicting versions go to review. Optional automatic checks run while Notable is open; explicit sending creates new tablet documents rather than continuously merging PC edits into existing tablet documents. PDF sending and folder creation require their separate connection settings.
+
+#### Verification and release tooling
+
+The illustrated manual is generated from [task definitions](documentation/manual_tasks.py) and current offline UI captures. To regenerate the guides, run `scripts/capture_manual.py` through `tools/run_ui_tests.py`, then run `scripts/build_guides.py` with ReportLab/Pillow and `scripts/verify_guides.py` with PyMuPDF/Pillow and Poppler. The verifier removes fixture paths from embedded screenshot pixels, renders every page, and checks for clipped text. Documentation dependencies are authoring tools rather than app runtime requirements.
 
 Run the suite from the project folder:
 

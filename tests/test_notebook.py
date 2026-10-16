@@ -255,10 +255,10 @@ class NotebookTests(unittest.TestCase):
         self.assertTrue(output.exists())
         self.assertTrue(self.pdf.exists())
 
-    def test_search_in_comments_colors_and_metadata(self):
+    def test_note_search_in_comments_and_colors_excludes_paper_metadata(self):
         self.scan()
         self.assertEqual(len(self.store.entries(query="replicates")), 1)
-        self.assertEqual(len(self.store.entries(query="Example Researcher")), 3)
+        self.assertEqual(len(self.store.entries(query="Example Researcher")), 0)
         self.assertGreater(len(self.store.entries(query="Red")), 0)
 
     def test_live_watcher_catches_saved_change_and_shutdown(self):

@@ -1,4 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.win32.versioninfo import VSVersionInfo, FixedFileInfo, StringFileInfo, StringTable, StringStruct, VarFileInfo, VarStruct
 
 
 a = Analysis(
@@ -27,7 +28,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='PDF Note Organizer',
+    name='Notable',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -41,4 +42,12 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=['Note icon.ico'],
+    version=VSVersionInfo(
+        ffi=FixedFileInfo(filevers=(2, 5, 0, 0), prodvers=(2, 5, 0, 0), mask=0x3f, flags=0, OS=0x40004, fileType=1, subtype=0, date=(0, 0)),
+        kids=[StringFileInfo([StringTable('040904B0', [
+            StringStruct('CompanyName', 'Notable'), StringStruct('FileDescription', 'Notable research document organizer'),
+            StringStruct('FileVersion', '2.5.0'), StringStruct('ProductName', 'Notable'),
+            StringStruct('ProductVersion', '2.5.0'), StringStruct('OriginalFilename', 'Notable.exe'),
+        ])]), VarFileInfo([VarStruct('Translation', [1033, 1200])])],
+    ),
 )

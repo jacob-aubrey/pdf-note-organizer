@@ -121,6 +121,7 @@ def open_labels(app):
                 field.configure(state="normal")
             save.configure(state="normal")
             status.set("Labels are local to this library. Use Collection or tag in Reader to filter notes and PDFs within your current folder and paper selection. All papers clears this label filter.")
+            fit_dialog(window, app.root)
     background(app, load, loaded, failed, task='Loading paper tags and collections…')
     fit_dialog(window, app.root)
 

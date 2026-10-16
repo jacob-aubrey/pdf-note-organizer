@@ -160,6 +160,10 @@ def bind_item_open(tree, open_item):
             selected = tree.selection()
             row = tree.focus() if tree.focus() in selected else next(iter(selected), "")
         else:
+            # A fast Ctrl/Shift selection can also arrive as a double click.
+            # Let Treeview's ordinary extended-selection binding handle it.
+            if event.state & 5:
+                return
             if tree.identify_region(event.x, event.y) not in {"cell", "tree"}:
                 return
             row = tree.identify_row(event.y)

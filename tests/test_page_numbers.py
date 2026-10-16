@@ -64,12 +64,14 @@ class PageNumberTests(unittest.TestCase):
         self.assertEqual(page_description(verified), "PDF page 3 of 12 · Journal p. 2457")
         self.assertIn("2457", page_search_text(verified))
 
-    def test_search_distinguishes_physical_label_and_verified_journal(self):
+    def test_page_search_text_distinguishes_physical_label_and_verified_journal(self):
         entry = {"path": "article.pdf", "kind": "highlight", "page": 3, "pdf_label": "iii",
                  "journal_page": "2457", "journal_page_verified": True}
         for query in ("3", "iii", "2457"):
-            self.assertTrue(matches_search(entry, query, ["page"], "Exact phrase", "All notes"))
-        self.assertFalse(matches_search({**entry, "journal_page_verified": False}, "2457", ["page"], "Exact phrase", "All notes"))
+            self.assertIn(query, page_search_text(entry))
+            # Page metadata is intentionally no longer a note-search field.
+            self.assertFalse(matches_search(entry, query, ["page"], "Exact phrase", "All notes"))
+        self.assertNotIn("2457", page_search_text({**entry, "journal_page_verified": False}))
 
     def test_both_exports_share_page_description_and_physical_link(self):
         entry = {"path": "article.pdf", "page": 3, "page_count": 12, "label": "2457",
