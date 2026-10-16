@@ -253,6 +253,41 @@ class ReaderDocumentTargetTests(unittest.TestCase):
         self.app.load_reader_document(self.entry(key="next-note"), self.cancelled)
         self.assertEqual(self.app.pdf_worker.materialize_cancellable.call_count, 2)
 
+    def test_verified_pdf_page_jump_reuses_location_without_worker_calls(self):
+        self.source.write_bytes(b"source")
+        self.resolved.write_bytes(b"prepared")
+        entry = self.entry(kind="pdf", logical_paper_id="paper-identity", combined_view_page=2)
+        self.app.pdf_worker.reader_location.return_value = {"pages": 9, "rect": None,
+                                                           "suppressedPopupIds": {"1": ["123R"]}}
+        self.app.load_reader_document(entry, self.cancelled)
+        self.app.pdf_worker.reset_mock()
+        reused = self.app.reuse_reader_document({**entry, "key": "pdf-page:4", "page": 4, "combined_view_page": 4})
+        self.assertEqual(reused["page"], 4)
+        self.assertIsNone(reused["rect"])
+        self.assertEqual(reused["suppressedPopupIds"], {"1": ["123R"]})
+        self.app.pdf_worker.reader_location.assert_not_called()
+        self.app.pdf_worker.materialize_cancellable.assert_not_called()
+        for changes in ({"combined_view_page": 10}, {"source_digest": "new"}, {"kind": "highlight"},
+                        {"logical_paper_id": None}):
+            with self.subTest(changes=changes):
+                self.assertIsNone(self.app.reuse_reader_document({**entry, **changes}))
+        self.resolved.write_bytes(b"prepared file changed")
+        self.assertIsNone(self.app.reuse_reader_document(entry))
+
+    def test_fast_page_jump_revalidates_source_and_library_versions(self):
+        self.source.write_bytes(b"source")
+        self.app.store.path.write_bytes(b"library")
+        entry = self.entry(kind="pdf")
+        self.app.load_reader_document(entry, self.cancelled)
+        self.assertIsNotNone(self.app.reuse_reader_document(entry))
+        self.source.write_bytes(b"updated source")
+        self.assertIsNone(self.app.reuse_reader_document(entry))
+        self.app.load_reader_document(entry, self.cancelled)
+        self.app.store.path.write_bytes(b"updated library")
+        self.assertIsNone(self.app.reuse_reader_document(entry))
+        with self.assertRaises(FileNotFoundError):
+            self.app.reuse_reader_document({**entry, "missing": True})
+
     def test_managed_tablet_notes_keep_page_only_navigation_without_trusted_extraction_geometry(self):
         for metadata in ({"managed_cloud_id": "tablet-id"}, {"tablet_layers_only": True}):
             with self.subTest(metadata=metadata):

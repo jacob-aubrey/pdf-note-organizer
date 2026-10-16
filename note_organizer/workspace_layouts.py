@@ -318,7 +318,8 @@ class WorkspaceLayouts:
         self.image_menu = tk.Menu(self.preview_text, tearoff=False)
         menu_action(self.image_menu, "Copy image", self.copy_note_image)
         Tooltip(self.source_button, self.external_pdf_help)
-        self.pdf_reader = PDFReader(self.reader_views, self.load_reader_document, self.open_source_external, self.toggle_reader_expanded)
+        self.pdf_reader = PDFReader(self.reader_views, self.load_reader_document, self.open_source_external,
+                                    self.toggle_reader_expanded, reuse=self.reuse_reader_document)
         self.reader_views.add(self.note_details, text="Note view")
         self.reader_views.add(self.pdf_reader, text="PDF view")
         self.reader_views.select(self.pdf_reader)

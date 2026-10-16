@@ -256,6 +256,82 @@ class PDFReaderLifecycleTests(unittest.TestCase):
         self.reader.native.show.assert_not_called()
         self.assertIn("ResizeObserver", self.reader.last_warning)
 
+    def test_slow_next_selection_keeps_native_surface_visible_until_resolution(self):
+        self.show()
+        self.reader.set_entry(self.entry())
+        self.wait(lambda: self.reader.pending is not None)
+        self.reader.handle_event({"kind": "state", "id": self.reader.generation, "loaded": True})
+        self.reader.native = native = Mock()
+        self.reader.connection = connection = Mock()
+        entered, release = threading.Event(), threading.Event()
+        def resolve(entry, cancelled):
+            entered.set()
+            release.wait(3)
+            return {"path": entry["path"], "page": entry["page"]}
+        self.resolver.side_effect = resolve
+        try:
+            self.reader.set_entry(self.entry("second"))
+            self.assertTrue(entered.wait(1))
+            self.assertTrue(self.reader.displayed)
+            self.assertFalse(self.reader.loaded)
+            native.show.assert_not_called()
+            self.assertEqual(connection.send.call_args.args[0], {"command": "prepare", "id": self.reader.generation})
+            self.reader.mapped()
+            native.show.assert_called_once_with(True)
+            release.set()
+            self.wait(lambda: self.reader.pending is not None)
+        finally:
+            release.set()
+            self.reader.native = None
+            self.reader.connection = None
+
+    def test_verified_page_jump_opens_immediately_and_queues_requested_match_without_poll(self):
+        self.show()
+        self.reader.displayed = True
+        self.reader.native = native = Mock()
+        self.reader.process = object()
+        self.reader.connection = connection = Mock()
+        self.reader.reuse = Mock(return_value={"path": str(Path("paper.pdf").resolve()), "page": 3})
+        try:
+            self.reader.set_entry(self.entry("next", page=3))
+            self.resolver.assert_not_called()
+            self.assertEqual(connection.send.call_args.args[0]["command"], "open")
+            self.assertEqual(self.reader.pending["page"], 3)
+            request = {"index": 2, "term": "gold"}
+            self.reader.select_match(request)
+            self.assertEqual(connection.send.call_args.args[0],
+                {"command": "match", "index": request, "id": self.reader.generation})
+            native.show.assert_not_called()
+            self.assertTrue(self.reader.displayed)
+            self.assertIsNone(self.reader.pending_match)
+        finally:
+            self.reader.native = self.reader.process = self.reader.connection = None
+
+    def test_clearing_or_failed_replacement_hides_retained_surface(self):
+        self.reader.set_entry(self.entry())
+        self.reader.displayed = True
+        self.reader.native = native = Mock()
+        self.reader.set_entry(None)
+        native.show.assert_called_with(False)
+        self.assertFalse(self.reader.displayed)
+        self.reader.displayed = True
+        self.reader.handle_event({"kind": "error", "id": self.reader.generation, "message": "PDF unavailable"})
+        self.assertFalse(self.reader.displayed)
+        self.assertIn("PDF unavailable", self.reader.message.get())
+        self.reader.native = None
+
+    def test_first_document_reveals_native_surface_before_waiting_for_its_paint(self):
+        self.show()
+        self.reader.set_entry(self.entry())
+        self.reader.native = native = Mock()
+        self.reader.handle_event({"kind": "state", "id": self.reader.generation,
+                                  "renderable": True, "loaded": False})
+        self.assertTrue(self.reader.displayed)
+        self.assertFalse(self.reader.loaded)
+        native.show.assert_called_once_with(True)
+        self.assertFalse(self.reader.placeholder.winfo_manager())
+        self.reader.native = None
+
 
 class PDFReaderAppControlsTests(unittest.TestCase):
     setUp = test_ui_audit.UIAuditTests.setUp

@@ -104,7 +104,8 @@ class SortingTooltipTests(unittest.TestCase):
         self.assertIn("any time", view.item_help("synthetic.pdf", "state"))
         view.rows["synthetic.pdf"] = {"status": "error", "error": "Synthetic problem"}
         self.assertEqual(view.item_help("synthetic.pdf", "state"), "Synthetic problem")
-        self.assertEqual(view.item_help("synthetic.pdf", "name"), "")
+        self.assertIn("Double-click or press Enter", view.item_help("synthetic.pdf", "name"))
+        self.assertIn("Review selected", view.item_help("synthetic.pdf", "name"))
 
 
 if __name__ == "__main__":

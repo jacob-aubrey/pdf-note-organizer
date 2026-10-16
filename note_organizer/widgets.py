@@ -529,9 +529,18 @@ class Tooltip:
                 return False
             owner = self.widget.winfo_toplevel()
             focused = owner.focus_displayof()
+            root = owner._root()
+            # Opening a nonmodal dialog need not move keyboard focus from the
+            # main window. Hover help belongs to the pointed-at control, not
+            # necessarily the particular app window retaining keyboard focus.
+            native_owners = (owner,) if owner is root else (owner, root)
             native_foreground = focused is None and any(
-                native.owner_is_foreground() for native in getattr(owner, "_native_reader_children", ()))
-            if not native_foreground and (focused is None or focused.winfo_toplevel() != owner):
+                native.owner_is_foreground() for window in native_owners
+                for native in getattr(window, "_native_reader_children", ()))
+            if not native_foreground and (focused is None or focused._root() is not root):
+                return False
+            grab = self.widget.grab_current()
+            if grab is not None and grab.winfo_toplevel() != owner:
                 return False
             x, y = self.widget.winfo_pointerxy()
             under_pointer = self.widget.winfo_containing(x, y)
@@ -545,7 +554,7 @@ class Tooltip:
                 return (self.widget.identify_region(local_x, local_y) == "cell"
                         and bool(self.widget.identify_row(local_y)))
             return True
-        except tk.TclError:
+        except (tk.TclError, KeyError):
             return False
 
     def show(self):

@@ -1,5 +1,5 @@
 import * as pdfjsLib from "../pdfjs/build/pdf.mjs";
-const { EventBus, PDFViewer, PDFLinkService, PDFFindController } =
+const { EventBus, PDFViewer, PDFLinkService, PDFFindController, RenderingStates } =
   await import("../pdfjs/web/pdf_viewer.mjs");
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("../pdfjs/build/pdf.worker.mjs", import.meta.url).href;
@@ -71,6 +71,97 @@ let pan = null;
 let readingSnapshot = null;
 let suppressLinkClickUntil = 0;
 let suppressedPopups = new Set();
+let preparingId = null;
+let transitionFrame = null;
+let loadingTimer = null;
+
+// Retain only visible pages, including their text/annotation layers. A cloned
+// canvas is blank unless its pixels are copied explicitly. This is an inert
+// visual cover, not a second live PDF viewer or another document in memory.
+function retainVisiblePage() {
+  const cover = $("transitionCover");
+  if (!cover.hidden || !ready) return;
+  const bounds = $("stage").getBoundingClientRect();
+  for (const page of $("viewer").querySelectorAll(".page")) {
+    const box = page.getBoundingClientRect();
+    if (box.bottom <= bounds.top || box.top >= bounds.bottom ||
+        box.right <= bounds.left || box.left >= bounds.right || !page.querySelector("canvas")) continue;
+    const copy = page.cloneNode(true);
+    const originals = page.querySelectorAll("canvas"), copies = copy.querySelectorAll("canvas");
+    originals.forEach((canvas, index) => {
+      if (canvas.width && canvas.height) copies[index].getContext("2d").drawImage(canvas, 0, 0);
+    });
+    for (const element of [copy, ...copy.querySelectorAll("[id]")]) element.removeAttribute("id");
+    Object.assign(copy.style, { position: "absolute", margin: "0",
+      left: `${box.left - bounds.left}px`, top: `${box.top - bounds.top}px` });
+    cover.append(copy);
+  }
+  if (!cover.childElementCount) return;
+  const style = getComputedStyle($("viewer"));
+  for (const name of style) if (name.startsWith("--")) cover.style.setProperty(name, style.getPropertyValue(name));
+  cover.dataset.searchMode = inPdfFind ? "pdf" : "main";
+  cover.hidden = false;
+}
+
+function beginTransition() {
+  retainVisiblePage();
+  if ($("stage").classList.contains("opening")) return;
+  $("stage").setAttribute("aria-busy", "true");
+  $("stage").classList.add("opening");
+  $("viewerContainer").inert = true;
+  $("loading").hidden = true;
+  // Fast navigation should never display a transient loading message.
+  loadingTimer = setTimeout(() => { $("loading").hidden = false; }, 180);
+  updateControls();
+}
+
+function finishTransition() {
+  clearTimeout(loadingTimer);
+  loadingTimer = null;
+  if (transitionFrame !== null) cancelAnimationFrame(transitionFrame);
+  transitionFrame = null;
+  $("transitionCover").hidden = true;
+  $("transitionCover").replaceChildren();
+  $("loading").hidden = true;
+  $("stage").classList.remove("opening");
+  $("viewerContainer").inert = false;
+  $("stage").removeAttribute("aria-busy");
+  updateControls();
+}
+
+function revealRenderedSelection() {
+  if (transitionFrame !== null) return;
+  const check = () => {
+    transitionFrame = null;
+    if (!$("stage").classList.contains("opening")) return;
+    const page = ready ? viewer.getPageView(viewer.currentPageNumber - 1) : null;
+    if (preparingId !== null || !page || page.renderingState !== RenderingStates.FINISHED ||
+        pendingMatch || mainScrollMatches) {
+      transitionFrame = requestAnimationFrame(check);
+      return;
+    }
+    // Give text-layer scrolling/highlights their frame before removing cover.
+    const token = generation;
+    transitionFrame = requestAnimationFrame(() => {
+      transitionFrame = null;
+      if (token === generation && preparingId === null && !pendingMatch && !mainScrollMatches) {
+        finishTransition();
+        report("state", diagnosticState());
+      }
+      else revealRenderedSelection();
+    });
+  };
+  transitionFrame = requestAnimationFrame(check);
+}
+
+function prepare(id) {
+  // Cancel asynchronous callbacks from a superseded open, preserving its
+  // last painted page until the new result has resolved and rendered.
+  ++generation;
+  pendingOpen = null;
+  preparingId = id;
+  beginTransition();
+}
 
 // PDF.js normally centers the selected word horizontally. Main-result arrows
 // instead reveal the line vertically while keeping the fitted page centered.
@@ -123,9 +214,11 @@ function reportWarning(message) {
 }
 
 function diagnosticState() {
+  const transitioning = $("stage").classList.contains("opening");
   return {
     id: active?.id ?? null, url: active?.url ?? null, title: active?.title ?? "",
-    ready, loaded: ready, page: ready ? viewer.currentPageNumber : 0,
+    ready: ready && !transitioning, loaded: ready && !transitioning, renderable: ready,
+    page: ready ? viewer.currentPageNumber : 0,
     pages: pdfDocument?.numPages ?? 0,
     scale: ready ? viewer.currentScale : 0,
     scaleValue: ready ? viewer.currentScaleValue : "page-width",
@@ -134,13 +227,15 @@ function diagnosticState() {
     selectedMatch: { ...findController.selected },
     pageMatches: findController.pageMatches.map(matches => matches?.length ?? 0),
     matches: { ...matchCount }, findMode: inPdfFind ? "pdf" : "library",
-    mainMappingBuilds,
+    mainMappingBuilds, transitioning,
+    retainedPage: !$("transitionCover").hidden,
+    loadingVisible: !$("loading").hidden,
     findQuery: $("findInput").value, expanded,
     panning: pan !== null,
     scroll: { left: $("viewerContainer").scrollLeft, top: $("viewerContainer").scrollTop },
-    textLayers: document.querySelectorAll(".textLayer").length,
-    renderedPages: document.querySelectorAll(".page canvas").length,
-    selectionOutlined: !!document.querySelector(".notable-selection"),
+    textLayers: $("viewer").querySelectorAll(".textLayer").length,
+    renderedPages: $("viewer").querySelectorAll(".page canvas").length,
+    selectionOutlined: !!$("viewer").querySelector(".notable-selection"),
     suppressedPopupCount: suppressedPopups.size,
     annotationEditorMode: viewer.annotationEditorMode,
     renderForms: viewer.renderForms, enableScripting: viewer.enableScripting,
@@ -155,15 +250,16 @@ function reportState() {
 }
 
 function updateControls() {
+  const available = ready && !$("stage").classList.contains("opening");
   for (const id of ["pageNumber", "zoom", "zoomIn", "zoomOut", "findToggle"]) {
-    $(id).disabled = !ready;
+    $(id).disabled = !available;
   }
-  $("backToSelection").disabled = !ready || !active?.hasSelection;
+  $("backToSelection").disabled = !available || !active?.hasSelection;
   $("backToSelection").title = !ready ? "Open a PDF to return to its selected note or main search result." : !active?.hasSelection ?
     "Select a note or main search result to enable returning to its location." :
     "Return to the selected note or main search result and resume main search highlighting.";
-  $("previousPage").disabled = !ready || viewer.currentPageNumber <= 1;
-  $("nextPage").disabled = !ready || viewer.currentPageNumber >= (pdfDocument?.numPages ?? 0);
+  $("previousPage").disabled = !available || viewer.currentPageNumber <= 1;
+  $("nextPage").disabled = !available || viewer.currentPageNumber >= (pdfDocument?.numPages ?? 0);
   $("previousPage").title = !ready ? "Open a PDF to browse pages." :
     viewer.currentPageNumber <= 1 ? "Already on the first PDF page." : "Go to the previous PDF page.";
   $("nextPage").title = !ready ? "Open a PDF to browse pages." :
@@ -609,7 +705,6 @@ function applySelection() {
   if (!ready || !active) return;
   updateDocumentTitle(active.title || "PDF document");
   $("empty").hidden = true;
-  $("loading").hidden = true;
   jumpToSelection();
   // open() is a main-result selection. It always restores the main search;
   // visibility changes between the two views do not call this method.
@@ -619,6 +714,7 @@ function applySelection() {
 
 async function open(payload) {
   const token = ++generation;
+  preparingId = null;
   let passwordRejected = false;
   try {
     endPan();
@@ -629,6 +725,7 @@ async function open(payload) {
       throw new Error("The PDF must be served by this local reader.");
     }
     const oldUrl = active?.url;
+    if (!pdfDocument || !ready || oldUrl !== url.href) beginTransition();
     if (typeof payload.expanded === "boolean" && payload.expanded !== expanded) {
       readingSnapshot = payload.expanded ? captureView() : null;
       expanded = payload.expanded;
@@ -647,6 +744,7 @@ async function open(payload) {
     requestedMatch = matchRequest(payload.match);
     if (pdfDocument && ready && oldUrl === active.url) {
       applySelection();
+      revealRenderedSelection();
       // The host can reveal the existing surface immediately. Debounced
       // progress reports still follow as highlighting/rendering settles.
       report("state", diagnosticState());
@@ -667,7 +765,6 @@ async function open(payload) {
     pendingMatch = null;
     missingMainMatchPage = null;
     matchCount = { current: 0, total: 0 };
-    $("loading").hidden = false;
     $("empty").hidden = true;
     updateControls();
     const previousTask = loadingTask;
@@ -707,6 +804,8 @@ async function open(payload) {
 }
 
 function showError(message) {
+  preparingId = null;
+  finishTransition();
   endPan();
   setPanReady(false);
   ready = false;
@@ -718,6 +817,8 @@ function showError(message) {
 }
 
 async function clear(message = "Select a paper or note to read its PDF.", id = null) {
+  preparingId = null;
+  finishTransition();
   endPan();
   setPanReady(false);
   ++generation;
@@ -784,6 +885,7 @@ eventBus.on("pagesinit", () => {
   pendingOpen = null;
   viewer.currentScaleValue = defaultScale();
   applySelection();
+  revealRenderedSelection();
   report("state", diagnosticState());
   reportState();
 });
@@ -971,9 +1073,9 @@ document.addEventListener("click", event => {
 }, true);
 
 window.NotableReader = {
-  open, clear, setTitle,
-  selectMatch(value) {
-    if (!active?.url) return false;
+  open, clear, setTitle, prepare,
+  selectMatch(value, id = active?.id) {
+    if (!active?.url || id !== active.id) return false;
     const request = value && typeof value === "object" ? value : { index: value };
     requestedMatch = matchRequest(request);
     let hitsChanged = false;

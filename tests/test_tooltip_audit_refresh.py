@@ -1,4 +1,5 @@
 """Current workflow help, checked on disposable Tk controls and libraries."""
+import gc
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
@@ -7,7 +8,7 @@ from unittest.mock import Mock, patch
 
 from note_organizer import archive_ui, maintenance_ui, research_tools, research_ui, storage_ui, support_ui
 from note_organizer.support import UpdateResult
-from note_organizer.widgets import annotate_buttons, dismiss_tooltips
+from note_organizer.widgets import dismiss_tooltips
 from tests.test_preferences_ui import descendants
 from tests import test_ui_audit
 
@@ -25,9 +26,10 @@ class CurrentTooltipAuditTests(unittest.TestCase):
     def tearDown(self):
         test_ui_audit.UIAuditTests.tearDown(self)
         self.assertFalse(self.errors)
+        self.app = self.root = None
+        gc.collect()
 
     def assert_explained(self, parent):
-        annotate_buttons(parent)
         controls = [widget for widget in descendants(parent) if isinstance(widget,
             (ttk.Button, ttk.Checkbutton, ttk.Radiobutton, ttk.Entry, ttk.Combobox, ttk.Spinbox))]
         self.assertTrue(controls)
@@ -38,7 +40,30 @@ class CurrentTooltipAuditTests(unittest.TestCase):
                 self.assertTrue(help_text(widget).strip())
                 self.assertNotEqual(help_text(widget), "Choose this action.")
 
+    def test_help_buttons_have_working_hover_help_on_first_open(self):
+        self.root.geometry("1100x760+0+0")
+        self.root.deiconify()
+        self.app.help_button.focus_force()
+        self.root.update()
+        window = self.app.help()
+        self.root.update()
+        self.assert_explained(window)
+        buttons = [widget for widget in descendants(window) if isinstance(widget, ttk.Button)]
+        for button in buttons:
+            with self.subTest(button=button.cget("text")), \
+                    patch.object(button, "winfo_pointerxy", return_value=(button.winfo_rootx()+2, button.winfo_rooty()+2)), \
+                    patch.object(button, "winfo_containing", return_value=button):
+                self.assertTrue(button.tooltip.pointer_over(),
+                    f"Hover rejected with focus on {window.focus_displayof()}")
+                button.tooltip.show()
+                self.root.update()
+                self.assertIsNotNone(button.tooltip.window)
+                self.assertTrue(button.tooltip.window.winfo_exists())
+                button.tooltip.hide()
+        window.destroy()
+
     def test_every_main_tab_and_disabled_control_has_current_help(self):
+        self.assert_explained(self.app.utility_header)
         for tab in (self.app.inbox_tab, self.app.library_tab, self.app.notes_tab, self.app.remarkable_tab):
             self.assert_explained(tab)
         self.assertIn("Select an incoming document", help_text(self.app.inbox_view.review_button))

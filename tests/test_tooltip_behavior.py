@@ -142,6 +142,33 @@ class TooltipBehaviorTests(unittest.TestCase):
         self.assertIsNone(tip.window)
         window.deiconify.assert_not_called()
 
+    def test_dialog_hover_does_not_require_clicking_to_move_keyboard_focus(self):
+        dialog = tk.Toplevel(self.root)
+        button = ttk.Button(dialog, text="Dialog action")
+        tip = Tooltip(button, "Dialog explanation")
+        with self.hovering(button), patch.object(dialog, "focus_displayof", return_value=self.button), self.popup() as popup:
+            tip.show()
+        self.assertIs(tip.window, popup)
+        popup.deiconify.assert_called_once()
+
+    def test_dialog_hover_accepts_native_reader_focus_in_same_foreground_app(self):
+        dialog = tk.Toplevel(self.root)
+        button = ttk.Button(dialog, text="Dialog action")
+        tip = Tooltip(button, "Dialog explanation")
+        native = Mock()
+        self.root._native_reader_children = [native]
+        with self.hovering(button, focused=False):
+            native.owner_is_foreground.return_value = True
+            self.assertTrue(tip.pointer_over())
+            native.owner_is_foreground.return_value = False
+            self.assertFalse(tip.pointer_over())
+
+    def test_modal_dialog_blocks_hover_help_on_other_app_windows(self):
+        dialog = tk.Toplevel(self.root)
+        tip = Tooltip(self.button, "Main window explanation")
+        with self.hovering(self.button), patch.object(self.button, "grab_current", return_value=dialog):
+            self.assertFalse(tip.pointer_over())
+
     def test_containers_and_whole_static_tables_do_not_show_help(self):
         for widget in (ttk.Frame(self.root), ttk.Notebook(self.root), tk.Canvas(self.root),
                        tk.Text(self.root), ttk.Panedwindow(self.root), ttk.Treeview(self.root)):

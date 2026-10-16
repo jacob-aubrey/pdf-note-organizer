@@ -433,9 +433,14 @@ def main():
             arrow_state = inspect()
             assert arrow_state["selectedMatch"]["matchIdx"] == expected_native, arrow_state
             assert arrow_state["scroll"]["left"] < 1, arrow_state
-        app.next_match_button.invoke()
-        assert app.notes.selection() == (rows[1],), (app.notes.selection(), rows)
-        loaded(2)
+        with patch.object(app.pdf_worker, "reader_location", wraps=app.pdf_worker.reader_location) as location, \
+             patch.object(app.pdf_reader.native, "show", wraps=app.pdf_reader.native.show) as visibility:
+            app.next_match_button.invoke()
+            assert app.notes.selection() == (rows[1],), (app.notes.selection(), rows)
+            loaded(2)
+        location.assert_not_called()
+        assert all(call.args == (True,) for call in visibility.call_args_list), visibility.call_args_list
+        passed("cached main-search page navigation bypasses the PDF worker and never hides the native surface")
         assert app.current_match_index == 0
         app.previous_match_button.invoke()
         assert app.notes.selection() == (rows[0],)

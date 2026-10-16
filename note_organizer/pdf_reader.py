@@ -16,9 +16,10 @@ from .widgets import Tooltip
 
 
 class PDFReader(ttk.Frame):
-    def __init__(self, parent, resolver, external, expand):
+    def __init__(self, parent, resolver, external, expand, reuse=None):
         super().__init__(parent)
         self.resolver, self.external, self.expand = resolver, external, expand
+        self.reuse = reuse
         self.generation = 0
         self.identity = None
         self.entry = None
@@ -35,6 +36,7 @@ class PDFReader(ttk.Frame):
         self.awaiting_entry = False
         self.closed = False
         self.loaded = False
+        self.displayed = False
         self.state = {}
         self.last_warning = ""
         self.inspection = None
@@ -88,7 +90,8 @@ class PDFReader(ttk.Frame):
         self.pending_match = None
         self.match_selection = None
         self.awaiting_entry = bool(entry)
-        self.show_message("Preparing PDF…" if entry else "Select a paper or note to read its PDF.")
+        if not entry or not self.displayed:
+            self.show_message("Preparing PDF…" if entry else "Select a paper or note to read its PDF.")
         if not entry:
             self.send({"command": "clear", "id": generation, "message": self.message.get()})
             return
@@ -100,10 +103,37 @@ class PDFReader(ttk.Frame):
             return
         self.awaiting_entry = False
         entry, cancelled, generation = dict(self.entry), self.cancelled, self.generation
+        if self.poll_after is not None:
+            self._root().after_cancel(self.poll_after)
+        self.poll_after = self._root().after(8, self.poll)
+        # Verified page-only targets can reuse the prepared source immediately,
+        # without a worker round trip or the periodic completion poll.
+        if self.reuse:
+            try:
+                payload = self.reuse(entry)
+            except Exception:
+                payload = None  # The normal resolver supplies actionable errors.
+            if payload is not None:
+                self.open_resolved(payload, generation)
+                return
+        if self.displayed:
+            self.send({"command": "prepare", "id": generation})
         def resolve():
             return self.resolver(dict(entry), cancelled.is_set)
         future = self.executor.submit(resolve)
         future.add_done_callback(lambda result: self.results.put((generation, result)))
+
+    def open_resolved(self, payload, generation):
+        self.pending = {**payload, "title": self.title,
+                        "mainHits": self.entry.get("search_hits", []) if self.entry else [], "id": generation,
+                        "terms": self.terms, "expanded": self.expanded}
+        if self.pending_match is not None:
+            self.pending["match"] = self.pending_match
+            self.pending_match = None
+        if self.process:
+            self.send({"command": "open", "payload": self.pending})
+        elif self.host.winfo_ismapped():
+            self.start_host()
 
     def reload(self):
         selected_match = self.match_selection
@@ -119,7 +149,7 @@ class PDFReader(ttk.Frame):
             self.start_host()
         if self.native:
             self.resize()
-            self.native.show(self.loaded)
+            self.native.show(self.displayed)
 
     def start_host(self):
         if self.closed or self.process or not self.pending:
@@ -152,6 +182,7 @@ class PDFReader(ttk.Frame):
             self.show_message("The PDF reader stopped. Retry or open the PDF externally.", retry=True)
 
     def show_message(self, text, retry=False):
+        self.displayed = False
         self.message.set(text)
         if self.native:
             self.native.show(False)
@@ -181,18 +212,7 @@ class PDFReader(ttk.Frame):
                 payload = future.result()
                 # A metadata edit can arrive while source resolution is still
                 # running. Its latest title wins over the captured old entry.
-                self.pending = {**payload, "title": self.title,
-                                "mainHits": self.entry.get("search_hits", []) if self.entry else [], "id": generation,
-                                "terms": self.terms, "expanded": self.expanded}
-                if self.pending_match is not None:
-                    # Select the requested hit as part of opening the result;
-                    # avoid waiting for a loaded-state round trip to send it.
-                    self.pending["match"] = self.pending_match
-                    self.pending_match = None
-                if self.process:
-                    self.send({"command": "open", "payload": self.pending})
-                elif self.host.winfo_ismapped():
-                    self.start_host()
+                self.open_resolved(payload, generation)
             except InterruptedError:
                 pass
             except Exception as exc:
@@ -206,7 +226,8 @@ class PDFReader(ttk.Frame):
         except (OSError, EOFError):
             self.stop_host()
             self.show_message("The PDF reader stopped. Retry or open the PDF externally.", retry=True)
-        self.poll_after = self._root().after(40, self.poll)
+        # Resolve short geometry jobs promptly; keep idle polling inexpensive.
+        self.poll_after = self._root().after(8 if self.entry and not self.loaded else 40, self.poll)
 
     def handle_event(self, event):
         kind = event.get("kind")
@@ -215,7 +236,7 @@ class PDFReader(ttk.Frame):
                 from .reader_host import NativeChild
                 try:
                     self.native = NativeChild(event["hwnd"], self.host)
-                    self.native.show(self.loaded and bool(self.host.winfo_ismapped()))
+                    self.native.show(self.displayed and bool(self.host.winfo_ismapped()))
                 except OSError as exc:
                     self.stop_host()
                     self.show_message(f"Could not embed the PDF reader: {exc}", retry=True)
@@ -227,9 +248,17 @@ class PDFReader(ttk.Frame):
             return
         if kind == "state":
             self.state = event
+            if event.get("renderable") and not self.displayed:
+                # WebView2 must be visible to paint its first canvas and run
+                # animation frames. "loaded" follows after that first paint.
+                self.displayed = True
+                self.placeholder.place_forget()
+                if self.native:
+                    self.native.show(bool(self.host.winfo_ismapped()))
             if event.get("loaded"):
                 was_loaded = self.loaded
                 self.loaded = True
+                self.displayed = True
                 self.placeholder.place_forget()
                 if self.native:
                     self.native.show(bool(self.host.winfo_ismapped()))
@@ -263,6 +292,10 @@ class PDFReader(ttk.Frame):
         self.match_selection = index
         if self.loaded:
             self.send({"command": "match", "index": index})
+        elif self.pending is not None and self.process:
+            # open is already queued. Send this occurrence behind it rather
+            # than waiting for a loaded-state report and another Tk poll.
+            self.send({"command": "match", "index": index, "id": self.generation})
         elif self.entry:
             self.pending_match = index
 
@@ -277,6 +310,7 @@ class PDFReader(ttk.Frame):
             self.send({"command": "expanded", "value": value})
 
     def stop_host(self):
+        self.displayed = False
         process, connection, native = self.process, self.connection, self.native
         self.process = self.connection = self.native = None
         if native:

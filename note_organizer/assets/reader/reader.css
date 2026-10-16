@@ -80,6 +80,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, #viewerContaine
   line-clamp: 2;
 }
 #stage { position: relative; flex: 1 1 auto; min-height: 0; background: #181a1b; }
+#stage.opening #viewerContainer { pointer-events: none; }
+#transitionCover { position: absolute; inset: 0; z-index: 2; overflow: hidden; background: #181a1b; pointer-events: none; user-select: none; }
 #viewerContainer { position: absolute; inset: 0; overflow: auto; scrollbar-gutter: stable; }
 #viewerContainer .pdfViewer { padding: 12px 0 30px; }
 #viewerContainer.pan-ready,
@@ -96,7 +98,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, #viewerContaine
 [data-search-mode="pdf"] .textLayer .highlight.selected { background: #287b48b3; }
 #empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; color: #bdc9d4; }
 #empty p { max-width: 460px; line-height: 1.5; text-align: center; }
-#loading { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); padding: 8px 15px; border-radius: 5px; background: #25282bee; color: #e4e7eb; pointer-events: none; }
+#loading { position: absolute; z-index: 3; bottom: 14px; right: 14px; padding: 6px 10px; border-radius: 5px; background: #25282bee; color: #e4e7eb; pointer-events: none; }
 @media (max-width: 700px) {
   .reader-actions .button-label { display: none; }
   .reader-actions button { width: 31px; padding: 3px; }

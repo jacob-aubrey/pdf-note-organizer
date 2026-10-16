@@ -11,12 +11,13 @@ def file_version(path):
 
 
 class ReaderSource:
-    def __init__(self, key, path, versions):
+    def __init__(self, key, path, versions, location=None):
         self.key, self.path = key, Path(path)
         # Source/library versions were captured before preparation. A source
         # changed during that work must invalidate reuse on the next request.
         self.versions = dict(versions)
         self.versions.setdefault(self.path, file_version(self.path))
+        self.location = dict(location or {})
 
     def reusable(self, key):
         return (self.key == key and self.versions[self.path] is not None and

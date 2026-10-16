@@ -2238,16 +2238,37 @@ class App(WorkspaceLayouts):
             self.reader_expanded = True
             self.reader_expand_button.configure(text="Exit reading mode")
 
-    def load_reader_document(self, entry, cancelled):
-        from .reader_source import ReaderSource, file_version
+    def reader_source_target(self, entry):
         reference, page = self.entry_pdf_target(entry)
         if entry.get("missing"):
             raise FileNotFoundError("This PDF is unavailable. Locate it in Library, or choose another paper.")
-        if cancelled():
-            raise InterruptedError("Reader selection changed")
         exact = entry.get("kind") == "pdf" and not entry.get("logical_paper_id")
         source_key = (getattr(self, "query_generation", None), str(self.store.path), str(reference), exact,
                       entry.get("source_digest"), entry.get("source_note_revision"))
+        return reference, page, source_key, exact
+
+    def reuse_reader_document(self, entry):
+        # PDF search rows need only a physical page jump. Rectangles belonging
+        # to extracted notes still go through the geometry-aware worker.
+        if entry.get("kind") != "pdf":
+            return None
+        _, page, source_key, _ = self.reader_source_target(entry)
+        prepared = getattr(self, "reader_prepared_source", None)
+        if not prepared or not prepared.reusable(source_key):
+            return None
+        pages = prepared.location.get("pages", 0)
+        if type(page) is not int or not 1 <= page <= pages:
+            return None
+        return {"path": str(prepared.path.resolve()), "title": result_title(entry), "page": page,
+                "rect": None, "hasSelection": not entry.get("pdf_document", False),
+                "mainHits": entry.get("search_hits", []),
+                "suppressedPopupIds": prepared.location.get("suppressedPopupIds", {})}
+
+    def load_reader_document(self, entry, cancelled):
+        from .reader_source import ReaderSource, file_version
+        reference, page, source_key, exact = self.reader_source_target(entry)
+        if cancelled():
+            raise InterruptedError("Reader selection changed")
         prepared = getattr(self, "reader_prepared_source", None)
         reuse = prepared is not None and prepared.reusable(source_key)
         if not reuse:
@@ -2274,7 +2295,7 @@ class App(WorkspaceLayouts):
         location = self.pdf_worker.reader_location(path, page, entry.get("path"), entry.get("page"),
             entry.get("rect") if entry.get("kind") != "pdf" and not managed else None, cancelled)
         if not reuse:
-            self.reader_prepared_source = ReaderSource(source_key, path, versions)
+            self.reader_prepared_source = ReaderSource(source_key, path, versions, location)
         return {"path": str(path.resolve()), "title": result_title(entry), "page": page,
                 "rect": location["rect"], "hasSelection": not entry.get("pdf_document", False),
                 "mainHits": entry.get("search_hits", []),

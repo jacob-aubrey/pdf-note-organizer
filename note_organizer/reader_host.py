@@ -151,13 +151,16 @@ def run_reader_host(connection, dpi_awareness=0):
                             current_source = identity
                         payload["url"] = document_url
                         window.evaluate_js("void window.NotableReader.open(" + json.dumps(payload) + ")")
+                    elif action == "prepare":
+                        window.evaluate_js("window.NotableReader.prepare(" + json.dumps(command.get("id")) + ")")
                     elif action == "clear":
                         server.clear_document()
                         current_source = None
                         window.evaluate_js("window.NotableReader.clear(" + json.dumps(command.get("message", "Choose a paper or note."))
                                            + "," + json.dumps(command.get("id")) + ")")
                     elif action == "match":
-                        window.evaluate_js("window.NotableReader.selectMatch(" + json.dumps(command["index"]) + ")")
+                        window.evaluate_js("window.NotableReader.selectMatch(" + json.dumps(command["index"])
+                                           + ("," + json.dumps(command["id"]) if "id" in command else "") + ")")
                     elif action == "expanded":
                         window.evaluate_js("window.NotableReader.setExpanded(" + json.dumps(bool(command.get("value"))) + ")")
                     elif action == "title":
