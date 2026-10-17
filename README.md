@@ -104,10 +104,10 @@ Optional Gemini naming has a model selector and **Test connection** in Sorting s
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip check
-.\.venv\Scripts\python.exe -m unittest discover -s tests -q
+.\.venv\Scripts\python.exe tools/run_ui_tests.py tools/run_test_batches.py
 ```
 
-Windows CI installs the hashed runtime dependencies, checks Python compilation and runs the source regression suite. It does not publish releases automatically. To build the portable Windows executable locally, install PyInstaller in the project environment and run `python scripts/build_release.py`. The script uses a dedicated versioned build/output directory, includes the bundled guides and PDF.js assets, and writes release checksums. Existing databases and older executables directly inside `dist/` are retained copies.
+Windows CI installs the hashed runtime dependencies, checks Python compilation and runs the complete regression suite in process batches on its disposable GitHub-hosted VM. Local GUI checks use an inactive desktop; the hosted VM uses its own desktop for WebView2 compatibility. Failed runs retain batch logs as downloadable workflow artifacts. CI does not publish releases automatically. To build the portable Windows executable locally, install PyInstaller in the project environment and run `python scripts/build_release.py`. The script uses a dedicated versioned build/output directory, includes the bundled guides and PDF.js assets, and writes release checksums. Existing databases and older executables directly inside `dist/` are retained copies.
 
 The release bundles the current user manual and README PDFs. Help opens these same bundled guides.
 
@@ -619,16 +619,14 @@ The illustrated manual is generated from [task definitions](documentation/manual
 Run the suite from the project folder:
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe tools/run_ui_tests.py tools/run_test_batches.py
 ```
 
 The suite uses synthetic documents and temporary libraries, with cloud clients mocked. It covers PDF extraction/notebooks, document naming and Office exclusions, incomplete downloads, filing collisions/recovery, key removal and atomic preferences, paper links and independent history, source reconstruction, cloud transfer retries and changed destinations, folder scope, moved-folder recovery, and interface behavior.
 
-On Windows, GUI tests can run on a separate inactive desktop so they do not display windows or take keyboard focus from your work:
+On Windows, use the launcher above for the full suite. It runs GUI tests on a separate inactive desktop so they do not display windows or take keyboard focus from your work. Direct discovery bypasses that isolation and is rejected by screenshot tests. Individual native checks use the same launcher:
 
 ```powershell
-.\.venv\Scripts\python.exe tools/run_ui_tests.py -m unittest discover -s tests -q
-.\.venv\Scripts\python.exe tools/run_ui_tests.py tools/run_test_batches.py
 .\.venv\Scripts\python.exe tools/run_ui_tests.py tests/reader_webview_regression.py
 .\.venv\Scripts\python.exe tools/run_ui_tests.py tests/reader_app_regression.py
 .\.venv\Scripts\python.exe tools/run_ui_tests.py tools/check_reader_focus.py
