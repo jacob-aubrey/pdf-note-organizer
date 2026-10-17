@@ -22,4 +22,13 @@ jobs:
           New-Item -ItemType Directory -Force tmp/test-runtime | Out-Null
           $env:TEMP = (Resolve-Path tmp/test-runtime).Path
           $env:TMP = $env:TEMP
-          python -m unittest discover -s tests -q
+          python tools/run_ui_tests.py tools/run_test_batches.py
+      - name: Keep regression diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-regression-diagnostics
+          path: |
+            .test-tmp/ui-tests-*.log
+            .test-tmp/suite-*/batch-*.log
+          retention-days: 14
