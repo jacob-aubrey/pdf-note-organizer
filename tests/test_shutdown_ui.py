@@ -26,8 +26,14 @@ class ShutdownUITests(unittest.TestCase):
         test_ui_audit.UIAuditTests.tearDown(self)
 
     def show(self):
-        self.root.attributes("-alpha", 0)
-        self.root.geometry("1100x760+0+0")
+        native = getattr(self, "enable_pdf_reader", False)
+        if native:
+            from tests.reader_app_regression import require_private_desktop
+            require_private_desktop()
+        self.root.attributes("-alpha", 1 if native else 0)
+        width = min(1100, self.root.winfo_screenwidth() - 32) if native else 1100
+        height = min(760, self.root.winfo_screenheight() - 80) if native else 760
+        self.root.geometry(f"{width}x{height}+0+0")
         self.root.deiconify()
         self.root.update()
         self.releases = []

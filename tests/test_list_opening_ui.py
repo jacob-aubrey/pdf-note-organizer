@@ -49,8 +49,16 @@ class ListOpeningUITests(unittest.TestCase):
         self.app.paper_selected()
 
     def show(self, tab=None, window=None):
-        self.root.attributes("-alpha", 0)
-        self.root.geometry("1250x820+0+0")
+        native = getattr(self, "enable_pdf_reader", False)
+        if native:
+            from tests.reader_app_regression import require_private_desktop
+            require_private_desktop()
+        # WebView2 can stop painting a fully transparent ancestor on hosted
+        # Windows. These real viewer tests already run on an isolated desktop.
+        self.root.attributes("-alpha", 1 if native else 0)
+        width = min(1250, self.root.winfo_screenwidth() - 32) if native else 1250
+        height = min(820, self.root.winfo_screenheight() - 80) if native else 820
+        self.root.geometry(f"{width}x{height}+0+0")
         self.app.tabs.select(tab or self.app.library_tab)
         self.root.deiconify()
         if window:

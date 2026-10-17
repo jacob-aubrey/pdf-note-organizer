@@ -71,7 +71,11 @@ class UIAuditTests(unittest.TestCase):
         while not predicate() and time.monotonic() < deadline:
             self.root.update()
             time.sleep(.005)
-        self.assertTrue(predicate())
+        if not predicate():
+            reader = self.app.pdf_reader
+            self.fail(f"Timed out after {timeout}s; reader state={reader.state!r}; "
+                      f"message={reader.message.get()!r}; displayed={reader.displayed}; "
+                      f"native={reader.native!r}; callback errors={self.errors!r}")
         self.assertFalse(self.errors)
 
     def test_folder_table_shows_only_source_with_actual_destination(self):
