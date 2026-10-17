@@ -2,7 +2,7 @@
 
 Notable helps you organize research documents and collect your PDF annotations into searchable notes and Word notebooks. You can use it entirely on your PC. Document identification through online services and connection to a reMarkable tablet are optional.
 
-For task-by-task walkthroughs with annotated screenshots, see the [Notable 2.5 user manual](output/pdf/Notable-User-Manual.pdf). Each procedure shows which control to click, what appears next, and how to check the result. It covers setup, filing, PDF reading and search, exports, optional tablet syncing, backups, troubleshooting, and keyboard shortcuts.
+For task-by-task walkthroughs with annotated screenshots, see the [Notable 2.6 user manual](output/pdf/Notable-User-Manual.pdf). Each procedure shows which control to click, what appears next, and how to check the result. It covers setup, filing, PDF reading and search, exports, optional tablet syncing, backups, troubleshooting, and keyboard shortcuts.
 
 There are two related workflows:
 
@@ -13,13 +13,17 @@ Sorting supports `.pdf`, `.docx`, `.pptx`, and legacy `.ppt`. **Only PDFs enter 
 
 This README starts with setup and ordinary use. The [existing-library cleanup walkthrough](#bring-an-existing-pc-and-tablet-library-together) explains how to work through disorganized collections a few papers at a time. Troubleshooting and technical reference follow afterward.
 
-The current version is **Notable 2.5.0**. This release adds verified backup and recovery, history-preserving storage compaction, indexed PDF search, tags and research collections, saved searches, an accessible reading view, explicit citation conflict review and faster background PDF scheduling. The [implementation report](AUDIT_IMPLEMENTATION.md) maps the audit recommendations to the changes and verification.
+The current version is **Notable 2.6.0**. This release adds consistent Windows taskbar shortcut identities and corrects the Windows regression workflow. The previous release introduced verified backup and recovery, history-preserving storage compaction, indexed PDF search, tags and research collections, saved searches, an accessible reading view, explicit citation conflict review and faster background PDF scheduling. The [implementation report](AUDIT_IMPLEMENTATION.md) maps the audit recommendations to those changes and verification.
 
 The [October 13 interface audit](UI_AUDIT_2026-10-13.md) documents the consistency and layout polish, scrollable Settings and Inbox forms, responsive action rows, readable tables and the new open-source notebook-and-pen app icon. Short Library panes condense details to their path controls; enlarge the pane to restore the full explanation and Copy details action.
 
 ## Download and open the Windows app
 
-Download **Notable-2.5.0-windows-x64.exe** from the [Notable 2.5.0 release](https://github.com/jacob-aubrey/pdf-note-organizer/releases/tag/v2.5.0). Save it in a permanent folder and double-click it. This portable executable includes Python and the app's dependencies; it does not need a Python installation or an installer. Windows 10/11 x64 and the Microsoft Edge WebView2 Runtime are required for the embedded PDF reader. Most Windows 11 PCs already have WebView2.
+Download **Notable-2.6.0-windows-x64.exe** from the [Notable 2.6.0 release](https://github.com/jacob-aubrey/pdf-note-organizer/releases/tag/v2.6.0). Save it in a permanent folder and double-click it. This portable executable includes Python and the app's dependencies; it does not need a Python installation or an installer. Windows 10/11 x64 and the Microsoft Edge WebView2 Runtime are required for the embedded PDF reader. Most Windows 11 PCs already have WebView2.
+
+On packaged launches, Notable creates or updates its **Notable** entry in your Windows Start menu. To pin it, launch it once, open Start, search for **Notable**, right-click that entry, and choose **Pin to taskbar** (under **More** on some Windows versions). The shortcut and running app share the same Windows identity. Existing desktop, Start menu and taskbar shortcuts pointing to this exact executable receive the same identity without changing their launch arguments. Notable does not pin itself automatically. Managed profiles can restrict shortcut updates; the app still opens if registration is unavailable.
+
+When upgrading to a differently named executable or moving it, launch the new copy first so the Start entry updates. If an older pinned shortcut still opens the old version, unpin it and pin the current **Notable** Start entry. A shortcut's target remains a specific file; updating its identity does not redirect it to a different executable.
 
 The executable is unsigned. Windows may show an unrecognized-app notice; check the download came from the project's release page and compare its SHA-256 hash with `SHA256SUMS.txt` before deciding whether to run it. The release also includes the user manual and PDF README, both accessible inside the app through **Help**.
 
@@ -31,7 +35,7 @@ On launch, a branded splash identifies the startup task and then reveals the set
 
 ### First setup on Windows
 
-Use the source app when developing Notable or running it from VS Code. Release builds live under `dist/releases/v2.5.0/`; the older executable directly inside `dist/` is a retained rollback copy.
+Use the source app when developing Notable or running it from VS Code. Release builds live under `dist/releases/v2.6.0/`; earlier releases remain separate rollback copies.
 
 The project environment is configured for Python 3.13. Install Python 3.13, open PowerShell in the project folder, and run:
 
@@ -105,7 +109,7 @@ Optional Gemini naming has a model selector and **Test connection** in Sorting s
 
 Windows CI installs the hashed runtime dependencies, checks Python compilation and runs the source regression suite. It does not publish releases automatically. To build the portable Windows executable locally, install PyInstaller in the project environment and run `python scripts/build_release.py`. The script uses a dedicated versioned build/output directory, includes the bundled guides and PDF.js assets, and writes release checksums. Existing databases and older executables directly inside `dist/` are retained copies.
 
-The downloadable README PDF, if present, describes 2.4.1. This Markdown guide and the implementation report document 2.5.0.
+The release bundles the current user manual and README PDFs. Help opens these same bundled guides.
 
 For later launches, run this from the project folder:
 

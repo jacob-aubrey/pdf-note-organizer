@@ -64,6 +64,14 @@ def main():
     kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
     kernel.CloseHandle.argtypes = [wintypes.HANDLE]
     original_desktop = input_desktop_name()
+    # A GitHub-hosted VM is already disposable and has no user's workspace.
+    # Its service session's WebView2 broker cannot initialize on an alternate
+    # desktop (0x80070578). Keep the real renderer tests on the VM's own desktop.
+    if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted":
+        environment = {**os.environ, "NOTABLE_TEST_DESKTOP": original_desktop,
+                       "NOTABLE_TEST_HOSTED_RUNNER": "1", "PYTHONIOENCODING": "utf-8"}
+        print(f"Tests isolated by GitHub-hosted VM; desktop: {original_desktop}", flush=True)
+        return subprocess.call([sys.executable, "-u", *sys.argv[1:]], env=environment)
     name = f"NotableTests-{os.getpid()}-{time.time_ns()}"
     desktop = user.CreateDesktopW(name, None, None, 0, 0x10000000, None)
     if not desktop:

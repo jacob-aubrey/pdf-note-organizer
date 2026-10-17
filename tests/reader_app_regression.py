@@ -40,7 +40,10 @@ def require_private_desktop():
     desktop = user.GetThreadDesktop(kernel.GetCurrentThreadId())
     if not user.GetUserObjectInformationW(desktop, 2, name, ctypes.sizeof(name), ctypes.byref(required)):
         raise ctypes.WinError(ctypes.get_last_error())
-    if name.value != os.environ.get("NOTABLE_TEST_DESKTOP") or not name.value.startswith("NotableTests-"):
+    hosted = (os.environ.get("GITHUB_ACTIONS") == "true" and
+              os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted" and
+              os.environ.get("NOTABLE_TEST_HOSTED_RUNNER") == "1")
+    if name.value != os.environ.get("NOTABLE_TEST_DESKTOP") or not (name.value.startswith("NotableTests-") or hosted):
         raise RuntimeError("Use tools/run_ui_tests.py to isolate native viewer testing.")
 
 

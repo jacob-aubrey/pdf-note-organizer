@@ -43,11 +43,11 @@ exe = EXE(
     entitlements_file=None,
     icon=['Note icon.ico'],
     version=VSVersionInfo(
-        ffi=FixedFileInfo(filevers=(2, 5, 0, 0), prodvers=(2, 5, 0, 0), mask=0x3f, flags=0, OS=0x40004, fileType=1, subtype=0, date=(0, 0)),
+        ffi=FixedFileInfo(filevers=(2, 6, 0, 0), prodvers=(2, 6, 0, 0), mask=0x3f, flags=0, OS=0x40004, fileType=1, subtype=0, date=(0, 0)),
         kids=[StringFileInfo([StringTable('040904B0', [
             StringStruct('CompanyName', 'Notable'), StringStruct('FileDescription', 'Notable research document organizer'),
-            StringStruct('FileVersion', '2.5.0'), StringStruct('ProductName', 'Notable'),
-            StringStruct('ProductVersion', '2.5.0'), StringStruct('OriginalFilename', 'Notable.exe'),
+            StringStruct('FileVersion', '2.6.0'), StringStruct('ProductName', 'Notable'),
+            StringStruct('ProductVersion', '2.6.0'), StringStruct('OriginalFilename', 'Notable.exe'),
         ])]), VarFileInfo([VarStruct('Translation', [1033, 1200])])],
     ),
 )

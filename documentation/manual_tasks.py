@@ -4,8 +4,8 @@ def step(screen, action, result, *callouts, crop=None):
     return dict(screen=screen, action=action, result=result, callouts=callouts, crop=crop)
 
 TASKS = [
-('Start the Windows app', 'Download the executable, SHA256SUMS.txt and guides from the v2.5.0 GitHub release. Use Windows 10/11 x64; the embedded reader also needs Microsoft Edge WebView2 Runtime.', [
-    step('library', 'Save Notable-2.5.0-windows-x64.exe in a permanent folder and double-click it. Let the startup splash finish, then click Library.', 'The saved library and controls appear together after startup. The portable executable includes Python; first launch can take a few seconds to unpack.', ('Library', 'Open your saved PDF folders')),
+('Start the Windows app', 'Download the executable, SHA256SUMS.txt and guides from the v2.6.0 GitHub release. Use Windows 10/11 x64; the embedded reader also needs Microsoft Edge WebView2 Runtime.', [
+    step('library', 'Save Notable-2.6.0-windows-x64.exe in a permanent folder and double-click it. Let the startup splash finish, then click Library.', 'The saved library and controls appear together after startup. First launch creates a Notable entry in the Windows Start menu for this copy. Python is included.', ('Library', 'Open your saved PDF folders')),
     step('help', 'Click Help (the question-mark button), then check the version and Active library. Use Open manual or Open README for the bundled guides.', 'The packaged app normally uses %LOCALAPPDATA%/PDF Note Organizer. A source checkout normally uses .local-data. An explicit PDF_NOTES_DATA_DIR overrides either.', ('Active library', 'Check which saved library is open'), ('Open manual', 'Open this walkthrough')),
 ]),
 ('Add an existing PDF folder', 'Choose a folder containing your PDFs. Adding a watched folder does not move those PDFs.', [

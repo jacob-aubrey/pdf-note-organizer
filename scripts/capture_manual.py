@@ -138,7 +138,8 @@ def main():
     app.service.remarkable.vault.path.touch()
     app.refresh()
     settle_library(app, root)
-    root.title('Notable 2.5.0 — Example library')
+    from note_organizer import __version__
+    root.title(f'Notable {__version__} — Example library')
     root.geometry('1440x900+20+20')
     root.deiconify()
     settings_only='--only-settings' in sys.argv

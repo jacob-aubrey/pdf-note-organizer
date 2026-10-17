@@ -20,6 +20,7 @@ from note_organizer.extraction import extract
 from note_organizer.storage import Store, DEFAULT_SETTINGS
 from tests.test_notebook import sample_pdf
 from tests.reader_app_regression import capture_test_window, require_private_desktop
+from note_organizer.windows_identity import APP_ID, create_shortcut, read_shortcut, _link, _identity, _save
 
 
 def main():
@@ -43,7 +44,15 @@ def main():
     digest,signature,metadata,entries=extract(path,DEFAULT_SETTINGS)
     store.save_scan(project,path,digest,signature,'packaged smoke',metadata,entries)
     exe=ROOT/'dist'/'releases'/('v'+__version__)/f'Notable-{__version__}-windows-x64.exe'
-    env={**os.environ,'PDF_NOTES_DATA_DIR':str(data),'PDF_NOTES_SKIP_LEGACY_IMPORT':'1'}
+    shell_root=folder/'shell-profile'
+    pin=shell_root/'TaskBar'/'Downloaded Notable.lnk'
+    create_shortcut(pin,exe)
+    with _link(pin,write=True) as (_,persist,props):
+        _identity(props,'')
+        _save(persist,pin)
+    pin_before=read_shortcut(pin)
+    env={**os.environ,'PDF_NOTES_DATA_DIR':str(data),'PDF_NOTES_SKIP_LEGACY_IMPORT':'1',
+         'NOTABLE_TEST_SHELL_ROOT':str(shell_root)}
     process=subprocess.Popen([str(exe)],env=env,cwd=folder,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
     windows=[]
     def describe(hwnd,_):
@@ -72,6 +81,10 @@ def main():
             raise AssertionError('Packaged startup timed out; windows: '+repr(list_windows()))
         workspace_seconds=round(time.monotonic()-start,2)
         print('Packaged workspace appeared after',workspace_seconds,'seconds',flush=True)
+        start_entry=read_shortcut(shell_root/'Programs'/'Notable.lnk')
+        assert start_entry['app_id']==APP_ID and start_entry['target']==str(exe)
+        assert read_shortcut(pin)=={**pin_before,'app_id':APP_ID}
+        print('Packaged first launch registered Start entry and repaired existing pin in isolated profile',flush=True)
         native=None
         deadline=time.monotonic()+70
         while time.monotonic()<deadline:
@@ -94,7 +107,8 @@ def main():
         if 'Traceback (most recent call last)' in log or 'ERROR' in log:
             raise AssertionError('Packaged log has an error; inspect '+str(data/'app.log'))
         result={'executable':str(exe),'startup_seconds':workspace_seconds,'total_seconds':round(time.monotonic()-start,2),
-                'embedded_reader_visible':bool(native),'exit_code':process.returncode,'fixture':str(folder)}
+                'embedded_reader_visible':bool(native),'shortcut_registration_verified':True,
+                'exit_code':process.returncode,'fixture':str(folder)}
         (folder/'result.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
         print(json.dumps(result),flush=True)
     finally:

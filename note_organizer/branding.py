@@ -6,12 +6,13 @@ from pathlib import Path
 import sys
 
 from PIL import Image, ImageTk
+from .windows_identity import APP_ID
 
 
 def set_process_identity():
     if os.name == "nt":
         try:
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Notable.Desktop")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
         except (AttributeError, OSError):
             logging.debug("Windows app identity unavailable", exc_info=True)
 

@@ -57,6 +57,8 @@ def main():
     startup = None
 
     def prepare_library(report):
+        from .windows_identity import prepare_packaged_shortcuts
+        prepare_packaged_shortcuts()
         from .storage import Store
         store = Store(data / "library.sqlite3")
         if should_import_legacy(data, root_dir):

@@ -42,6 +42,9 @@ class UIAuditTests(unittest.TestCase):
         self.store.set_preference("remarkable_folders", self.catalog)
         self.root = tk.Tk()
         self.root.withdraw()
+        # Exercise wide-window layouts even on the hosted runner's 1024px
+        # display. Tk's default maximum otherwise caps a 1600px test to 994px.
+        self.root.maxsize(max(1920, self.root.winfo_screenwidth()), max(1080, self.root.winfo_screenheight()))
         self.errors = []
         self.root.report_callback_exception = lambda *args: self.errors.append(args)
         with patch.object(Service, "start"):

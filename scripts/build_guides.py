@@ -63,7 +63,7 @@ def chrome(c, title, page, section='USER MANUAL'):
     paragraph(c, html.escape(title), M, H-43, W-2*M, 22, 25, bold=True)
     c.setFont('Guide', 8)
     c.setFillColor(colors.HexColor(MUTED))
-    c.drawString(M, 15, 'October 16, 2026  •  Example library; no real account data')
+    c.drawString(M, 15, 'October 17, 2026  •  Example library; no real account data')
     c.drawRightString(W-M, 15, str(page))
 
 
@@ -319,7 +319,7 @@ def build_readme():
     def footer(c,doc):
         c.setFont('Guide',8)
         c.setFillColor(colors.HexColor(MUTED))
-        c.drawString(36,20,f'Notable {__version__} README  •  October 16, 2026')
+        c.drawString(36,20,f'Notable {__version__} README  •  October 17, 2026')
         c.drawRightString(A4[0]-36,20,str(doc.page))
     doc=SimpleDocTemplate(str(OUT/'Notable-README.pdf'),pagesize=A4,rightMargin=36,leftMargin=36,
         topMargin=36,bottomMargin=39,title=f'Notable {__version__} README',author='Notable')
