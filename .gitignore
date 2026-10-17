@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 build/
+!note_organizer/assets/pdfjs/build/
+!note_organizer/assets/pdfjs/build/*.mjs
 dist/
 tmp/
 legacy/*.exe
