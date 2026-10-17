@@ -27,9 +27,10 @@ jobs:
           python tools/run_ui_tests.py tools/run_test_batches.py
       - name: Keep regression diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: windows-regression-diagnostics
+          include-hidden-files: true
           path: |
             .test-tmp/ui-tests-*.log
             .test-tmp/suite-*/batch-*.log
