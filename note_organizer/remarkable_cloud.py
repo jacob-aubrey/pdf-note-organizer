@@ -191,7 +191,17 @@ def publish_staged(temporary, path, expected_digest=None, require_absent=False, 
             raise CloudError(f"An interrupted replacement needs review. Previous complete {item_label} copies are preserved at " + "; ".join(retained))
         _publish_absent(temporary, path)
     else:
-        os.replace(temporary, path)
+        # Short-lived Windows scanner/sync locks can block a metadata rename.
+        # Retry only the same atomic operation; never remove the destination or
+        # weaken the separate digest-guarded user-file replacement path above.
+        for attempt in range(5):
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError as error:
+                if getattr(error, "winerror", None) not in {5, 32, 33} or attempt == 4:
+                    raise
+                time.sleep(.025 * 2 ** attempt)
 
 
 def atomic_write(path, data, expected_digest=None, require_absent=False):
@@ -602,6 +612,114 @@ class CloudClient:
                     "pinned": False, "source": "", "type": "CollectionType", "visibleName": name}
         return self._commit_new_item(item_id, name, parent_id, "CollectionType",
                                     {item_id + ".metadata": json.dumps(metadata, sort_keys=True).encode()}, scope_id)
+
+    def update_item(self, item_id, *, expected_hash, name=None, parent=None, scope_id="", restore=False,
+                    tags=None, page_tags=None):
+        """Rename/move/trash/restore metadata without rewriting document layers.
+
+        A caller must have observed this exact revision. An unrelated library
+        commit is retried; a change to this item requires renewed review. A
+        confirmed trash entry can be restored only to a validated live parent.
+        """
+        uuid.UUID(item_id)
+        if not re.fullmatch(r"[a-f0-9]{64}", expected_hash or ""):
+            raise CloudError("Select a current cloud revision before changing it.")
+        if name is not None and (not isinstance(name, str) or not name.strip()
+                                 or len(name) > 240 or any(c in name for c in "\r\n\x00")):
+            raise CloudError("Choose a nonempty document or folder name.")
+        prepared, desired = None, None
+        for attempt in range(5):
+            self.check_stop()
+            root = json.loads(self.get(SYNC + "/v4/root"))
+            if type(root.get("generation")) is not int or root["generation"] < 0:
+                raise CloudError("Cloud root has no generation; change paused.")
+            entries = parse_index(self.blob(root["hash"], "root.docSchema"))
+            entry = next((row for row in entries if row["id"] == item_id), None)
+            if not entry:
+                raise CloudError("The cloud item is missing. It was not recreated.")
+            # A lost successful response is recognized by the exact prepared
+            # hash; the operation is never replayed onto newer tablet edits.
+            if prepared and entry["hash"] == prepared["hash"]:
+                return CloudItem(item_id, entry["hash"], desired["visibleName"], desired.get("parent", ""),
+                                 desired["type"], bool(desired.get("deleted")), self._item_files(entry))
+            if entry["hash"] != expected_hash:
+                raise CloudConflict("This cloud item changed. Refresh and review before retrying.")
+            metadata = self._item_metadata(entry)
+            trashed = bool(metadata.get("deleted")) or metadata.get("parent") == "trash"
+            if trashed and not restore:
+                raise CloudError("This item is in tablet Trash. Choose Restore explicitly.")
+            if restore and not trashed:
+                raise CloudError("This cloud item is not a confirmed trash entry.")
+            if not trashed:
+                self._validate_parent(entries, metadata.get("parent", ""), scope_id)
+            destination = metadata.get("parent", "") if parent is None else parent
+            if destination != "trash":
+                self._validate_parent(entries, destination, scope_id)
+            if destination == item_id:
+                raise CloudError("A folder cannot be moved into itself.")
+            # Reject moving a folder under its own descendant.
+            by_id, cursor, seen = {row["id"]: row for row in entries}, destination, set()
+            while cursor and cursor != "trash":
+                if cursor == item_id or cursor in seen:
+                    raise CloudError("A folder cannot be moved into its own subtree.")
+                seen.add(cursor)
+                cursor = self._item_metadata(by_id[cursor]).get("parent", "")
+            if prepared is None:
+                desired = {**metadata, "parent": destination, "deleted": destination == "trash",
+                           "lastModified": str(int(time.time() * 1000))}
+                if name is not None:
+                    desired["visibleName"] = name.strip()
+                files = [file for file in self._item_files(entry) if file["id"] != item_id + ".metadata"]
+                if tags is not None or page_tags is not None:
+                    from .zotero_tags import names, tablet_tags
+                    import pymupdf
+                    from .remarkable_pdf import page_map
+                    content_file = next((f for f in files if f['id'] == item_id + '.content'), None)
+                    pdf_file = next((f for f in files if f['id'] == item_id + '.pdf'), None)
+                    if desired['type'] != 'DocumentType' or not content_file or not pdf_file:
+                        raise CloudError('Tags can only be synchronized for a PDF.')
+                    content = json.loads(self.blob(content_file['hash'], content_file['id']))
+                    tablet_tags(content)  # Fail closed on an unrecognized tag schema.
+                    now = int(time.time() * 1000)
+                    if tags is not None:
+                        retained = {t['name']: t for t in content.get('tags') or []}
+                        content['tags'] = [retained.get(t, {'name': t, 'timestamp': now}) for t in names(tags)]
+                    if page_tags is not None:
+                        if not isinstance(page_tags, dict):
+                            raise CloudError('Page tags need stable page identities.')
+                        with pymupdf.open(stream=self.blob(pdf_file['hash'], pdf_file['id']), filetype='pdf') as pdf:
+                            active = {pid for pid, _ in page_map(content, len(pdf))}
+                        retained = {(t['pageId'], t['name']): t for t in content.get('pageTags') or []}
+                        updated_tags = []
+                        for pid, values in sorted(page_tags.items()):
+                            for tag in names(values):
+                                if pid not in active and (pid, tag) not in retained:
+                                    raise CloudError('A tagged tablet page was removed. Review its pending tags.')
+                                updated_tags.append(retained.get((pid, tag), {'name': tag, 'pageId': pid, 'timestamp': now}))
+                        content['pageTags'] = updated_tags
+                    files = [f for f in files if f['id'] != content_file['id']]
+                    files.append(self._file_entry(content_file['id'], json.dumps(content, sort_keys=True).encode()))
+                files.append(self._file_entry(item_id + ".metadata", json.dumps(desired, sort_keys=True).encode()))
+                doc_body = serialize_index(files)
+                doc_hash = hashlib.sha256(b"".join(bytes.fromhex(file["hash"])
+                    for file in sorted(files, key=lambda file: file["id"]))).hexdigest()
+                self.put(SYNC + "/v3/files/" + doc_hash, doc_body, item_id + ".docSchema")
+                prepared = {**entry, "hash": doc_hash, "subfiles": len(files),
+                            "size": sum(file["size"] for file in files)}
+            body = serialize_index([prepared if row["id"] == item_id else row for row in entries], root=True)
+            root_hash = hashlib.sha256(body).hexdigest()
+            self.put(SYNC + "/v3/files/" + root_hash, body, "root.docSchema", "text/plain; charset=UTF-8")
+            try:
+                committed = json.loads(self.put(SYNC + "/v3/root", json.dumps({"hash": root_hash,
+                    "generation": root["generation"], "broadcast": True}).encode(), "roothash",
+                    "application/json", integrity=False))
+                if committed.get("hash") != root_hash:
+                    raise CloudError("Cloud change was not confirmed. Refresh to recover its result.")
+                return CloudItem(item_id, prepared["hash"], desired["visibleName"], destination,
+                                 desired["type"], bool(desired.get("deleted")), files)
+            except CloudConflict:
+                if attempt == 4:
+                    raise
 
     def upload_pdf(self, data, name, parent_id, item_id, scope_id=""):
         import pymupdf as fitz

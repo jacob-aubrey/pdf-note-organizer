@@ -1,5 +1,10 @@
 # Notable
 
+The Zotero-first route now has a graphical plugin and a bundled Windows helper.
+See [reMarkable Sync for Zotero setup and workflow](documentation/ZOTERO_PLUGIN.md).
+The standalone application and its existing documentation below remain available
+while that migration is evaluated.
+
 Notable helps you organize research documents and collect your PDF annotations into searchable notes and Word notebooks. You can use it entirely on your PC. Document identification through online services and connection to a reMarkable tablet are optional.
 
 For task-by-task walkthroughs with annotated screenshots, see the [Notable 2.6 user manual](output/pdf/Notable-User-Manual.pdf). Each procedure shows which control to click, what appears next, and how to check the result. It covers setup, filing, PDF reading and search, exports, optional tablet syncing, backups, troubleshooting, and keyboard shortcuts.
@@ -382,7 +387,7 @@ Review uses locally saved tablet information. A folder refresh is not the same a
 1. Open **Review library…** from Inbox, or **Library actions ▾ → Review library…** in Library.
 2. Choose the PC folder to inspect and choose **Check library**. This scan uses local PDFs and saved tablet information; it does not download, upload, delete, move, or link papers.
 3. Use the box marked **Search**, beside the magnifying glass, and the finding filter to work on one topic or type of finding. Search checks names, explanations, and file locations. Click a column heading to sort the rows.
-4. Select one finding. Read its complete explanation, local paths, and tablet IDs in the scrollable details area. Select copies in the lower list; **Ctrl-click** toggles individual copies and **Shift-click** selects a range. **Link selected copies…** uses only selected sources, including selectable tablet sources. Select one local PDF to use **Open PDF**; **More…** contains Open containing folder, Copy selected paths, Review again, Undo last link, and Delete selected PDFs. Batch deletion reviews the exact selected paths in one scrollable confirmation and uses Windows Recycle Bin; saved notes and history remain available.
+4. Select one finding. Read its complete explanation, local paths, and tablet IDs in the scrollable details area. Select copies in the lower list; **Ctrl-click** toggles individual copies and **Shift-click** selects a range. **Link selected copies…** uses only selected sources, including selectable tablet sources. **Delete selected PDFs…**, beside Link, reviews the exact selected paths before moving files to Windows Recycle Bin; saved notes and history remain available. Related findings update using the completed check, without scanning the whole library again. Failed deletions remain listed with an explanation. Select one local PDF to use **Open PDF**; **More…** contains Open containing folder, Copy selected paths, Review again, and Undo last link.
 5. Decide whether this is the same paper, a different edition, supplementary material, or an independent item. DOI/title similarity is a suggestion to inspect, not a reason to merge automatically. A matching baseline is stronger evidence, but different annotations still need preservation.
 
 Generated **Notebook backups** and **notes_media** folders, plus the hidden **.git** folder used for source code history, are left out of these findings. The app's private tablet cache and review areas are also excluded. These support folders are not ordinary paper folders to link to the tablet.

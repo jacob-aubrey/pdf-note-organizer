@@ -1,0 +1,40 @@
+{
+  "started": "2026-10-18T22:09:31.053Z",
+  "version": "10.0.6",
+  "checks": [
+    {
+      "name": "restart_preserves_thesis_and_SI",
+      "status": "PASS",
+      "university": "Example University",
+      "attachments": 2
+    },
+    {
+      "name": "restart_preserves_complete_long_PDF_index",
+      "status": "PASS",
+      "ids": [
+        9
+      ]
+    },
+    {
+      "name": "dissertation_CSL_bibliography",
+      "status": "PASS",
+      "text": "Researcher, T. (2026). Synthetic doctoral dissertation [Ph.D.]. Example University.\n"
+    },
+    {
+      "name": "OCR_searchable_copy_indexes_in_Zotero",
+      "status": "PASS",
+      "itemID": 11,
+      "keyword": "nanoparticle",
+      "found": true
+    }
+  ],
+  "dataDirectory": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\zotero-route-8gbvxll7\\data",
+  "profileDirectory": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\zotero-route-8gbvxll7\\profile",
+  "localAPITest": {
+    "port": 23129,
+    "authPrompt": "simulated in disposable profile",
+    "ready": true,
+    "completed": true
+  },
+  "completed": "2026-10-18T22:10:27.413Z"
+}

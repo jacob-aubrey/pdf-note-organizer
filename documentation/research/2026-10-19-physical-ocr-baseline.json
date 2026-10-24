@@ -1,0 +1,15 @@
+{
+  "visible_scene_items": {
+    "Line": 37,
+    "GlyphRange": 1
+  },
+  "metadata_extensions": {
+    "SceneInfo": 1
+  },
+  "engine": "PyMuPDF 1.28.2 / official English tessdata_fast",
+  "expected_words": 8,
+  "recovered_expected_words": 0,
+  "case_insensitive_word_recall": 0.0,
+  "math_recognition_claimed": false,
+  "transcript_published": false
+}

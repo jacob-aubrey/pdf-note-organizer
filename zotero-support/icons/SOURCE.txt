@@ -1,0 +1,5 @@
+Lucide Icons
+https://github.com/lucide-icons/lucide
+Revision: f12b0de177fbc2a6795e99be065887e72b237123
+SVG originals and 72px PNG renders; round-cap dots rendered as circles, with a larger Help dot for small-size legibility. See LICENSE.txt.
+minimize.svg is a locally drawn inward-facing companion to the bundled maximize icon, rendered with the same pipeline.

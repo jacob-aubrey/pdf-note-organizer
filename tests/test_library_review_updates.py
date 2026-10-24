@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from note_organizer import library_files
+from note_organizer.reconciliation import scan_reconciliation
 from note_organizer.storage import canonical
 from tests import test_library_review_files, test_review_controls
 
@@ -23,6 +24,7 @@ class LibraryReviewUpdatesTests(unittest.TestCase):
         paths.append(third)
         sources.append(registry.register_local(third))
         review.rows["copies"]["local_paths"].append(str(third))
+        review.scan_snapshot = scan_reconciliation(self.store, {"integration_enabled": False}, local_root=self.pc).snapshot
         review.selected()
         return review, registry, sources, paths
 
@@ -41,10 +43,16 @@ class LibraryReviewUpdatesTests(unittest.TestCase):
         review, _, _, _ = self.three_copies()
         self.show(review)
         tree = review.local_copies
+        click_time = 1000
         def click(row, state=0):
+            nonlocal click_time
+            click_time += 1000  # Each is a single click, even after scrolling.
+            tree.see(str(row))
+            self.root.update()
             x, y, width, height = tree.bbox(str(row))
-            tree.event_generate("<ButtonPress-1>", x=x+12, y=y+height//2, state=state)
-            tree.event_generate("<ButtonRelease-1>", x=x+12, y=y+height//2, state=state)
+            click_y = y + min(height, tree.winfo_height() - y - 1) // 2
+            tree.event_generate("<ButtonPress-1>", x=x+12, y=click_y, state=state, time=click_time)
+            tree.event_generate("<ButtonRelease-1>", x=x+12, y=click_y, state=state, time=click_time+10)
             self.root.update()
         click(0)
         click(2, 4)  # Control toggles an independent selection.
@@ -99,8 +107,8 @@ class LibraryReviewUpdatesTests(unittest.TestCase):
             Path(path).unlink()  # Only disposable test files; production requires recycling.
         with patch.object(library_files, "_recycle_windows", side_effect=recycle) as recycled:
             review.update_more_menu()
-            index = next(index for index, control in review.menu_actions if control == review.delete_pdf_button)
-            review.more_menu.invoke(index)
+            self.assertNotIn(review.delete_pdf_button, [control for _, control in review.menu_actions])
+            review.delete_pdf_button.invoke()
             self.wait(lambda: getattr(review, "confirmation", None) is not None)
             review.confirmation.confirm_button.invoke()
             self.wait(lambda: not review.busy and not review.checking)
@@ -112,6 +120,9 @@ class LibraryReviewUpdatesTests(unittest.TestCase):
         self.assertEqual(len(registry.sources()), 3)
         self.assertIn("1 file needs attention", review.feedback.get())
         self.assertIn("Synthetic locked PDF", review.details.get("1.0", "end"))
+        self.assertEqual(review.selected_paths(), [canonical(paths[0])])
+        self.assertEqual(set(next(row for row in review.rows.values() if row["kind"] == "local_duplicate")["local_paths"]),
+                         {canonical(paths[0]), canonical(paths[1])})
 
     def test_changed_batch_member_stops_before_any_confirmation_or_removal(self):
         review, _, _, paths = self.three_copies()
@@ -161,7 +172,8 @@ class LibraryReviewUpdatesTests(unittest.TestCase):
         self.assertTrue(review.map_button.winfo_ismapped())
         self.assertFalse(review.map_button.instate(["disabled"]))
         self.assertFalse(review.send_button.winfo_ismapped())
-        self.assertFalse(review.delete_pdf_button.winfo_ismapped())
+        self.assertTrue(review.delete_pdf_button.winfo_ismapped())
+        self.assertTrue(review.delete_pdf_button.instate(["disabled"]))
         with patch("note_organizer.ui.filedialog.askdirectory", return_value="") as picker:
             review.map_button.invoke()
         self.assertIn("/Literature/Missing", picker.call_args.kwargs["title"])
@@ -173,7 +185,7 @@ class LibraryReviewUpdatesTests(unittest.TestCase):
         self.root.update()
         self.assertFalse(review.map_button.winfo_ismapped())
         y_positions = {control.winfo_y() for control in review.review_actions.controls if control.winfo_ismapped()}
-        self.assertEqual(len(y_positions), 1)
+        self.assertLessEqual(len(y_positions), 2)
 
     def test_tablet_source_is_an_explicit_selectable_link_target(self):
         review, _, _, paths = self.file_review()

@@ -1,0 +1,34 @@
+{
+  "started": "2026-10-18T22:07:54.932Z",
+  "version": "10.0.6",
+  "checks": [
+    {
+      "name": "restart_preserves_thesis_and_SI",
+      "status": "PASS",
+      "university": "Example University",
+      "attachments": 2
+    },
+    {
+      "name": "restart_preserves_complete_long_PDF_index",
+      "status": "PASS",
+      "ids": [
+        9
+      ]
+    },
+    {
+      "name": "dissertation_CSL_bibliography",
+      "status": "ERROR",
+      "error": "UnloadedDataException: Styles not yet loaded",
+      "stack": "Zotero.Exception.UnloadedDataException@chrome://zotero/content/xpcom/error.js:158:16\nZotero.Styles</this.get@chrome://zotero/content/xpcom/style.js:236:13\nZotero.QuickCopy</this.getContentFromItems@chrome://zotero/content/xpcom/quickCopy.js:292:35\nrunRestart/<@file:///C:/Users/jdaub/OneDrive/Desktop/Documents/PhD/Bonitatibus%20Research/Python%20Code/PDF%20Note%20Organizer/.test-tmp/zotero-route-8gbvxll7/probe-plugin/bootstrap.js:158:49\ncheck@file:///C:/Users/jdaub/OneDrive/Desktop/Documents/PhD/Bonitatibus%20Research/Python%20Code/PDF%20Note%20Organizer/.test-tmp/zotero-route-8gbvxll7/probe-plugin/bootstrap.js:17:46\nrunRestart@file:///C:/Users/jdaub/OneDrive/Desktop/Documents/PhD/Bonitatibus%20Research/Python%20Code/PDF%20Note%20Organizer/.test-tmp/zotero-route-8gbvxll7/probe-plugin/bootstrap.js:155:9\n"
+    }
+  ],
+  "dataDirectory": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\zotero-route-8gbvxll7\\data",
+  "profileDirectory": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\zotero-route-8gbvxll7\\profile",
+  "localAPITest": {
+    "port": 23129,
+    "authPrompt": "simulated in disposable profile",
+    "ready": true,
+    "completed": true
+  },
+  "completed": "2026-10-18T22:08:57.109Z"
+}

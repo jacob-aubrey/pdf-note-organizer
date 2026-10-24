@@ -1,0 +1,163 @@
+{
+  "date": "2026-10-18T17:53:57.186024",
+  "python": "3.13.1 (tags/v3.13.1:0671451, Dec  3 2024, 19:06:28) [MSC v.1942 64 bit (AMD64)]",
+  "root": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer",
+  "write_root": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\documentation\\research\\preflight-notable-2026-10-18",
+  "groups": [
+    {
+      "command": [
+        "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_research_features.ResearchTests",
+        "-v"
+      ],
+      "exit_code": 0,
+      "seconds": 16.0,
+      "log": "group-1.log"
+    },
+    {
+      "command": [
+        "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_search_accuracy",
+        "-v"
+      ],
+      "exit_code": 0,
+      "seconds": 3.74,
+      "log": "group-2.log"
+    },
+    {
+      "command": [
+        "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_supplement_integration.SupplementIntegrationTests",
+        "-v"
+      ],
+      "exit_code": 0,
+      "seconds": 16.06,
+      "log": "group-3.log"
+    },
+    {
+      "command": [
+        "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_cloud_outbox",
+        "-v"
+      ],
+      "exit_code": 0,
+      "seconds": 23.18,
+      "log": "group-4.log"
+    },
+    {
+      "command": [
+        "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_remarkable",
+        "-v"
+      ],
+      "exit_code": 0,
+      "seconds": 49.67,
+      "log": "group-5.log"
+    },
+    {
+      "command": [
+        "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_combined_pdf",
+        "-v"
+      ],
+      "exit_code": 0,
+      "seconds": 36.82,
+      "log": "group-6.log"
+    },
+    {
+      "command": [
+        "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_sorting_citations_and_recovery.CitationTests",
+        "-v"
+      ],
+      "exit_code": 0,
+      "seconds": 5.0,
+      "log": "group-7.log"
+    }
+  ],
+  "synthetic_probe": {
+    "fixture_kind": "Synthetic two-page thesis plus screenshot PDF; no personal documents",
+    "dissertation_classification": "thesis_dissertation",
+    "dissertation_proposed_filename": "A_synthetic_nanoparticle_dissertation_2025_Thesis_or_Dissertation.pdf",
+    "citation_fields_retained": [
+      "authors",
+      "doi",
+      "issue",
+      "journal",
+      "pages",
+      "title",
+      "url",
+      "volume",
+      "year"
+    ],
+    "university_retained": false,
+    "thesis_type_retained": false,
+    "RIS_type_line": "TY  - GEN",
+    "BibTeX_type_line": "@misc{notable48e0c5e15e5d,",
+    "PDF_search": {
+      "nanoparticle": {
+        "pages": [
+          1
+        ],
+        "warnings": []
+      },
+      "catalysis": {
+        "pages": [
+          2
+        ],
+        "warnings": []
+      },
+      "nanoparticle AND catalysis": {
+        "pages": [],
+        "warnings": []
+      },
+      "\"synthetic nanoparticle\"": {
+        "pages": [
+          1
+        ],
+        "warnings": []
+      },
+      "nanoparticle NOT catalysis": {
+        "pages": [
+          1
+        ],
+        "warnings": []
+      },
+      "nanoparticle OR catalysis": {
+        "pages": [
+          1,
+          2
+        ],
+        "warnings": []
+      }
+    },
+    "screenshot_search": {
+      "count": 0,
+      "warnings": [
+        "screenshot.pdf: No searchable text layer. Scanned pages need OCR before PDF text search."
+      ]
+    },
+    "original_source_unchanged_by_search": true
+  }
+}

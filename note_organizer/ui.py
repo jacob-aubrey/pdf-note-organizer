@@ -14,7 +14,7 @@ import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, font
 from PIL import Image, ImageTk
-from . import APP_NAME, __version__
+from . import APP_NAME, APP_DISPLAY_NAME, __version__
 from .exporting import paper_title
 from .combined_pdf import materialize_combined, export_combined
 from .service import Service
@@ -43,6 +43,7 @@ from .citations import export_citations
 from .workspace_layouts import WorkspaceLayouts
 from .time_display import local_time
 from .branding import apply_app_icon, set_process_identity
+from .windows_identity import configure_taskbar
 
 
 class App(WorkspaceLayouts):
@@ -105,7 +106,8 @@ class App(WorkspaceLayouts):
         self.style = apply_theme(root)
         set_process_identity()
         apply_app_icon(root)
-        root.title(f"{APP_NAME} {__version__}")
+        root.title(APP_DISPLAY_NAME)
+        configure_taskbar(root)
         area = getattr(root, "launch_area", None)
         if area:
             left, top, right, bottom = area

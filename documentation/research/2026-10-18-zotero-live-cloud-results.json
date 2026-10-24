@@ -1,0 +1,82 @@
+{
+  "checks": [
+    {
+      "name": "plan_leaves_Zotero_empty_and_Notable_database_unchanged",
+      "status": "PASS"
+    },
+    {
+      "name": "publish_annotated_PDF_and_thesis_metadata",
+      "status": "PASS"
+    },
+    {
+      "name": "highlight_quote_typed_comment_and_saved_transcript_are_searchable",
+      "status": "PASS"
+    },
+    {
+      "name": "repeat_keeps_one_attachment_and_user_metadata",
+      "status": "PASS"
+    },
+    {
+      "name": "tablet_scene_revision_refreshes_same_attachment_with_three_marks",
+      "status": "PASS"
+    },
+    {
+      "name": "previous_prepared_version_and_original_retained",
+      "status": "PASS"
+    },
+    {
+      "name": "long_thesis_search_finds_marker_beyond_100_pages_and_500000_characters",
+      "status": "PASS",
+      "pages": 125,
+      "characters": 700020
+    },
+    {
+      "name": "native_text_index_rebuild_is_repaired_without_PDF_reupload",
+      "status": "PASS"
+    },
+    {
+      "name": "bridge_desktop_PDF_and_SI_upload_to_tablet_and_return_under_existing_thesis",
+      "status": "PASS"
+    },
+    {
+      "name": "bridge_tablet_PDF_folders_tags_and_transcript_reach_real_Zotero",
+      "status": "PASS"
+    },
+    {
+      "name": "bridge_repeat_has_no_duplicate_PDFs_or_feedback_uploads",
+      "status": "PASS"
+    },
+    {
+      "name": "bridge_new_tablet_ink_refreshes_same_durable_Zotero_attachment",
+      "status": "PASS"
+    },
+    {
+      "name": "printed_OCR_finds_upright_and_rotated_scan_in_real_Zotero_without_rewriting_PDF",
+      "status": "PASS"
+    },
+    {
+      "name": "remembered_local_write_grant_reconnects_from_DPAPI_without_new_prompt",
+      "status": "PASS"
+    },
+    {
+      "name": "LIVE_cloud_accepts_PC_collection_and_PDF_and_returns_exact_baseline",
+      "status": "PASS"
+    },
+    {
+      "name": "LIVE_cloud_folder_and_PDF_addition_reach_disposable_Zotero_library",
+      "status": "PASS"
+    },
+    {
+      "name": "LIVE_repeat_has_no_duplicates_and_all_preexisting_cloud_item_hashes_are_unchanged",
+      "status": "PASS",
+      "new_test_folders": 3,
+      "new_test_pdfs": 2
+    },
+    {
+      "name": "transcript_and_long_thesis_search_survive_Zotero_restart",
+      "status": "PASS"
+    }
+  ],
+  "scope": "new synthetic profile only",
+  "zotero": "10.0.6"
+}

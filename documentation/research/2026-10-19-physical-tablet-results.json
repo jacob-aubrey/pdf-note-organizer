@@ -1,0 +1,50 @@
+{
+  "scope": "existing synthetic tablet subtree and disposable Zotero profile only",
+  "cloud_writes": 0,
+  "checks": [
+    {
+      "name": "fresh_physical_tablet_revision_received",
+      "status": "PASS"
+    },
+    {
+      "name": "same_durable_Zotero_attachment_updated_original_baselines_unchanged",
+      "status": "PASS"
+    },
+    {
+      "name": "physical_ink_and_highlight_preserved",
+      "status": "PASS",
+      "pages": 1,
+      "annotations": {
+        "Ink": 37,
+        "Highlight": 1
+      }
+    },
+    {
+      "name": "physical_highlight_available_in_Zotero_native_annotations",
+      "status": "PASS"
+    },
+    {
+      "name": "highlight_quote_present_in_persistent_library_search",
+      "status": "PASS"
+    },
+    {
+      "name": "repeated_live_sync_has_no_duplicate_items_or_upload_feedback",
+      "status": "PASS"
+    },
+    {
+      "name": "physical_PDF_and_highlight_search_survive_Zotero_restart",
+      "status": "PASS"
+    },
+    {
+      "name": "offline_saved_source_replay_preserves_same_attachment_without_duplicates",
+      "status": "PASS"
+    },
+    {
+      "name": "production_Notable_library_unchanged",
+      "status": "PASS"
+    }
+  ],
+  "zotero": "10.0.6",
+  "handwriting_recognition": "Ink preserved visually; no recognizer or new transcript tested",
+  "status": "PASS"
+}

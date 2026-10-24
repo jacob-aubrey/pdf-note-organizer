@@ -9,8 +9,12 @@ from ctypes import wintypes
 import logging
 import os
 from pathlib import Path
+import re
 import sys
+import subprocess
 import uuid
+
+from . import APP_DISPLAY_NAME
 
 APP_ID = "Notable.Desktop"
 
@@ -68,8 +72,8 @@ def _link(path=None, write=False):
             ole.CoUninitialize()
 
 
-def _identity(props, value=None):
-    key = _PropertyKey(_guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), 5)
+def _property(props, identifier, value=None):
+    key = _PropertyKey(_guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), identifier)
     variant = _PropVariant()
     if value is None:
         try:
@@ -80,6 +84,53 @@ def _identity(props, value=None):
     buffer = ctypes.create_unicode_buffer(value)
     variant.type, variant.value = 31, ctypes.cast(buffer, ctypes.c_void_p).value
     _check(_call(props, 6, (ctypes.c_void_p, ctypes.c_void_p), ctypes.byref(key), ctypes.byref(variant)))
+
+
+def _identity(props, value=None):
+    return _property(props, 5, value)
+
+
+@contextmanager
+def _window_properties(root):
+    user = ctypes.WinDLL("user32")
+    user.GetAncestor.argtypes = (wintypes.HWND, wintypes.UINT)
+    user.GetAncestor.restype = wintypes.HWND
+    handle = user.GetAncestor(root.winfo_id(), 2)
+    shell = ctypes.WinDLL("shell32")
+    shell.SHGetPropertyStoreForWindow.argtypes = (wintypes.HWND, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))
+    props = ctypes.c_void_p()
+    _check(shell.SHGetPropertyStoreForWindow(handle, _guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), ctypes.byref(props)))
+    try:
+        yield props
+    finally:
+        _call(props, 2)
+
+
+def relaunch_command():
+    if getattr(sys, "frozen", False):
+        return subprocess.list2cmdline([sys.executable])
+    interpreter = Path(sys.executable)
+    windowed = interpreter.with_name("pythonw.exe")
+    if windowed.exists():
+        interpreter = windowed
+    return subprocess.list2cmdline([str(interpreter), str(Path(__file__).resolve().parent.parent / "PDF Note Organizer.py")])
+
+
+def configure_taskbar(root):
+    """Give the main window a versioned label, including Python launches."""
+    if os.name != "nt":
+        return
+    try:
+        base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+        with _window_properties(root) as props:
+            # Relaunch properties require an explicit window identity as well
+            # as the process identity; the ID itself stays stable across versions.
+            _property(props, 2, relaunch_command())
+            _property(props, 3, str(base / "Note icon.ico") + ",0")
+            _property(props, 4, APP_DISPLAY_NAME)
+            _identity(props, APP_ID)
+    except OSError:
+        logging.debug("Windows taskbar label unavailable", exc_info=True)
 
 
 def _text(link, index):
@@ -119,7 +170,7 @@ def create_shortcut(path, executable):
     executable = Path(executable).resolve()
     with _link() as (link, persist, props):
         for index, value in ((20, str(executable)), (9, str(executable.parent)),
-                             (7, "Notable research document organizer")):
+                             (7, APP_DISPLAY_NAME)):
             _check(_call(link, index, (wintypes.LPCWSTR,), value))
         _check(_call(link, 17, (wintypes.LPCWSTR, ctypes.c_int), str(executable), 0))
         _identity(props, APP_ID)
@@ -130,10 +181,16 @@ def repair_shortcut(path, executable):
     before = read_shortcut(path)
     if os.path.normcase(os.path.abspath(before["target"])) != os.path.normcase(str(Path(executable).resolve())):
         return False
-    if before["app_id"] == APP_ID:
+    description = before["description"]
+    owned_description = (description.casefold() == "notable research document organizer" or
+                         bool(re.fullmatch(r"Notable \d+\.\d+\.\d+", description)))
+    update_description = owned_description and description != APP_DISPLAY_NAME
+    if before["app_id"] == APP_ID and not update_description:
         return False
-    with _link(path, write=True) as (_, persist, props):
+    with _link(path, write=True) as (link, persist, props):
         _identity(props, APP_ID)
+        if update_description:
+            _check(_call(link, 7, (wintypes.LPCWSTR,), APP_DISPLAY_NAME))
         _save(persist, path)
     return True
 

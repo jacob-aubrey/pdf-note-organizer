@@ -4,8 +4,10 @@ Results are suggestions. Scanning never registers sources, changes mappings,
 uploads files, edits PDFs, or assumes cached cloud data is a complete inventory.
 """
 from collections import defaultdict
+from copy import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 
@@ -144,58 +146,80 @@ def _source_descriptor(source, registered):
     return result
 
 
-def scan_reconciliation(store, config, cancelled=None, *, local_root=None, inspect_pdf=None):
-    """Hash a selected root and compare it to cached originals, without network.
+class ReconciliationRows(list):
+    """Ordinary findings plus the in-memory inputs of their completed check."""
+    def __init__(self, rows, snapshot):
+        super().__init__(rows)
+        self.snapshot = snapshot
 
-    ``local_root`` or ``config['pc_root']`` must explicitly select the root. An
-    unset reMarkable integration checks local duplicates only. A cached catalog
-    never proves that an unmatched paper is absent from the live tablet.
-    """
-    configured_root = local_root or config.get("pc_root")
-    if not configured_root:
-        raise ValueError("Choose the local folder to compare first.")
-    root = Path(configured_root).resolve()
-    if not root.is_dir():
-        raise ValueError("The selected local folder does not exist.")
-    _check(cancelled)
-    registered = _registered_sources(store)
-    with store.connect() as db:
-        si_paths = {canonical(row[0]) for row in db.execute("SELECT path FROM supplement_files")}
-        si_paths.update(canonical(row[0]) for row in db.execute("SELECT path FROM paper_attachments"))
-        si_digests = {row[0] for row in db.execute("SELECT digest FROM supplement_files") if row[0]}
-    si_identities = {row["paper_id"] for (kind, locator), row in registered.items()
-                     if (kind == "local" and locator in si_paths) or json.loads(row.get("metadata", "{}")).get("is_supplementary_material")}
 
-    def is_si(item):
-        key = item.get("path") or item.get("cloud_id")
-        known = registered.get((item["kind"], key), {})
-        meta = json.loads(known.get("metadata", "{}"))
-        return bool(key in si_paths or item.get("digest") in si_digests or known.get("paper_id") in si_identities or item.get("metadata", {}).get("is_supplementary_material") or meta.get("is_supplementary_material"))
-    documents = {}
-    for document in store.documents():
-        if _within(document["path"], root):
-            record = documents.setdefault(document["path"], {**document, "project_ids": []})
-            record["project_ids"].append(document["project_id"])
-    excluded_roots = [store.path.parent / "remarkable"]
-    if config.get("review_dir"):
-        excluded_roots.append(Path(config["review_dir"]))
-    local, rows, directories = [], [], set()
-    for path in root.rglob("*"):
-        _check(cancelled)
-        if any(part in {"Notebook backups", "notes_media", ".git"} for part in path.relative_to(root).parts):
-            continue
-        if not _within(path, root) or any(_within(path, excluded_root.resolve()) for excluded_root in excluded_roots):
-            continue
-        if path.is_dir():
-            directories.add(canonical(path))
-        elif path.is_file() and path.suffix.casefold() == ".pdf":
-            try:
-                info = _local_info(path, documents.get(canonical(path)), cancelled, inspect_pdf)
-                local.append(info)
-                if info["read_error"]:
-                    rows.append(_row("local_read_error", info["title"], [info["path"]], reason=info["read_error"]))
-            except OSError as exc:
-                rows.append(_row("local_read_error", path.stem, [canonical(path)], reason=str(exc)))
+class ReviewSnapshot:
+    def __init__(self, local, cloud, registered, is_si, cloud_root=None):
+        self.registered, self.is_si, self.cloud_root = registered, is_si, cloud_root
+        self.sources = {(item["kind"], item.get("path") or item["cloud_id"]): item for item in [*local, *cloud]}
+        self.order = {key: index for index, key in enumerate(self.sources)}
+        self.keys, self.index = {}, defaultdict(set)
+        self.removed = frozenset()
+        for source_id, item in self.sources.items():
+            role = is_si(item)
+            keys = set()
+            if item.get("digest"):
+                keys.add(("digest", item["digest"]))
+            if _title(item["title"]):
+                keys.add(("title", _title(item["title"]), role))
+            if _doi(item.get("metadata", {}).get("doi")):
+                keys.add(("doi", _doi(item["metadata"]["doi"]), role))
+            known = registered.get(source_id, {})
+            if known.get("paper_id"):
+                keys.add(("paper", known["paper_id"]))
+            if item["kind"] == "local":
+                keys.add(("path", item["path"]))
+                keys.add(("title", _title(Path(item["path"]).stem), role))
+            elif item.get("render_path"):
+                keys.add(("path", canonical(item["render_path"])))
+            self.keys[source_id] = keys
+            for key in keys:
+                self.index[key].add(source_id)
+
+    def after_delete(self, rows, deleted):
+        """Recompare only the connected paper groups, using cached records."""
+        deleted = {canonical(path) for path in deleted}
+        affected, pending = set(), [("local", path) for path in deleted]
+        while pending:
+            source_id = pending.pop()
+            if source_id in affected or source_id in self.removed:
+                continue
+            affected.add(source_id)
+            for key in self.keys.get(source_id, ()):
+                pending.extend(self.index[key] - affected - self.removed)
+        local_paths = {key for kind, key in affected if kind == "local"}
+        cloud_ids = {key for kind, key in affected if kind == "cloud"}
+        retained, errors = [], []
+        for row in rows:
+            # Scan locators are already absolute/resolved. Normalize casing
+            # without asking the filesystem about every unaffected row again.
+            row_paths = {os.path.normcase(os.path.abspath(path)) for path in row.get("local_paths", [])}
+            related = local_paths.intersection(row_paths) or cloud_ids.intersection(row.get("cloud_ids", []))
+            if not related:
+                retained.append(row)
+            elif row["kind"] == "local_read_error" and not deleted.intersection(row_paths):
+                errors.append(row)
+        removed = self.removed | {("local", path) for path in deleted}
+        # Preserve the scan's ordering for deterministic variant grouping.
+        local, cloud = [], []
+        for source_id in sorted(affected - removed, key=lambda key: self.order.get(key, -1)):
+            item = self.sources.get(source_id)
+            if item is not None:
+                (local if item["kind"] == "local" else cloud).append(item)
+        changed = _compare_sources(local, cloud, self.registered, self.is_si, self.cloud_root)
+        updated = copy(self)
+        updated.removed = frozenset(removed)
+        return ReconciliationRows([*retained, *errors, *changed], updated)
+
+
+def _compare_sources(local, cloud, registered, is_si, cloud_root=None, cancelled=None):
+    """Compare cached records; never enumerate or inspect PDF files."""
+    rows = []
     by_digest = defaultdict(list)
     for item in local:
         by_digest[item["digest"]].append(item)
@@ -223,72 +247,12 @@ def scan_reconciliation(store, config, cancelled=None, *, local_root=None, inspe
                          reason="These PDFs have the same " + basis + " but different bytes. They may hold independent annotations or different editions. Review before linking; keep their notes separate.",
                          confidence=basis + "_candidate", sources=[_source_descriptor(item, registered) for item in copies],
                          actions=["link_papers", "keep_copies"]))
-    integration_enabled = config.get("integration_enabled", config.get("cloud_enabled", config.get("enabled", False)))
-    _check(cancelled)
-    if not integration_enabled:
+    if cloud_root is None:
         return rows
-    if not config.get("pc_root"):
-        rows.append(_row("comparison_info", "Choose the tablet's linked PC folder",
-                         reason="Local duplicate checks are complete. Select the linked PC root before comparing tablet records."))
-        return rows
-    cloud_root = Path(config["pc_root"]).resolve()
-    if not root.is_relative_to(cloud_root) and not cloud_root.is_relative_to(root):
-        rows.append(_row("comparison_info", "Local comparison only",
-                         reason="This folder is outside the tablet's linked PC root. Only local duplicates were checked."))
-        return rows
-    local = [item for item in local if _within(item["path"], cloud_root)]
+    local = [item for item in local if Path(item["path"]).is_relative_to(cloud_root)]
     by_digest = defaultdict(list)
     for item in local:
         by_digest[item["digest"]].append(item)
-    directories = {path for path in directories if _within(path, cloud_root)}
-    catalog = store.preference("remarkable_folders", [])
-    catalog = catalog if isinstance(catalog, list) else []
-    folders = {str(folder["id"]): folder for folder in catalog if isinstance(folder, dict) and folder.get("id")}
-    scope_id = config.get("source_folder_id", "")
-    source_folder = folders.get(scope_id, {})
-    source_name = source_folder.get("name") or config.get("source_folder_name", "Literature")
-    cloud = []
-    manifests = store.remarkable_items()
-    listing = store.preference("remarkable_documents", [])
-    listing = listing if isinstance(listing, list) else []
-    cloud_records = dict(manifests)
-    for item in listing:
-        if isinstance(item, dict) and item.get("id"):
-            cloud_id = str(item["id"])
-            cloud_records[cloud_id] = {**manifests.get(cloud_id, {}), **item}
-    for cloud_id, payload in cloud_records.items():
-        _check(cancelled)
-        parent = payload.get("parent", "")
-        parent_folder = folders.get(parent, {})
-        ancestor_ids = parent_folder.get("ancestor_ids", [])
-        path_parts = str(payload.get("cloud_path", "")).strip("/").split("/")
-        if scope_id:
-            in_scope = parent == scope_id or scope_id in ancestor_ids
-            # Older records can lack the parent catalog. Their display path is
-            # only enough for a cached suggestion, never for a write operation.
-            if parent not in folders:
-                source_path = str(source_folder.get("path", "")).strip("/").split("/")
-                in_scope = bool(source_folder.get("path") and path_parts[:len(source_path)] == source_path)
-        else:
-            in_scope = bool(source_name and path_parts and path_parts[0].casefold() == source_name.casefold())
-        if not in_scope:
-            continue
-        digest, strokes, error = _archive_info(store, str(cloud_id), cancelled)
-        catalog_digest = payload.get("pdf_hash", "")
-        if catalog_digest:
-            if digest and digest != catalog_digest:
-                strokes = False
-                error = "The cached archive is an older revision than the cached cloud listing. Refresh its annotations before comparing notes."
-            digest = catalog_digest
-        metadata = payload.get("metadata", {})
-        metadata = metadata if isinstance(metadata, dict) else {}
-        cloud.append({"kind": "cloud", "cloud_id": str(cloud_id), "digest": digest,
-                      "title": payload.get("name") or Path(payload.get("cloud_path", "Paper")).name,
-                      "metadata": metadata, "parent": parent,
-                      "strokes_cached": strokes, "archive_error": error,
-                      "render_path": payload.get("path", ""), "render_digest": payload.get("digest", ""),
-                      "state": payload.get("state", ""), "cloud_path": payload.get("cloud_path", ""),
-                      "original_hash_source": "catalog" if catalog_digest else "archive"})
     managed = {}
     for item in cloud:
         if item["render_path"]:
@@ -355,10 +319,131 @@ def scan_reconciliation(store, config, cancelled=None, *, local_root=None, inspe
                              reason="No match was found in the cached tablet data. This does not prove the paper is missing from reMarkable; refresh or review before sending it.",
                              confidence="cached_only", cached=True, sources=[_source_descriptor(item, registered)],
                              actions=["review_upload", "keep_copies"]))
+    return rows
+
+
+def scan_reconciliation(store, config, cancelled=None, *, local_root=None, inspect_pdf=None):
+    """Hash a selected root and compare it to cached originals, without network.
+
+    ``local_root`` or ``config['pc_root']`` must explicitly select the root. An
+    unset reMarkable integration checks local duplicates only. A cached catalog
+    never proves that an unmatched paper is absent from the live tablet.
+    """
+    configured_root = local_root or config.get("pc_root")
+    if not configured_root:
+        raise ValueError("Choose the local folder to compare first.")
+    root = Path(configured_root).resolve()
+    if not root.is_dir():
+        raise ValueError("The selected local folder does not exist.")
+    _check(cancelled)
+    registered = _registered_sources(store)
+    with store.connect() as db:
+        si_paths = {canonical(row[0]) for row in db.execute("SELECT path FROM supplement_files")}
+        si_paths.update(canonical(row[0]) for row in db.execute("SELECT path FROM paper_attachments"))
+        si_digests = {row[0] for row in db.execute("SELECT digest FROM supplement_files") if row[0]}
+    si_identities = {row["paper_id"] for (kind, locator), row in registered.items()
+                     if (kind == "local" and locator in si_paths) or json.loads(row.get("metadata", "{}")).get("is_supplementary_material")}
+
+    def is_si(item):
+        key = item.get("path") or item.get("cloud_id")
+        known = registered.get((item["kind"], key), {})
+        meta = json.loads(known.get("metadata", "{}"))
+        return bool(key in si_paths or item.get("digest") in si_digests or known.get("paper_id") in si_identities or item.get("metadata", {}).get("is_supplementary_material") or meta.get("is_supplementary_material"))
+    documents = {}
+    for document in store.documents():
+        if _within(document["path"], root):
+            record = documents.setdefault(document["path"], {**document, "project_ids": []})
+            record["project_ids"].append(document["project_id"])
+    excluded_roots = [store.path.parent / "remarkable"]
+    if config.get("review_dir"):
+        excluded_roots.append(Path(config["review_dir"]))
+    local, rows, directories = [], [], set()
+    for path in root.rglob("*"):
+        _check(cancelled)
+        if any(part in {"Notebook backups", "notes_media", ".git"} for part in path.relative_to(root).parts):
+            continue
+        if not _within(path, root) or any(_within(path, excluded_root.resolve()) for excluded_root in excluded_roots):
+            continue
+        if path.is_dir():
+            directories.add(canonical(path))
+        elif path.is_file() and path.suffix.casefold() == ".pdf":
+            try:
+                info = _local_info(path, documents.get(canonical(path)), cancelled, inspect_pdf)
+                local.append(info)
+                if info["read_error"]:
+                    rows.append(_row("local_read_error", info["title"], [info["path"]], reason=info["read_error"]))
+            except OSError as exc:
+                rows.append(_row("local_read_error", path.stem, [canonical(path)], reason=str(exc)))
+    def local_result():
+        return ReconciliationRows(rows + _compare_sources(local, [], registered, is_si),
+                                  ReviewSnapshot(local, [], registered, is_si))
+    integration_enabled = config.get("integration_enabled", config.get("cloud_enabled", config.get("enabled", False)))
+    _check(cancelled)
+    if not integration_enabled:
+        return local_result()
+    if not config.get("pc_root"):
+        rows.append(_row("comparison_info", "Choose the tablet's linked PC folder",
+                         reason="Local duplicate checks are complete. Select the linked PC root before comparing tablet records."))
+        return local_result()
+    cloud_root = Path(config["pc_root"]).resolve()
+    if not root.is_relative_to(cloud_root) and not cloud_root.is_relative_to(root):
+        rows.append(_row("comparison_info", "Local comparison only",
+                         reason="This folder is outside the tablet's linked PC root. Only local duplicates were checked."))
+        return local_result()
+    directories = {path for path in directories if _within(path, cloud_root)}
+    catalog = store.preference("remarkable_folders", [])
+    catalog = catalog if isinstance(catalog, list) else []
+    folders = {str(folder["id"]): folder for folder in catalog if isinstance(folder, dict) and folder.get("id")}
+    scope_id = config.get("source_folder_id", "")
+    source_folder = folders.get(scope_id, {})
+    source_name = source_folder.get("name") or config.get("source_folder_name", "Literature")
+    cloud = []
+    manifests = store.remarkable_items()
+    listing = store.preference("remarkable_documents", [])
+    listing = listing if isinstance(listing, list) else []
+    cloud_records = dict(manifests)
+    for item in listing:
+        if isinstance(item, dict) and item.get("id"):
+            cloud_id = str(item["id"])
+            cloud_records[cloud_id] = {**manifests.get(cloud_id, {}), **item}
+    for cloud_id, payload in cloud_records.items():
+        _check(cancelled)
+        parent = payload.get("parent", "")
+        parent_folder = folders.get(parent, {})
+        ancestor_ids = parent_folder.get("ancestor_ids", [])
+        path_parts = str(payload.get("cloud_path", "")).strip("/").split("/")
+        if scope_id:
+            in_scope = parent == scope_id or scope_id in ancestor_ids
+            # Older records can lack the parent catalog. Their display path is
+            # only enough for a cached suggestion, never for a write operation.
+            if parent not in folders:
+                source_path = str(source_folder.get("path", "")).strip("/").split("/")
+                in_scope = bool(source_folder.get("path") and path_parts[:len(source_path)] == source_path)
+        else:
+            in_scope = bool(source_name and path_parts and path_parts[0].casefold() == source_name.casefold())
+        if not in_scope:
+            continue
+        digest, strokes, error = _archive_info(store, str(cloud_id), cancelled)
+        catalog_digest = payload.get("pdf_hash", "")
+        if catalog_digest:
+            if digest and digest != catalog_digest:
+                strokes = False
+                error = "The cached archive is an older revision than the cached cloud listing. Refresh its annotations before comparing notes."
+            digest = catalog_digest
+        metadata = payload.get("metadata", {})
+        metadata = metadata if isinstance(metadata, dict) else {}
+        cloud.append({"kind": "cloud", "cloud_id": str(cloud_id), "digest": digest,
+                      "title": payload.get("name") or Path(payload.get("cloud_path", "Paper")).name,
+                      "metadata": metadata, "parent": parent,
+                      "strokes_cached": strokes, "archive_error": error,
+                      "render_path": payload.get("path", ""), "render_digest": payload.get("digest", ""),
+                      "state": payload.get("state", ""), "cloud_path": payload.get("cloud_path", ""),
+                      "original_hash_source": "catalog" if catalog_digest else "archive"})
+    rows.extend(_compare_sources(local, cloud, registered, is_si, cloud_root, cancelled))
     _folder_rows(cloud_root if cloud_root.is_relative_to(root) else root,
                  directories, folders, scope_id, config, rows, cancelled)
     _check(cancelled)
-    return rows
+    return ReconciliationRows(rows, ReviewSnapshot(local, cloud, registered, is_si, cloud_root))
 
 
 def _folder_rows(root, directories, folders, scope_id, config, rows, cancelled):

@@ -10,7 +10,7 @@ import math
 import pymupdf as fitz
 
 
-RENDER_REVISION = 3
+RENDER_REVISION = 4
 
 
 class UnsupportedAnnotations(ValueError):
@@ -82,11 +82,48 @@ def scene(data):
     # annotation fields or skipped items could lose marks, so require review.
     if any(isinstance(block, SceneItemBlock) and (block.extra_data or block.extra_value_data) for block in blocks):
         raise UnsupportedAnnotations("The PDF contains newer annotation fields the reader cannot interpret")
-    if any(isinstance(block, (SceneTextItemBlock, SceneTombstoneItemBlock)) for block in blocks):
+    if any(isinstance(block, SceneTextItemBlock) for block in blocks):
         raise UnsupportedAnnotations("The PDF contains annotation items the renderer cannot interpret")
+    blocks = resolved_deletions(blocks)
     tree = SceneTree()
     build_tree(tree, blocks)
     return tree
+
+
+def resolved_deletions(blocks):
+    """Adapt parsed CRDT deletion runs before rmscene builds its scene tree.
+
+    rmscene 0.8 parses tombstones but build_tree omits them. Use its existing
+    expand_text_item helper for the same compressed ID-run representation. The
+    deleted placeholders retain ordering links and never become visible marks.
+    Raw source blocks are not modified or discarded from retained archives.
+    """
+    from dataclasses import replace
+    from rmscene.scene_stream import SceneItemBlock, SceneLineItemBlock, SceneTombstoneItemBlock
+    from rmscene.text import expand_text_item
+    removed = {}
+    for block in blocks:
+        if not isinstance(block, SceneItemBlock):
+            continue
+        length = block.item.deleted_length
+        if isinstance(block, SceneTombstoneItemBlock) and (length <= 0 or block.item.value is not None):
+            raise UnsupportedAnnotations("An invalid tablet deletion record requires review")
+        if length <= 0:
+            continue
+        if length > 100_000:
+            raise UnsupportedAnnotations("A tablet deletion run exceeds the supported scene budget")
+        for item in expand_text_item(replace(block.item, value="")):
+            identity = (block.parent_id, item.item_id)
+            placeholder = SceneLineItemBlock(block.parent_id, replace(item, value=None))
+            if identity in removed and removed[identity] != placeholder:
+                raise UnsupportedAnnotations("Overlapping tablet deletion runs require review")
+            removed[identity] = placeholder
+    if not removed:
+        return blocks
+    result = [block for block in blocks if not isinstance(block, SceneItemBlock)
+              or ((block.parent_id, block.item.item_id) not in removed and not block.item.deleted_length)]
+    result.extend(removed.values())
+    return result
 
 
 def visible_items(group):

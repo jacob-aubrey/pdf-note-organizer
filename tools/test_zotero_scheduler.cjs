@@ -1,0 +1,62 @@
+// Exercise the actual controller against timer/window races without waiting
+// five minutes or touching a profile, network connection, or library.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const timers = new Map();
+let next = 1;
+const context = {setTimeout: (callback, delay) => { const id = next++; timers.set(id, {callback, delay}); return id; },
+  clearTimeout: id => timers.delete(id)};
+vm.createContext(context);
+vm.runInContext(fs.readFileSync('zotero-support/ui.js', 'utf8'), context);
+const ui = context.NotableUI;
+const calls = [];
+ui.latest = {config: {tablet_root: 'example', automatic: true, sync_paused: false}};
+ui.stopped = false;
+const actualAction = ui.action;
+ui.action = async (...args) => { calls.push(args); };
+async function main() {
+  ui.schedule();
+  assert.equal(timers.get(ui.timer).delay, 300000);
+  await timers.get(ui.timer).callback();
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][1].automatic, true);
+  const oldCallback = timers.get(ui.timer).callback;
+  ui.view = {closed: false};
+  await oldCallback();
+  assert.equal(calls.length, 1, 'A timer racing an opened window must yield');
+  assert.equal(ui.timer, null);
+  ui.action = actualAction;
+  ui.rpc = async () => { throw Error('An open workspace called the worker automatically'); };
+  await ui.action('sync', {automatic: true});
+  assert.equal(ui.busy, false);
+  ui.action = async (...args) => { calls.push(args); };
+  ui.view = null;
+  ui.busy = true;
+  ui.schedule(); assert.equal(ui.timer, null);
+  ui.busy = false;
+  ui.latest.config.sync_paused = true;
+  ui.schedule(); assert.equal(ui.timer, null);
+  ui.latest.config.sync_paused = false;
+  ui.latest.config.automatic = false;
+  ui.schedule(); assert.equal(ui.timer, null);
+  ui.latest.config.automatic = true;
+  ui.workspaceOpening = true;
+  ui.schedule(); assert.equal(ui.timer, null);
+  ui.workspaceOpening = false;
+  const writes = [];
+  ui.operation = {automatic: true};
+  ui.process = {stdin: {write: async text => writes.push(JSON.parse(text))}};
+  await ui.yieldBackground(); await ui.yieldBackground();
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].method, 'cancel');
+  assert.equal(ui.latest.config.automatic, true);
+  assert.equal(ui.latest.config.sync_paused, false);
+  ui.operation = null;
+  ui.failures = 2;
+  ui.schedule(); assert.equal(timers.get(ui.timer).delay, 900000);
+  ui.view = {closed: false};
+  ui.schedule(); assert.equal(timers.size, 0);
+  console.log('PASS: timer races, open-workspace priority, busy/paused guards, background cancellation, preferences, and backoff');
+}
+main().catch(error => { console.error(error); process.exitCode = 1; });

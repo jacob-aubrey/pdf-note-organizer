@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "network_blocked": true,
+  "actual_handwriting_only_word_recognized": true,
+  "cached_repeat_skips_recognition": true,
+  "original_PDF_unchanged": true,
+  "model_checksums_validated": true
+}

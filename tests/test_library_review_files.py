@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from note_organizer import library_files
+from note_organizer.reconciliation import scan_reconciliation
 from note_organizer.storage import Store, canonical, digest_file
 from tests import test_review_controls
 
@@ -20,6 +21,7 @@ class LibraryReviewFileTests(unittest.TestCase):
         registry, sources, paths = self.duplicate_papers()
         review = self.review()
         review.checked_scope = str(self.pc)
+        review.scan_snapshot = scan_reconciliation(self.store, {"integration_enabled": False}, local_root=self.pc).snapshot
         review.rows = {"copies": {"id": "copies", "kind": "local_duplicate", "title": "Same paper",
             "reason": "These PDFs have the same bytes", "sources": sources,
             "local_paths": list(map(str, paths)), "actions": ["link_papers"]}}
@@ -92,6 +94,7 @@ class LibraryReviewFileTests(unittest.TestCase):
         # Only disposable synthetic files are removed by this mock. Production
         # always calls Windows' recycle operation, with no unlink fallback.
         with patch("note_organizer.workflow_ui.messagebox.askokcancel", return_value=True), \
+                patch.object(review, "check", side_effect=AssertionError("Deletion must not rescan the library")), \
                 patch.object(library_files, "_recycle_windows", side_effect=lambda path, digest: Path(path).unlink()) as recycled:
             review.delete_pdf_button.invoke()
             self.wait(lambda: not review.busy and not review.check_button.instate(["disabled"]))

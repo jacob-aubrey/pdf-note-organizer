@@ -757,16 +757,16 @@ class ReconciliationWindow:
         self.open_pdf_button = actions.add(Button(actions, text="Open PDF", command=self.open_pdf, state="disabled"))
         self.open_folder_button = Button(actions, text="Open containing folder", command=self.open_folder, state="disabled")
         self.local_path_copy = Button(actions, text="Copy full path", command=self.copy_path, state="disabled")
-        self.delete_pdf_button = Button(actions, text="Delete selected PDFs…", command=self.delete_pdf, state="disabled")
         Tooltip(self.local_path_copy, lambda: "Copy the selected local file paths, one per line.\n\n" + "\n".join(self.selected_paths())
                 if self.selected_paths() else "Select local files in the list above to copy their full paths.")
         Tooltip(self.open_pdf_button, lambda: "Select a finding and an available local PDF above first." if self.open_pdf_button.instate(["disabled"]) else
                 "Open the selected local PDF to inspect its contents and annotations.\n\n" + self.selected_path())
         Tooltip(self.open_folder_button, lambda: "Select a finding and a local copy above first." if self.open_folder_button.instate(["disabled"]) else
                 "Open the folder containing the selected copy in File Explorer.\n\n" + self.selected_path())
+        self.link_button = actions.add(Button(actions, text="Link selected copies…", command=self.link, state="disabled", style="Primary.TButton"))
+        self.delete_pdf_button = actions.add(Button(actions, text="Delete selected PDFs…", command=self.delete_pdf, state="disabled"))
         Tooltip(self.delete_pdf_button, lambda: "Review the selected local PDFs and confirm moving them to Windows Recycle Bin. Saved notes, history and tablet sources stay preserved.\n\n" + "\n".join(self.selected_paths())
                 if not self.delete_pdf_button.instate(["disabled"]) else "Select available local PDFs inside the checked folder. Folders and tablet sources cannot be deleted here; wait for the current check or action to finish.")
-        self.link_button = actions.add(Button(actions, text="Link selected copies…", command=self.link, state="disabled", style="Primary.TButton"))
         Tooltip(self.link_button, "Select at least two copies in the lower list, using Ctrl/Shift-click. Confirm only those selected sources as the same paper. Previously linked copies remain together; files, annotation history and independent notes are retained.")
         self.map_button = Button(actions, text="Map and sync…", command=self.map_folder, state="disabled")
         Tooltip(self.map_button, "Link the selected tablet folder to an existing PC folder, then sync enabled transfers. Different folder names can remain linked.")
@@ -781,12 +781,11 @@ class ReconciliationWindow:
         Tooltip(self.again_button, "Clear your Keep separate decision and return this finding to review.")
         Tooltip(self.undo_button, "Restore the paper relationships from the latest link made by this version. Original files and notes stay preserved.")
         self.more_button = actions.add(Button(actions, text="More…", command=self.show_more))
-        Tooltip(self.more_button, "Open folder, copy selected paths, review a kept-separate finding again, undo the last link, or delete selected local PDFs.")
+        Tooltip(self.more_button, "Open folder, copy selected paths, review a kept-separate finding again, or undo the last link.")
         self.more_menu = tk.Menu(self.more_button, tearoff=False, postcommand=self.update_more_menu)
         self.menu_actions = []
         for label, control in (("Open containing folder", self.open_folder_button), ("Copy selected paths", self.local_path_copy),
-                               (None, None), ("Review again", self.again_button), ("Undo last link…", self.undo_button),
-                               (None, None), ("Delete selected PDFs…", self.delete_pdf_button)):
+                               (None, None), ("Review again", self.again_button), ("Undo last link…", self.undo_button)):
             if control is None:
                 self.more_menu.add_separator()
             else:
@@ -985,7 +984,9 @@ class ReconciliationWindow:
         cloud_ids = row.get("cloud_ids", [])
         if cloud_ids:
             text += "\n" + "\n".join("Tablet ID: " + cloud_id for cloud_id in cloud_ids)
-        self.details_display.set(text or self.action_detail or "Select a finding to inspect its files.", paths={"Selected local copy": (
+        if self.action_detail:
+            text += ("\n\n" if text else "") + self.action_detail
+        self.details_display.set(text or "Select a finding to inspect its files.", paths={"Selected local copy": (
             self.selected_path(), "This selected file belongs to the finding above. Only an explicitly confirmed Delete moves it to Recycle Bin.")}
             if self.selected_path() else {})
         self.open_actions()
@@ -999,7 +1000,7 @@ class ReconciliationWindow:
         self.local_path_copy.configure(state="normal" if self.selected_paths() and idle else "disabled")
         root = getattr(self, "checked_scope", "")
         paths = self.selected_paths()
-        deletable = bool(root and paths and len(paths) == len(self.local_copies.selection()) and all(
+        deletable = bool(root and getattr(self, "scan_snapshot", None) is not None and paths and len(paths) == len(self.local_copies.selection()) and all(
             Path(value).is_file() and Path(value).suffix.casefold() == ".pdf"
             and Path(value).resolve().is_relative_to(Path(root).resolve()) for value in paths))
         self.delete_pdf_button.configure(state="normal" if deletable and idle
@@ -1051,17 +1052,14 @@ class ReconciliationWindow:
                     self.local_copies.set_status()
                     if isinstance(result, str):
                         result = {"deleted": [result], "failed": []}
-                    def refreshed(error):
-                        count, failed_count = len(result["deleted"]), len(result["failed"])
-                        text = f"Moved {count} {'PDF' if count == 1 else 'PDFs'} to Recycle Bin."
-                        if failed_count:
-                            text += f" {failed_count} {'file needs' if failed_count == 1 else 'files need'} attention."
-                        self.feedback.set(text + " Saved notes and history were retained."
-                                          + (f" Refresh failed: {error}" if error else ""))
-                        if result["failed"]:
-                            self.action_detail = "\n\n".join(item["path"] + "\n" + item["error"] for item in result["failed"])
-                            self.copy_selected()
-                    self.check(on_complete=refreshed)
+                    self.apply_deleted_pdfs(result["deleted"])
+                    count, failed_count = len(result["deleted"]), len(result["failed"])
+                    text = f"Moved {count} {'PDF' if count == 1 else 'PDFs'} to Recycle Bin."
+                    if failed_count:
+                        text += f" {failed_count} {'file needs' if failed_count == 1 else 'files need'} attention."
+                    self.feedback.set(text + " Saved notes and history were retained.")
+                    self.action_detail = "\n\n".join(item["path"] + "\n" + item["error"] for item in result["failed"])
+                    self.copy_selected()
             def execute():
                 self.feedback.set("Moving selected PDFs to Recycle Bin…")
                 self.local_copies.set_status("Moving selected PDFs to Recycle Bin…")
@@ -1082,6 +1080,48 @@ class ReconciliationWindow:
         def verify():
             return [reviewed_pdf(path, root, sources.get(os.path.normcase(os.path.abspath(path)), {}).get("digest", "")) for path in paths]
         background(self.app, verify, checked, failed, task='Verifying PDFs selected for removal…')
+
+    def apply_deleted_pdfs(self, paths):
+        """Update the checked snapshot without revisiting unrelated files."""
+        from .storage import canonical
+        if not paths:
+            return
+        children, selection = self.tree.get_children(), self.tree.selection()
+        selected_id = selection[0] if selection else None
+        selected_row = self.rows.get(selected_id, {})
+        row_index = children.index(selected_id) if selected_id in children else 0
+        previous = {("local", canonical(path)) for path in self.selected_paths()}
+        previous.update(("cloud", source["cloud_id"]) for source in self.selected_sources() if source.get("cloud_id"))
+        top, copy_top = self.tree.yview()[0], self.local_copies.yview()[0]
+        updated = self.scan_snapshot.after_delete(self.rows.values(), paths)
+        self.scan_snapshot = updated.snapshot
+        self.rows = {str(row["id"]): row for row in updated}
+        self.type_filter.configure(values=["All types"] + sorted({row["kind"].replace("_", " ").capitalize() for row in updated}))
+        self.render()
+        visible = self.tree.get_children()
+        target = selected_id if selected_id in visible else None
+        if target is None and visible:
+            selected_paths = {os.path.normcase(os.path.abspath(path)) for path in selected_row.get("local_paths", ())}
+            def overlap(key):
+                row = self.rows[key]
+                shared_cloud = set(row.get("cloud_ids", ())) & set(selected_row.get("cloud_ids", ()))
+                shared_local = {os.path.normcase(os.path.abspath(path)) for path in row.get("local_paths", ())} & selected_paths
+                return len(shared_cloud) * 3 + len(shared_local)
+            candidate = max(visible, key=overlap)
+            target = candidate if overlap(candidate) else visible[min(row_index, len(visible) - 1)]
+        if target:
+            self.tree.selection_set(target)
+            self.tree.focus(target)
+            self.selected()
+            copies = [key for key in self.local_copies.get_children() if
+                      (("local", canonical(self.copy_paths[key])) if key in self.copy_paths else
+                       ("cloud", self.copy_sources.get(key, {}).get("cloud_id"))) in previous]
+            if copies:
+                self.local_copies.selection_set(copies)
+                self.local_copies.focus(copies[0])
+                self.copy_selected()
+        self.tree.yview_moveto(top)
+        self.local_copies.yview_moveto(copy_top)
 
     def confirm_copies(self, title, prompt, labels, warning, action, execute, cancel):
         """Keep a large reviewed selection readable in one scrollable dialog."""
@@ -1201,6 +1241,7 @@ class ReconciliationWindow:
                 return
             self.checking = False
             self.checked_scope = root
+            self.scan_snapshot = getattr(rows, "snapshot", None)
             self.set_review_status()
             self.rows = {str(row["id"]): row for row in rows}
             self.tree.empty_label.configure(text="No findings in this check.")

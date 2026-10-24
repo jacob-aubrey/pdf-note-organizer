@@ -1,0 +1,85 @@
+{
+  "started": "2026-10-18T22:13:18.687597+00:00",
+  "pyzotero": "1.16.0",
+  "endpoint": "http://127.0.0.1:23129/api",
+  "scope": "synthetic disposable Zotero profile only",
+  "authorization": "simulated by exact-name test harness, not a human consent test",
+  "environment_attempts": [
+    "Initial sandbox request blocked before connection with WinError 10013; this run uses authorized loopback access."
+  ],
+  "checks": [
+    {
+      "name": "read_seeded_thesis_and_attachments",
+      "status": "PASS",
+      "theses": 2,
+      "attachments": 1
+    },
+    {
+      "name": "authorize_local_simulated_consent",
+      "status": "PASS",
+      "key_received": true,
+      "remember": true
+    },
+    {
+      "name": "create_thesis_metadata_and_tag",
+      "status": "PASS"
+    },
+    {
+      "name": "update_item_and_reread",
+      "status": "PASS"
+    },
+    {
+      "name": "upload_stored_synthetic_PDF_and_reread",
+      "status": "PASS",
+      "attachments": 1
+    },
+    {
+      "name": "set_fulltext_and_reread",
+      "status": "PASS",
+      "response_status": 204
+    }
+  ],
+  "prior_attempts": [
+    {
+      "started": "2026-10-18T22:10:24.452815+00:00",
+      "completed": "2026-10-18T22:10:26.608503+00:00",
+      "checks": [
+        {
+          "name": "read_seeded_thesis_and_attachments",
+          "status": "PASS",
+          "theses": 1,
+          "attachments": 1
+        },
+        {
+          "name": "authorize_local_simulated_consent",
+          "status": "PASS",
+          "key_received": true,
+          "remember": true
+        },
+        {
+          "name": "create_thesis_metadata_and_tag",
+          "status": "PASS"
+        },
+        {
+          "name": "update_item_and_reread",
+          "status": "PASS"
+        },
+        {
+          "name": "upload_stored_synthetic_PDF_and_reread",
+          "status": "PASS",
+          "attachments": 1
+        },
+        {
+          "name": "probe_execution",
+          "status": "ERROR",
+          "type": "AttributeError",
+          "error": "'bool' object has no attribute 'status_code'"
+        }
+      ],
+      "requests": 13
+    }
+  ],
+  "completed": "2026-10-18T22:13:19.983468+00:00",
+  "requests": 14,
+  "request_scope_guard": "Every HTTP request restricted to 127.0.0.1:23129/api/"
+}

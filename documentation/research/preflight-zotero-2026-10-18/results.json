@@ -1,0 +1,145 @@
+{
+  "started": "2026-10-18T22:05:35.891Z",
+  "version": "10.0.6",
+  "checks": [
+    {
+      "name": "isolated_profile",
+      "status": "PASS",
+      "signedIn": false,
+      "data": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\zotero-route-8gbvxll7\\data"
+    },
+    {
+      "name": "dissertation_metadata",
+      "status": "PASS",
+      "metadata": {
+        "key": "B7WPUDEG",
+        "version": 0,
+        "itemType": "thesis",
+        "title": "Synthetic doctoral dissertation",
+        "date": "2026",
+        "thesisType": "Ph.D.",
+        "university": "Example University",
+        "creators": [
+          {
+            "firstName": "Test",
+            "lastName": "Researcher",
+            "creatorType": "author"
+          }
+        ],
+        "tags": [],
+        "collections": [],
+        "relations": {},
+        "dateAdded": "2026-10-18T22:05:36Z",
+        "dateModified": "2026-10-18T22:05:36Z"
+      }
+    },
+    {
+      "name": "main_and_SI_association",
+      "status": "PASS",
+      "parentTitle": "Synthetic main article",
+      "attachments": [
+        {
+          "title": "Main article",
+          "parentID": 2,
+          "path": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\zotero-route-8gbvxll7\\data\\storage\\825TYWNC\\same-page.pdf"
+        },
+        {
+          "title": "Supporting information",
+          "parentID": 2,
+          "path": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\zotero-route-8gbvxll7\\data\\storage\\Y5M8PSSP\\supporting-information.pdf"
+        }
+      ]
+    },
+    {
+      "name": "nested_collections_and_tags",
+      "status": "PASS",
+      "collections": [
+        1,
+        2
+      ],
+      "tags": [
+        {
+          "tag": "nanoparticle"
+        },
+        {
+          "tag": "read-on-tablet"
+        }
+      ]
+    },
+    {
+      "name": "linked_PDF_preserves_external_path",
+      "status": "PASS",
+      "path": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\zotero-route-8gbvxll7\\inputs\\thesis.pdf",
+      "mode": 2
+    },
+    {
+      "name": "search_inputs_indexed",
+      "status": "PASS",
+      "ids": {
+        "same": 6,
+        "cross": 7,
+        "scan": 8,
+        "long": 9
+      },
+      "defaults": {
+        "pdfMaxPages": 100,
+        "textMaxLength": 500000
+      }
+    },
+    {
+      "name": "Boolean_AND_across_PDF_pages",
+      "status": "PASS",
+      "ids": [
+        3,
+        6,
+        7
+      ],
+      "samePageHit": true,
+      "crossPageHit": true
+    },
+    {
+      "name": "Boolean_NOT_across_PDF_pages",
+      "status": "PASS",
+      "ids": [],
+      "samePageExcluded": true,
+      "crossPageExcluded": true
+    },
+    {
+      "name": "Boolean_OR_and_phrase",
+      "status": "PASS",
+      "orHits": [
+        6,
+        3,
+        7
+      ],
+      "phraseHits": [
+        3,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "image_only_PDF_requires_OCR",
+      "status": "GAP_CONFIRMED",
+      "searchable": false,
+      "extractedCharacters": 0
+    },
+    {
+      "name": "long_thesis_default_and_complete_index",
+      "status": "DEFAULT_LIMIT_CONFIRMED",
+      "pages": 551,
+      "tailFoundDefault": false,
+      "tailFoundComplete": true
+    },
+    {
+      "name": "native_annotation_and_durable_export",
+      "status": "PASS_WITH_WORKFLOW_LIMIT",
+      "originalUnchanged": true,
+      "exportedAnnotations": 1,
+      "path": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\zotero-route-8gbvxll7\\annotated-export.pdf"
+    }
+  ],
+  "dataDirectory": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\zotero-route-8gbvxll7\\data",
+  "profileDirectory": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\zotero-route-8gbvxll7\\profile",
+  "completed": "2026-10-18T22:05:38.436Z"
+}

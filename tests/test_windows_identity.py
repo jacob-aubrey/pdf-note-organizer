@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from note_organizer import windows_identity as identity
+from note_organizer import APP_DISPLAY_NAME
 
 
 @unittest.skipUnless(os.name == "nt", "Windows Shell shortcut integration")
@@ -29,6 +30,7 @@ class WindowsIdentityTests(unittest.TestCase):
         self.assertEqual(link["target"], str(self.exe))
         self.assertEqual(link["icon"], str(self.exe))
         self.assertEqual(link["arguments"], "")
+        self.assertEqual(link["description"], APP_DISPLAY_NAME)
         before = path.read_bytes(), path.stat().st_mtime_ns
         identity.ensure_shortcuts(self.exe, self.locations)
         self.assertEqual(before, (path.read_bytes(), path.stat().st_mtime_ns))
@@ -47,6 +49,39 @@ class WindowsIdentityTests(unittest.TestCase):
         self.assertEqual(changed, [path])
         self.assertEqual(identity.read_shortcut(path), {**before, "app_id": identity.APP_ID})
         self.assertEqual(identity.ensure_shortcuts(self.exe, self.locations), [])
+
+    def test_legacy_description_is_updated_even_when_identity_is_already_correct(self):
+        path = self.locations[2] / "Notable.lnk"
+        identity.create_shortcut(path, self.exe)
+        with identity._link(path, write=True) as (link, persist, _):
+            identity._check(identity._call(link, 7, (identity.wintypes.LPCWSTR,), "Notable research document organizer"))
+            identity._save(persist, path)
+        self.assertTrue(identity.repair_shortcut(path, self.exe))
+        self.assertEqual(identity.read_shortcut(path)["description"], APP_DISPLAY_NAME)
+        self.assertFalse(identity.repair_shortcut(path, self.exe))
+
+    def test_main_window_has_versioned_taskbar_name_and_source_relaunch_command(self):
+        from tests.reader_app_regression import require_private_desktop
+        require_private_desktop()
+        import tkinter as tk
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            identity.configure_taskbar(root)
+            with identity._window_properties(root) as props:
+                self.assertEqual(identity._property(props, 4), APP_DISPLAY_NAME)
+                self.assertEqual(identity._identity(props), identity.APP_ID)
+                command = identity._property(props, 2)
+                self.assertEqual(command, identity.relaunch_command())
+                self.assertIn("PDF Note Organizer.py", command)
+                self.assertIn("Note icon.ico", identity._property(props, 3))
+        finally:
+            root.destroy()
+
+    def test_packaged_relaunch_command_quotes_executable_paths_with_spaces(self):
+        import subprocess
+        with patch.object(sys, "frozen", True, create=True), patch.object(sys, "executable", str(self.exe)):
+            self.assertEqual(identity.relaunch_command(), subprocess.list2cmdline([str(self.exe)]))
 
     def test_other_app_and_other_copy_of_notable_are_not_modified(self):
         other = self.folder / "Other.exe"

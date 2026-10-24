@@ -1,5 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.win32.versioninfo import VSVersionInfo, FixedFileInfo, StringFileInfo, StringTable, StringStruct, VarFileInfo, VarStruct
+from pathlib import Path
+from runpy import run_path
+
+branding = run_path(str(Path(SPECPATH) / 'note_organizer' / '__init__.py'))
+APP_DISPLAY_NAME, __version__ = branding['APP_DISPLAY_NAME'], branding['__version__']
+
+version_parts = tuple(int(part) for part in __version__.split('.')) + (0,)
 
 
 a = Analysis(
@@ -43,11 +50,11 @@ exe = EXE(
     entitlements_file=None,
     icon=['Note icon.ico'],
     version=VSVersionInfo(
-        ffi=FixedFileInfo(filevers=(2, 6, 0, 0), prodvers=(2, 6, 0, 0), mask=0x3f, flags=0, OS=0x40004, fileType=1, subtype=0, date=(0, 0)),
+        ffi=FixedFileInfo(filevers=version_parts, prodvers=version_parts, mask=0x3f, flags=0, OS=0x40004, fileType=1, subtype=0, date=(0, 0)),
         kids=[StringFileInfo([StringTable('040904B0', [
-            StringStruct('CompanyName', 'Notable'), StringStruct('FileDescription', 'Notable research document organizer'),
-            StringStruct('FileVersion', '2.6.0'), StringStruct('ProductName', 'Notable'),
-            StringStruct('ProductVersion', '2.6.0'), StringStruct('OriginalFilename', 'Notable.exe'),
+            StringStruct('CompanyName', 'Notable'), StringStruct('FileDescription', APP_DISPLAY_NAME),
+            StringStruct('FileVersion', __version__), StringStruct('ProductName', 'Notable'),
+            StringStruct('ProductVersion', __version__), StringStruct('OriginalFilename', 'Notable.exe'),
         ])]), VarFileInfo([VarStruct('Translation', [1033, 1200])])],
     ),
 )
