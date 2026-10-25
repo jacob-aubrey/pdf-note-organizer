@@ -8,6 +8,7 @@ from collections import Counter
 from contextlib import contextmanager
 import hashlib
 import json
+import re
 from types import SimpleNamespace
 import uuid
 from zipfile import BadZipFile
@@ -16,7 +17,7 @@ import pymupdf
 
 from .remarkable_cloud import CloudItem, CloudError, atomic_write
 from .remarkable_pdf import annotated_pdf, RENDER_REVISION, UnsupportedAnnotations
-from .remarkable_sources import save_source_bundle, source_bundle
+from .remarkable_sources import save_source_bundle, source_bundle, source_info
 from .zotero_pilot import (AuthorizationRequired, Ledger, Paper, PilotError,
                            TransportInterrupted, publish, stable_key, marker)
 
@@ -37,15 +38,17 @@ class BridgeState(Ledger):
             db.execute("INSERT OR REPLACE INTO bridge_values VALUES(?,?)", (key, json.dumps(value)))
 
 
-def descendants(records, root, key, parent):
+def descendants(records, root, key, parent, unavailable=()):
     """Validate ancestry before any write; no recursive loops or truncated trees."""
     by_id = {key(row): row for row in records}
-    if len(by_id) != len(records) or root not in by_id:
+    if len(by_id) != len(records) or root not in by_id or root in unavailable:
         raise PilotError("The selected sync root is missing or its catalog is ambiguous.")
     result = {}
     for identity, row in by_id.items():
         seen, cursor, depth = set(), identity, 0
         while cursor:
+            if cursor in unavailable:
+                break  # Retain deleted ancestry, but never include its subtree.
             if cursor in seen:
                 raise PilotError("A folder catalog contains a cycle. No synchronization was attempted.")
             seen.add(cursor)
@@ -79,6 +82,13 @@ class Bridge:
         self.namespace = "notable-bridge-" + _sha(json.dumps([zotero.server_id, zotero_root, self.croot]).encode())[:24]
         self.publisher = Ledger(state.directory / "publisher")
         self.sources = SimpleNamespace(path=state.directory / "sources" / "library.sqlite3")
+        # Reuse the cloud adapter's existing content-addressed baseline support.
+        if hasattr(self.cloud, "baseline_dir"):
+            self.cloud.baseline_dir = self.sources.path.parent / "remarkable" / "baselines"
+
+    def _cancelled(self):
+        stop = getattr(self.cloud, "stop", None)
+        return bool(stop and stop.is_set())
 
     def run(self, *, apply=False):
         with self.state.lock():
@@ -94,7 +104,9 @@ class Bridge:
             # Cancellation and lost permission belong to the whole operation.
             raise
         except (PilotError, CloudError, OSError, ValueError, KeyError, BadZipFile,
-                pymupdf.FileDataError, pymupdf.EmptyFileError) as error:
+                pymupdf.FileDataError, pymupdf.EmptyFileError, RuntimeError) as error:
+            if type(error) is RuntimeError and not str(error).startswith('code=4:'):
+                raise  # Isolate MuPDF format errors without hiding programming failures.
             if isinstance(error, CloudError) and "authorization expired" in str(error).lower():
                 raise
             identity = {"cloud": cloud} if cloud else {"attachment": attachment}
@@ -103,11 +115,15 @@ class Bridge:
                 suspended.add(cloud)
 
     def _run(self, apply):
-        collections = [r for r in self.zot.collections() if not r.get("deleted")]
+        self.progress('Checking connected folders…')
+        collections = self.zot.collections()
+        self.progress('Checking reMarkable’s current file list…')
         catalog = self.cloud.library()
-        zscope = descendants(collections, self.zroot, lambda r: r["key"], lambda r: r.get("parentCollection"))
-        cfolders = [r for r in catalog if not r.deleted and r.kind == "CollectionType"]
-        cscope = descendants(cfolders, self.croot, lambda r: r.id, lambda r: r.parent)
+        zscope = descendants(collections, self.zroot, lambda r: r["key"], lambda r: r.get("parentCollection"),
+                             {r['key'] for r in collections if r.get('deleted')})
+        cfolders = [r for r in catalog if r.kind == "CollectionType"]
+        cscope = descendants(cfolders, self.croot, lambda r: r.id, lambda r: r.parent,
+                             {r.id for r in cfolders if r.deleted})
         from .zotero_connections import filtered_scope
         zscope = filtered_scope(zscope, self.exclusions['zotero'], lambda r: r['key'], lambda r: r.get('parentCollection'), self.zroot)
         cscope = filtered_scope(cscope, self.exclusions['tablet'], lambda r: r.id, lambda r: r.parent, self.croot)
@@ -275,6 +291,20 @@ class Bridge:
                     if not key:
                         continue
                     path = self.zot.file_path(key)
+                    if apply and re.fullmatch(r'[a-f0-9]{64}', item.name) and path.stem == item.name and row['name'] == item.name:
+                        from .sorting.core_logic import sanitize_filename_part
+                        title = re.sub(r'<[^>]+>', '', parent.get('title', '')).strip()
+                        title = re.sub(r'\.pdf$', '', title, flags=re.I)
+                        if title and not re.fullmatch(r'[a-f0-9]{64}', title, re.I):
+                            name = sanitize_filename_part(title)[:220]
+                            if name:
+                                self.set_desktop_document(row, name, home, maps)
+                                changed = self.cloud.update_item(identity, expected_hash=item.hash, name=name,
+                                                                 parent=item.parent, scope_id=self.croot)
+                                catalog[catalog.index(item)] = changed
+                                item = changed
+                                path = self.zot.file_path(key)
+                                reports.append({'action': 'legacy_name_repaired', 'cloud': identity})
                     # Preserve any independent names established during adoption.
                     row.setdefault("desktop_name", path.stem)
                     desktop = [path.stem, home]
@@ -299,13 +329,15 @@ class Bridge:
                         row.update(name=chosen[0], desktop_name=chosen[0], collection=chosen[1], tablet_parent=maps[chosen[1]]["cloud"])
                         reports.append({"action": "paper_location_updated", "cloud": identity})
                     save()
+        self.progress('Checking Zotero papers in connected folders…')
         for zk in zby:
             if not apply and zk not in zscope:
                 continue
             for row in self.zot.collection_items(zk):
                 if row.get("itemType") not in {"attachment", "note", "annotation"} and not row.get("deleted"):
                     references[row["key"]] = row
-        for parent in references.values():
+        for number, parent in enumerate(references.values(), 1):
+            self.progress(f'Checking Zotero paper {number} of {len(references)}…')
             homes = [k for k in parent.get("collections", []) if k in maps]
             for attachment in self.zot.children(parent["key"]):
                 if (attachment.get("itemType") != "attachment" or attachment.get("deleted")
@@ -320,6 +352,12 @@ class Bridge:
                     data = self.zot.file_path(source_key).read_bytes()
                     baseline = _sha(data)
                     approval = self.review_policy.approval("zotero", source_key, baseline) if self.review_policy else {}
+                    counterpart = next((ck for ck, linked in documents.items()
+                                        if not existing and linked.get('baseline') == baseline and not linked.get('unavailable')), None)
+                    if counterpart:
+                        reviews.append({'attachment': source_key, 'cloud': counterpart,
+                                        'reason': 'This exact PDF already has a connected tablet copy. Reconcile its Zotero references before sending another copy.'})
+                        continue
                     # A reference can have several PDFs, each with its own tablet
                     # home. Research memberships do not override that choice.
                     chosen = existing[1]["collection"] if existing else (approval or {}).get("collection")
@@ -331,6 +369,11 @@ class Bridge:
                         ck, old = existing
                         if ck in suspended:
                             continue
+                        # Repair a pre-existing interrupted registration from the
+                        # unchanged desktop source before attempting its upload.
+                        original = self.state.directory / "originals" / (baseline + ".pdf")
+                        if apply and old["baseline"] == baseline and not original.exists():
+                            atomic_write(original, data, require_absent=True)
                         if old["baseline"] != baseline or old["collection"] != zk or old["parent"] != parent["key"]:
                             reviews.append({"attachment": source_key, "reason": "The desktop original or its collection changed; it was not sent back to the tablet."})
                         continue
@@ -338,7 +381,7 @@ class Bridge:
                         reviews.append({"attachment": source_key, "reason": "Review the filename and tablet destination before sending this new document."})
                         continue
                     ck = str(uuid.uuid5(uuid.NAMESPACE_URL, self.namespace + "/pdf/" + source_key))
-                    documents[ck] = {"origin": "zotero", "source_key": source_key, "parent": parent["key"],
+                    proposed = {"origin": "zotero", "source_key": source_key, "parent": parent["key"],
                                      "collection": zk, "baseline": baseline, "uploaded": False,
                                      "role": "si" if approval.get("document_type") == "supporting_information" else "main",
                                      "tablet_parent": maps[zk]["cloud"],
@@ -346,25 +389,36 @@ class Bridge:
                     # Include a child label when a reference has several PDF files.
                     label = attachment.get("title", "")
                     if label and label != parent.get("title"):
-                        documents[ck]["name"] += " - " + label[:60]
+                        proposed["name"] += " - " + label[:60]
                     if approval.get("filename"):
                         from pathlib import Path
-                        documents[ck]["name"] = Path(approval["filename"]).stem
+                        proposed["name"] = Path(approval["filename"]).stem
                     original = self.state.directory / "originals" / (baseline + ".pdf")
                     if apply:
                         if not original.exists():
                             atomic_write(original, data, require_absent=True)
                         elif _sha(original.read_bytes()) != baseline:
                             raise PilotError("A retained desktop original changed. It was not uploaded.")
+                    # Another successful paper must never persist this mapping
+                    # until its immutable original has been staged completely.
+                    documents[ck] = proposed
                     save()
                     reports.append({"action": "pdf_to_tablet", "attachment": source_key, "cloud": ck})
 
         cloud_pdfs = {r.id: r for r in catalog if not r.deleted and r.is_pdf and r.parent in reverse}
         for identity in suspended:
             cloud_pdfs.pop(identity, None)
-        for ck, row in list(documents.items()):
+        for number, (ck, row) in enumerate(list(documents.items()), 1):
+            self.progress(f'Checking approved paper {number} of {len(documents)}…')
             if ck in suspended:
                 continue
+            if ck in cloud_pdfs:
+                row.pop("unavailable", None)
+            elif row.get("uploaded"):
+                row["unavailable"] = True
+                if row["origin"] != "zotero":
+                    reviews.append({"cloud": ck, "reason": "Linked tablet PDF is unavailable or outside the selected folders. Its absence does not confirm deletion; saved files were retained."})
+            save()
             if row["origin"] != "zotero":
                 continue
             with self._document_errors(reviews, cloud=ck, suspended=suspended):
@@ -380,6 +434,7 @@ class Bridge:
                     reviews.append({"cloud": ck, "reason": "Linked tablet PDF is missing or moved; it was not recreated."})
                     continue
                 if ck not in cloud_pdfs and apply:
+                    self.progress(f'Sending approved paper {number} of {len(documents)} to reMarkable…')
                     original = self.state.directory / "originals" / (row["baseline"] + ".pdf")
                     data = original.read_bytes()
                     if _sha(data) != row["baseline"]:
@@ -402,7 +457,10 @@ class Bridge:
                 if row and row["collection"] != zk:
                     reviews.append({"cloud": ck, "reason": "Linked tablet PDF moved; review the primary collection."})
                     continue
-                bundle = self.cloud.pdf_bundle(item)
+                cached_source = source_info(self.sources, ck, self._cancelled)
+                retained = bool(cached_source and cached_source.get("cloud_hash") == item.hash)
+                bundle = (source_bundle(self.sources, ck, self._cancelled, revision=item.hash)
+                          if retained else self.cloud.pdf_bundle(item))
                 baseline = _sha(bundle[ck + ".pdf"])
                 if row and row["baseline"] != baseline:
                     reviews.append({"cloud": ck, "reason": "The tablet PDF baseline changed; annotations were not applied to a different edition."})
@@ -429,7 +487,8 @@ class Bridge:
                 if not apply:
                     reports.append({"action": "tablet_to_zotero", "cloud": ck, "collection": zk})
                     continue
-                save_source_bundle(self.sources, item, bundle)
+                if not retained:
+                    save_source_bundle(self.sources, item, bundle)
                 # Rendering only retained, integrity-checked source bytes also makes
                 # later retries independent of mutable in-memory download objects.
                 retained_bundle = source_bundle(self.sources, ck, revision=item.hash)
@@ -443,7 +502,7 @@ class Bridge:
                         raise PilotError("A retained annotated PDF changed. It was preserved for review.")
                 else:
                     try:
-                        rendered = annotated_pdf(item, retained_bundle)
+                        rendered = annotated_pdf(item, retained_bundle, self._cancelled)
                     except UnsupportedAnnotations as error:
                         reviews.append({"cloud": ck, "reason": str(error)})
                         continue
@@ -454,6 +513,13 @@ class Bridge:
                     row["rendered"] = {"input": render_id, "sha256": digest}
                     save()
                 annotations = tuple(self.saved_annotations(ck))
+                if (self.review_policy and row.get("source_key") == row.get("view_key")
+                        and row.get("source_key") and not self.publisher.get(ck)["published"]):
+                    source_attachment = self.zot.get("item", row["source_key"])
+                    if source_attachment and source_attachment.get("linkMode") == "linked_file":
+                        # Recover an adoption recorded by an earlier version;
+                        # publication never supported linked-file attachments.
+                        row.pop("view_key")
                 if self.review_policy and row.get("source_key") and not row.get("view_key"):
                     source = row["source_key"]
                     if self.publisher.get(ck)["published"]:
@@ -461,8 +527,10 @@ class Bridge:
                     else:
                         original = self.state.directory / "originals" / (baseline + ".pdf")
                         original_md5 = hashlib.md5(original.read_bytes()).hexdigest()
-                        adopted = self.zot.review_action("adopt", {"key": source, "parent": row["parent"], "md5": original_md5,
-                                                                 "marker": marker(self.namespace, ck)})
+                        attachment = self.zot.get("item", source)
+                        adopted = ({"adopted": False, "native": 0} if attachment and attachment.get("linkMode") == "linked_file"
+                                   else self.zot.review_action("adopt", {"key": source, "parent": row["parent"], "md5": original_md5,
+                                                                 "marker": marker(self.namespace, ck)}))
                         row["view_key"] = source if adopted["adopted"] else stable_key(self.namespace, "attachment", ck)
                         row["desktop_annotations_preserved"] = adopted["native"]
                         if adopted["adopted"]:
@@ -488,24 +556,59 @@ class Bridge:
                     row['page_map'] = [pid for pid, _ in page_map(json.loads(bundle[ck + '.content']), len(original_pdf))]
                 row['page_map_digest'] = digest
                 save()
+                # Existing links need keyword extraction too. Read the retained
+                # original, never the rendered view's synthetic export metadata.
+                from .zotero_tagging import backfill_keywords
+                original = self.sources.path.parent / 'remarkable' / 'baselines' / (baseline + '.pdf')
+                check = backfill_keywords(self.zot, row['parent'], original, row, save)
+                if check['status'] == 'extraction_failed':
+                    reviews.append({'cloud': ck, 'reason': 'Keyword extraction failed: ' + check.get('detail', '')})
+                elif check['status'] == 'needs_text_recognition':
+                    reviews.append({'cloud': ck, 'reason': 'No readable keyword text was found. This PDF needs text recognition or manual tags.'})
                 self._tags(row['parent'], bundle, ck, row, save)
                 self.progress(f'Received tablet PDF {number} of {len(cloud_pdfs)}…')
         return {"mode": "apply" if apply else "plan", "actions": reports, "review": reviews,
                 "folders": len(maps), "documents": len(documents)}
 
-    def set_desktop_document(self, row, name, home, maps):
-        """Move only the tablet-home membership; keep all research categories."""
+    def desktop_document_plan(self, row, name, home):
+        """Validate every filename and source before changing a membership."""
         from .sorting.core_logic import validate_document_filename
         parent = self.zot.get("item", row["parent"])
         if not parent or parent.get("deleted"):
             raise PilotError("The Zotero reference was trashed. Its tablet copy was retained.")
-        parent["collections"] = sorted((set(parent.get("collections", [])) - {row["collection"]}) | {home})
-        self.zot.authorize()
-        self.zot.update(parent)
-        for key in {row.get("source_key"), row.get("view_key")} - {None, ""}:
+        siblings = self.state.read("documents", {}).values()
+        keep_previous = any(other != row and other.get("parent") == row["parent"]
+                            and other.get("collection") == row["collection"] for other in siblings)
+        removed = set() if keep_previous else {row["collection"]}
+        parent["collections"] = sorted((set(parent.get("collections", [])) - removed) | {home})
+        files = []
+        for key in sorted({row.get('source_key'), row.get('view_key')} - {None, ''}):
             path = self.zot.file_path(key)
             filename = validate_document_filename(name + path.suffix, path.suffix)
-            self.zot.review_action("rename", {"key": key, "filename": filename, "md5": hashlib.md5(path.read_bytes()).hexdigest()})
+            attachment = self.zot.get('item', key)
+            if not attachment or attachment.get('deleted') or attachment.get('parentItem') != row['parent']:
+                raise PilotError('A connected attachment changed. Its filename and collections were retained.')
+            files.append({'key': key, 'filename': filename,
+                          'before_filename': attachment.get('filename') or path.name,
+                          'md5': hashlib.md5(path.read_bytes()).hexdigest()})
+        return {'parent': parent, 'files': files}
+
+    def set_desktop_document(self, row, name, home, maps, *, plan=None):
+        """Move only the tablet-home membership; keep all research categories."""
+        plan = self.desktop_document_plan(row, name, home) if plan is None else plan
+        self.zot.authorize()
+        self.zot.update(plan['parent'])
+        for entry in plan['files']:
+            attachment = self.zot.get('item', entry['key'])
+            path = self.zot.file_path(entry['key'])
+            if not attachment or attachment.get('deleted') or attachment.get('parentItem') != row['parent']:
+                raise PilotError('A connected attachment changed while moving its paper. Its file was retained.')
+            if (attachment.get('filename') or path.name) == entry['filename']:
+                with path.open('rb') as stream:
+                    if hashlib.file_digest(stream, 'md5').hexdigest() != entry['md5']:
+                        raise PilotError('A connected PDF changed while moving its paper. Its file was retained.')
+                continue  # A prior interrupted step already renamed this file.
+            self.zot.review_action('rename', {key: entry[key] for key in ('key', 'filename', 'md5')})
 
     def _tags(self, parent_key, bundle, cloud_id, row, save):
         from .zotero_tags import reconcile

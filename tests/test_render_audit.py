@@ -136,15 +136,22 @@ class RendererAuditTests(unittest.TestCase):
             page = document[0]
             self.assertEqual(len(list(page.annots())), 3)
 
-    def test_recognized_items_skipped_by_rmscene_require_review(self):
-        for block_type in (SceneTextItemBlock, SceneTombstoneItemBlock):
-            with self.subTest(block_type=block_type.__name__):
-                def change(blocks):
-                    blocks.append(block_type(CrdtId(0, 11), CrdtSequenceItem(
-                        CrdtId(1, 120), CrdtId(1, 101), CrdtId(0, 0), 0, None)))
-                item, bundle = changed_scene(change)
-                with self.assertRaisesRegex(UnsupportedAnnotations, "annotation items"):
-                    annotated_pdf(item, bundle)
+    def test_unrendered_text_items_require_review(self):
+        def change(blocks):
+            blocks.append(SceneTextItemBlock(CrdtId(0, 11), CrdtSequenceItem(
+                CrdtId(1, 120), CrdtId(1, 101), CrdtId(0, 0), 0, None)))
+        item, bundle = changed_scene(change)
+        with self.assertRaisesRegex(UnsupportedAnnotations, "annotation items"):
+            annotated_pdf(item, bundle)
+
+    def test_zero_length_tombstone_requires_deletion_record_review(self):
+        # Valid deletion runs are supported; this fixture has no deleted IDs.
+        def change(blocks):
+            blocks.append(SceneTombstoneItemBlock(CrdtId(0, 11), CrdtSequenceItem(
+                CrdtId(1, 120), CrdtId(1, 101), CrdtId(0, 0), 0, None)))
+        item, bundle = changed_scene(change)
+        with self.assertRaisesRegex(UnsupportedAnnotations, "invalid tablet deletion record"):
+            annotated_pdf(item, bundle)
 
     def test_absurd_off_page_highlight_ink_and_text_require_review(self):
         for block_type in (SceneGlyphItemBlock, SceneLineItemBlock, RootTextBlock):

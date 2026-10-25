@@ -1,0 +1,12 @@
+{
+  "verified_at": "2026-10-25T17:29:13.953497+00:00",
+  "version": "0.8.6",
+  "active": true,
+  "userDisabled": false,
+  "appDisabled": false,
+  "xpi_sha256": "f7ec29a3f9c908f202436b3bc3b00dccc86b279ee58c720d22045643c3ea5e6d",
+  "matching_extracted_runtime_paths": [
+    "C:\\Users\\jdaub\\AppData\\Roaming\\Zotero\\Zotero\\Profiles\\9v5afvrs.default\\notable\\runtime\\fde16501763030a0cea9433c\\notable-worker.exe"
+  ],
+  "worker_sha256": "5a1fdddcc86c12b0da09449c83c13ef4c6237a665a660ba22d439367931033ee"
+}

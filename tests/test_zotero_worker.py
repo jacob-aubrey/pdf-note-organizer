@@ -37,6 +37,12 @@ class ReviewZotero(BridgeZotero):
         if action == 'rename':
             self.items[data['key']]['filename'] = data['filename']
             return {'key': data['key']}
+        if action == 'reparent':
+            item = self.items[data['key']]
+            if item.get('parentItem', '') not in {data['previous_parent'], data['parent']}:
+                raise PilotError('Attachment changed')
+            item['parentItem'] = data['parent']
+            return {'key': data['key'], 'parent': data['parent']}
         if action == 'inventory':
             return {'inventory': [{'key': r['key']} for r in self.items.values() if r.get('parentItem') == data['parent']]}
         if action == 'adopt':

@@ -47,11 +47,14 @@ def exclusions(directory, config):
         if not (state_directory(directory, entry) / 'bridge' / 'pilot.sqlite3').exists():
             raise PilotError('A previous connection record is missing. Restore its recovery files before syncing.')
         saved = values(directory, entry)
-        result['zotero'].update(saved['folders'])
+        same_server = entry.get('server_id') == config.get('server_id')
+        if same_server:
+            result['zotero'].update(saved['folders'])
         result['tablet'].update(row['cloud'] for row in saved['folders'].values())
         result['documents'].update(saved['documents'])
-        for row in saved['documents'].values():
-            result['sources'].update(row.get(key) for key in ('source_key', 'view_key') if row.get(key))
+        if same_server:
+            for row in saved['documents'].values():
+                result['sources'].update(row.get(key) for key in ('source_key', 'view_key') if row.get(key))
     result['zotero'].discard(config.get('zotero_root'))
     result['tablet'].discard(config.get('tablet_root'))
     return result

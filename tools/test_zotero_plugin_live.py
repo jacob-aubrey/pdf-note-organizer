@@ -418,11 +418,17 @@ def command(root, action, **values):
     while time.monotonic() < deadline:
         path = root / 'response.json'
         if path.exists():
-            result = json.loads(path.read_text(encoding='utf-8'))
-            if result.get('id') == identity:
-                if result.get('error'):
-                    raise RuntimeError(result['error'] + '\n' + result.get('stack', ''))
-                return result
+            try:
+                result = json.loads(path.read_text(encoding='utf-8'))
+            except json.JSONDecodeError:
+                # The test extension may still be writing this response.
+                # Keep the same command identity and existing overall timeout.
+                pass
+            else:
+                if result.get('id') == identity:
+                    if result.get('error'):
+                        raise RuntimeError(result['error'] + '\n' + result.get('stack', ''))
+                    return result
         time.sleep(.15)
     raise RuntimeError('Plugin UI command timed out')
 
@@ -611,6 +617,19 @@ def native_checks(client, root, checked):
         assert not original.exists()
     assert (inbox / 'Still downloading.pdf').exists()
     checked('PDF_Word_and_PowerPoint_intake_waits_for_completion_and_review_then_verifies_managed_copy_before_cleanup')
+    from note_organizer.zotero_pilot import reparent_attachment
+    source = finished['approval']['source']
+    attachment = client.get('item', source)
+    old_parent = attachment['parentItem']
+    destination = client.create('item', {'key': 'RPAR2345', 'itemType': 'document', 'title': 'Verified reference move'})
+    original_bytes = client.file_path(source).read_bytes()
+    reparent_attachment(client, source, destination['key'])
+    assert client.get('item', source)['parentItem'] == destination['key']
+    assert client.file_path(source).read_bytes() == original_bytes
+    reparent_attachment(client, source, destination['key'])
+    reparent_attachment(client, source, old_parent)
+    assert client.get('item', source)['parentItem'] == old_parent
+    checked('native_reparent_is_verified_idempotent_and_keeps_attachment_key_and_bytes')
     return snapshot
 
 
@@ -687,7 +706,20 @@ def bulk_checks(client, root, checked, count, resume=False):
     worker.import_library(plan['id'])
     plan = worker.bulk.read()
     assert len([r for r in plan['rows'] if r['status'] == 'complete']) == count, [(r['path'], r['issues']) for r in plan['rows'] if r['issues']]
-    records = [r for r in client.review_action('catalog')['parents'].values() if 'BULK2345' in r.get('collections', [])]
+    def imported_records():
+        scope = {'BULK2345'}
+        collections = client.collections()
+        while True:
+            expanded = scope | {r['key'] for r in collections if r.get('parentCollection') in scope}
+            if expanded == scope:
+                break
+            scope = expanded
+        return [r for r in client.review_action('catalog')['parents'].values() if set(r.get('collections', [])) & scope]
+    records = imported_records()
+    categories = [r for r in client.collections() if r.get('parentCollection') == 'BULK2345' and r['name'].startswith('Category ')]
+    assert len(categories) == min(4, count)
+    assert all(any(r['key'] in parent.get('collections', []) for parent in records) for r in categories)
+    checked('native_bulk_import_preserves_original_category_folders')
     if resume:
         catalog = client.review_action('catalog')
         filed = {a['data'].get('parentItem') for a in catalog['attachments'] if a['data'].get('parentItem') in {r['key'] for r in records}}
@@ -711,7 +743,7 @@ def bulk_checks(client, root, checked, count, resume=False):
     again = worker.bulk.read()
     assert len([r for r in again['rows'] if r['existing']]) == count
     worker.import_library(again['id'])
-    assert len([r for r in client.review_action('catalog')['parents'].values() if 'BULK2345' in r.get('collections', [])]) == len(records)
+    assert len(imported_records()) == len(records)
     checked('native_bulk_rescan_reuses_existing_references_and_PDFs_without_creating_duplicates')
     # The normal DOI translator resolves this known preprint without adding a
     # downloaded PDF. The test file contains synthetic text, not a user's paper.
@@ -744,9 +776,17 @@ def bulk_checks(client, root, checked, count, resume=False):
     worker.sync(); time.sleep(2.1); worker.sync()
     eligible = [r for r in worker.review.rows() if r['kind'] == 'zotero' and r['payload'].get('parent') in {p['key'] for p in records}]
     selected = sorted(eligible, key=lambda r: not any(m['key'] == existing.id for m in r['payload'].get('matches', [])))[:3]
-    assert len(selected) == 3 and all(r['payload']['routine'] for r in selected), [(r['payload']['title'], r['payload'].get('issues')) for r in selected]
+    assert len(selected) == 3
     assert any(any(m['key'] == existing.id for m in r['payload'].get('matches', [])) for r in selected)
-    worker.approve_routine([{'id': r['id'], 'digest': r['digest'], 'review_token': r['payload']['review_token']} for r in selected], 'BULK2345')
+    ambiguous = [r for r in selected if not r['payload']['routine']]
+    assert len(ambiguous) == 1 and 'several tablet destinations' in str(ambiguous[0]['payload']['issues'])
+    held = ambiguous[0]
+    worker.approve(held['id'], held['digest'], held['payload']['filename'], held['payload']['title'],
+                   held['payload']['document_type'], 'BULK2345', match=existing.id,
+                   review_token=held['payload']['review_token'])
+    checked('native_import_with_multiple_original_folders_requires_an_explicit_tablet_home')
+    worker.approve_routine([{'id': r['id'], 'digest': r['digest'], 'review_token': r['payload']['review_token']}
+                            for r in selected if r['payload']['routine']], 'BULK2345')
     assert all(worker.review.row(r['id'])['status'] == 'approved' for r in selected)
     worker.sync()
     assert len(worker.state.read('documents')) == 3 and existing.id in worker.state.read('documents')
@@ -825,7 +865,8 @@ def tagging_checks(client, root, checked):
     path = source / 'Keyword fixture.pdf'
     with pymupdf.open() as document:
         page = document.new_page()
-        page.insert_text((40, 80), 'Spectral CT nanoparticle research\nKeywords: Spectral CT; nanoparticles\n\nIntroduction\nSpectral CT measures iodine concentration. Nanoparticles improve contrast.\nIodine concentration is measured with spectral imaging.')
+        page.insert_text((40, 80), 'Spectral CT nanoparticle research\n\nIntroduction\nSpectral CT measures iodine concentration. Nanoparticles improve contrast.\nIodine concentration is measured with spectral imaging.')
+        document.set_metadata({'keywords': 'Spectral CT\x02nanoparticles'})
         document.save(path)
     digest = file_sha(path)
     collection = client.collections()[0]['key']

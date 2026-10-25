@@ -151,6 +151,32 @@ class PresentationExtractionTests(unittest.TestCase):
         )
         self.assertTrue(extraction.requires_manual_review)
 
+    def test_partial_pptx_requires_review_even_with_complete_citation(self) -> None:
+        from note_organizer.sorting.core_logic import get_basic_document_details
+
+        for damaged_part in (None, b"<malformed"):
+            with self.subTest(damaged_part=damaged_part):
+                path = self.root / "partial.pptx"
+                _write_pptx(path, ["A complete lecture\nAuthors: Jane Smith\nYear: 2025", "Second slide"],
+                            title="A complete lecture", author="Jane Smith")
+                with zipfile.ZipFile(path) as archive:
+                    parts = {name: archive.read(name) for name in archive.namelist()
+                             if name != "ppt/slides/slide2.xml"}
+                if damaged_part is not None:
+                    parts["ppt/slides/slide2.xml"] = damaged_part
+                with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+                    for name, content in parts.items():
+                        archive.writestr(name, content)
+                extraction = extract_presentation(path)
+                details = get_basic_document_details(path)
+                self.assertIn("A complete lecture", extraction.text)
+                self.assertEqual(extraction.slide_count, 2)
+                self.assertTrue(extraction.warnings)
+                self.assertTrue(extraction.requires_manual_review)
+                self.assertTrue(details["needs_review"])
+                self.assertIn("This file format could not be read completely; check the proposed name.",
+                              details["review_reasons"])
+
     def test_pptx_with_missing_required_parts_has_a_clear_error(self) -> None:
         path = self.root / "not-a-presentation.pptx"
         with zipfile.ZipFile(path, "w") as archive:

@@ -12,10 +12,29 @@ jobs:
         with:
           python-version: '3.13'
           cache: pip
-          cache-dependency-path: requirements.lock
+          cache-dependency-path: |
+            requirements.lock
+            requirements-zotero-pilot.txt
+            requirements-handwriting-pilot.txt
+            requirements-zotero-plugin.txt
       - run: python -m pip install --require-hashes -r requirements.lock
+      - name: Install private plugin test environment
+        run: python -m pip install -r requirements-zotero-plugin.txt
+      - name: Check dependency consistency
+        run: python -m pip check
       - name: Check Python compilation
         run: python -m compileall -q note_organizer
+      - name: Check plugin JavaScript and controller regressions
+        shell: pwsh
+        run: |
+          Get-ChildItem zotero-support/*.js | ForEach-Object {
+            node --check $_.FullName
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          Get-ChildItem tools/test_zotero_*.cjs | ForEach-Object {
+            node $_.FullName
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Check embedded reader runtime
         run: python tools/run_ui_tests.py tools/check_reader_environment.py
       - name: Run regression suite

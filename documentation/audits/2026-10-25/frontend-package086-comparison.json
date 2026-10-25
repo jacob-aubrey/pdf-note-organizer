@@ -1,0 +1,408 @@
+{
+  "package": "dist\\reMarkable-Sync-for-Zotero-0.8.6.xpi",
+  "package_sha256": "bde735d23f0b0577aa71c2960c4da6b99c29f02d38a470165117168b5536ee77",
+  "runtime": ".test-tmp\\zotero-plugin-086-dist\\notable-worker.exe",
+  "runtime_sha256": "eadefe9f8b2d48a06bce3d1a76cd1361bafe417f308484fb66a8f0398ab4b58e",
+  "runtime_md5": "1e5f059f9257ccb9beaf5d79fda81cb5",
+  "comparison": "Recursive Python code object equality after normalizing only co_filename; optimization level 0",
+  "python_modules": [
+    {
+      "file": "note_organizer/__init__.py",
+      "module": "note_organizer",
+      "code_object_equal": true,
+      "sha256": "7ad141a92dd3829a00963c493876eddc4e5902acef52c5d06917f7f6a68e159e"
+    },
+    {
+      "file": "note_organizer/citations.py",
+      "module": "note_organizer.citations",
+      "code_object_equal": true,
+      "sha256": "87720682c0816b137a9fe23b755da29832b1092134f9bddd31e977f28f90a6f3"
+    },
+    {
+      "file": "note_organizer/cloud_notes.py",
+      "module": "note_organizer.cloud_notes",
+      "code_object_equal": true,
+      "sha256": "14937544c3190f79af60487ed1f8d6130cd8b536e0d1aa6b244f1dda2592db51"
+    },
+    {
+      "file": "note_organizer/combined_pdf.py",
+      "module": "note_organizer.combined_pdf",
+      "code_object_equal": true,
+      "sha256": "0a70cc258d01abbadb37571878acc81f1d944415973a477df31582ec601fdde3"
+    },
+    {
+      "file": "note_organizer/extraction.py",
+      "module": "note_organizer.extraction",
+      "code_object_equal": true,
+      "sha256": "a7c567078394b8482e937003aefbbb07718302d3bcebaf85481e3ab242dffc40"
+    },
+    {
+      "file": "note_organizer/handwriting_ocr.py",
+      "module": "note_organizer.handwriting_ocr",
+      "code_object_equal": true,
+      "sha256": "2519dd3b4bd8628c75af843fe6e712bdfd9a42a6dfa6fb8fc4875c6d6deda831"
+    },
+    {
+      "file": "note_organizer/image_storage.py",
+      "module": "note_organizer.image_storage",
+      "code_object_equal": true,
+      "sha256": "3d105b35359093368d5a4802cf81d6c874b468738589a41316d6d2a94c1b4928"
+    },
+    {
+      "file": "note_organizer/inbox.py",
+      "module": "note_organizer.inbox",
+      "code_object_equal": true,
+      "sha256": "0b8037e8c75bb759b305d032ab2fbfaffa5f5533a36412227f2014cf8c9b7d2f"
+    },
+    {
+      "file": "note_organizer/paper_projection.py",
+      "module": "note_organizer.paper_projection",
+      "code_object_equal": true,
+      "sha256": "f864ed7731f65ad66da392fd395e28976ddc944939acdf855856f46e550caf82"
+    },
+    {
+      "file": "note_organizer/paper_registry.py",
+      "module": "note_organizer.paper_registry",
+      "code_object_equal": true,
+      "sha256": "133132af5a4e0a2e65d2fdef265265cc72cf6cdc3aba32d7de2f6be198a23ee4"
+    },
+    {
+      "file": "note_organizer/pdf_margins.py",
+      "module": "note_organizer.pdf_margins",
+      "code_object_equal": true,
+      "sha256": "986238ff0066f854fa397b3b3ab12eeb02e45953fceb7834ad8c5b003645a263"
+    },
+    {
+      "file": "note_organizer/printed_ocr.py",
+      "module": "note_organizer.printed_ocr",
+      "code_object_equal": true,
+      "sha256": "f4ee4556b480374230dd9a5d868b5fc62559e48b0b6e6207a7a2ad0d14a44285"
+    },
+    {
+      "file": "note_organizer/remarkable_cloud.py",
+      "module": "note_organizer.remarkable_cloud",
+      "code_object_equal": true,
+      "sha256": "538758cc94b923bcb622ebd6bbd6e12dea50388f7ee4b0ce68363019d19df134"
+    },
+    {
+      "file": "note_organizer/remarkable_outbox.py",
+      "module": "note_organizer.remarkable_outbox",
+      "code_object_equal": true,
+      "sha256": "b40db73cd5fe352c73e0ffd9470ec4cf2962f6751cf634496d07bf358e6e560a"
+    },
+    {
+      "file": "note_organizer/remarkable_pdf.py",
+      "module": "note_organizer.remarkable_pdf",
+      "code_object_equal": true,
+      "sha256": "4d3b2e236f4569760a60ecd1c7ff32e696b241af4a7afc3b668acb0dd66a853d"
+    },
+    {
+      "file": "note_organizer/remarkable_sources.py",
+      "module": "note_organizer.remarkable_sources",
+      "code_object_equal": true,
+      "sha256": "0ac297e4b587204bd215df27efc9fef51d3939ea6425a5d46f738d5a4b955ba9"
+    },
+    {
+      "file": "note_organizer/remarkable_sync.py",
+      "module": "note_organizer.remarkable_sync",
+      "code_object_equal": true,
+      "sha256": "a29e27d4625738d465e9b97e9602ccd3ac9267083497c6d227780b8518f58c2c"
+    },
+    {
+      "file": "note_organizer/search.py",
+      "module": "note_organizer.search",
+      "code_object_equal": true,
+      "sha256": "4f1f5172d2f29d8e5c0d2f8bc36b60ab33b82f13fc7b67d9ceaaf7bcf7029b49"
+    },
+    {
+      "file": "note_organizer/search_index.py",
+      "module": "note_organizer.search_index",
+      "code_object_equal": true,
+      "sha256": "b721c641e34f6ac0524b71d7489ec16a25bfc2344acfaac878ac09f3fa1b7504"
+    },
+    {
+      "file": "note_organizer/sorting/__init__.py",
+      "module": "note_organizer.sorting",
+      "code_object_equal": true,
+      "sha256": "784ef9a8f9a7366d879ecd8b21d5c97eb173de5dfe17256a423a5dd8f873ca4c"
+    },
+    {
+      "file": "note_organizer/sorting/core_logic.py",
+      "module": "note_organizer.sorting.core_logic",
+      "code_object_equal": true,
+      "sha256": "7892af2a526b7ee8a6d33a4b63e6676a0bacbc98013ddec2b96bf8aad5430b5c"
+    },
+    {
+      "file": "note_organizer/sorting/document_types.py",
+      "module": "note_organizer.sorting.document_types",
+      "code_object_equal": true,
+      "sha256": "221213872a8113e6602c528360d60031646828dcb90c6c2d9a59e20ceb12b3dc"
+    },
+    {
+      "file": "note_organizer/sorting/key_protection.py",
+      "module": "note_organizer.sorting.key_protection",
+      "code_object_equal": true,
+      "sha256": "c813cd77910c2eb77fb003b1f59c1bd6cdadc0f49cd39a6d4da3603e6cb3c6ad"
+    },
+    {
+      "file": "note_organizer/sorting/metadata_lookup.py",
+      "module": "note_organizer.sorting.metadata_lookup",
+      "code_object_equal": true,
+      "sha256": "179274b83761da092c54b1535968174bd029f26d4d1045ad07db0e5accb7de76"
+    },
+    {
+      "file": "note_organizer/sorting/patent_metadata.py",
+      "module": "note_organizer.sorting.patent_metadata",
+      "code_object_equal": true,
+      "sha256": "9003fb18cda5badd41e89034b5e0911a8c3a666890dc6d4a8d9fc3b1ae3a2c90"
+    },
+    {
+      "file": "note_organizer/sorting/presentation_extraction.py",
+      "module": "note_organizer.sorting.presentation_extraction",
+      "code_object_equal": true,
+      "sha256": "a2d0011e22ffc95f79bfe280cc7e17de4f4691754128431999cf416a82404822"
+    },
+    {
+      "file": "note_organizer/storage.py",
+      "module": "note_organizer.storage",
+      "code_object_equal": true,
+      "sha256": "4855d16c3b8035d24d2f1abe470a316ded23ef5ba048e90da68f99bb06d78b8d"
+    },
+    {
+      "file": "note_organizer/supplement_library.py",
+      "module": "note_organizer.supplement_library",
+      "code_object_equal": true,
+      "sha256": "08881592459c306607c719062a2a0a2d2a92149bd5e43176a10f908d9511318d"
+    },
+    {
+      "file": "note_organizer/zotero_bridge.py",
+      "module": "note_organizer.zotero_bridge",
+      "code_object_equal": true,
+      "sha256": "5b6fb110ffdd753046caf36bc679bee8d10c9518422e2b008bfd9affe06547cc"
+    },
+    {
+      "file": "note_organizer/zotero_bulk.py",
+      "module": "note_organizer.zotero_bulk",
+      "code_object_equal": true,
+      "sha256": "877c50f32f803f2d6be7d5b75b4e76f8b31484c462504f309b2b840df19b21c0"
+    },
+    {
+      "file": "note_organizer/zotero_connections.py",
+      "module": "note_organizer.zotero_connections",
+      "code_object_equal": true,
+      "sha256": "314c21b5c192b1715a66a2d603264ff188d11b99bd885ff2ee44843cf2f69839"
+    },
+    {
+      "file": "note_organizer/zotero_pilot.py",
+      "module": "note_organizer.zotero_pilot",
+      "code_object_equal": true,
+      "sha256": "e0a78a9a6104967f58256c933383eba273865ea7a5d2d0c60432443d3e066aa0"
+    },
+    {
+      "file": "note_organizer/zotero_review.py",
+      "module": "note_organizer.zotero_review",
+      "code_object_equal": true,
+      "sha256": "79ff2d627acab99cf34bae692172282f5c3a07cefd91db3101aee785d095806d"
+    },
+    {
+      "file": "note_organizer/zotero_tagging.py",
+      "module": "note_organizer.zotero_tagging",
+      "code_object_equal": true,
+      "sha256": "75225d8b01242304d43834161ee947efdb9b48945c758cee17d03cfefb27de55"
+    },
+    {
+      "file": "note_organizer/zotero_tags.py",
+      "module": "note_organizer.zotero_tags",
+      "code_object_equal": true,
+      "sha256": "ac69bff5c9f9d9aeb3af581b77829bf236378b16b7117c28e8d82bbd4cc94f35"
+    },
+    {
+      "file": "note_organizer/zotero_worker.py",
+      "module": "note_organizer.zotero_worker",
+      "code_object_equal": true,
+      "sha256": "f566d2d2c66d5a9b23f904365419f2ee1aa35080167b6115f72416da1d8abcf7"
+    }
+  ],
+  "frontend_files": [
+    {
+      "file": "zotero-support/bootstrap.js",
+      "packaged_bytes_equal": true,
+      "sha256": "11b02c9aca657b8903529ead2ce3b46f44cef59346ecd0199876cf61c40a3e89"
+    },
+    {
+      "file": "zotero-support/icons/book-open.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "a5eb669f66989fdbc003b1689ebc93769b3b9d680f840573f2a3ac268756f894"
+    },
+    {
+      "file": "zotero-support/icons/check.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "7f33acc9a77a61659531044525fc008edebe215bf4dcf1c789c8674ad3277db0"
+    },
+    {
+      "file": "zotero-support/icons/external-link.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "3891241b8c3bfc3a8a930078f26ffc5a7e9763da6d0162ace2050b28d4c1d1fe"
+    },
+    {
+      "file": "zotero-support/icons/file-search.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "814b5c612baeb7b8b6f1b34a341ff9e6488ef8442d6c0b7aabdd238269bef445"
+    },
+    {
+      "file": "zotero-support/icons/file-text.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "486fab70d8ad3cdc69b5ff9b6c356a58d41fcc4c885359cbf9d6e088a7c47f70"
+    },
+    {
+      "file": "zotero-support/icons/folder-input.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "422afd22efd4b7474ee50fcdc42c37cdee1c170a81a2eb339df7ecd0d0dc3578"
+    },
+    {
+      "file": "zotero-support/icons/folder-open.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "ee57452b40e71df310214091dd9da1941a397c83197b8ff8d7ae66dd4242578b"
+    },
+    {
+      "file": "zotero-support/icons/folder-search.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "ddcdf0c312320d13a9e327793e73c3a056309e91da1ca630fe1531db81aed247"
+    },
+    {
+      "file": "zotero-support/icons/folder-sync.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "65cf1b56d7e8b0b43a347a83ea4c8b82c9364dc2cf6f816aa2b22dfcaa66407b"
+    },
+    {
+      "file": "zotero-support/icons/LICENSE.txt",
+      "packaged_bytes_equal": true,
+      "sha256": "1e7290b35280a048667bbf0ebabac1c7fd52a75300e8b2946ac165715997f2bc"
+    },
+    {
+      "file": "zotero-support/icons/link.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "4f3237183dcaabfac92f4e94c776a9a9e45c3c5e77a921061a6b34b61eb5413f"
+    },
+    {
+      "file": "zotero-support/icons/list-filter.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "502573071e3b8118356eb408df781872f0608071b4b09cd99954ba1d8e2b8b37"
+    },
+    {
+      "file": "zotero-support/icons/plug.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "2797d68c45c73c7b0befc312bb5d9a8b90f16c86c7f8b31b8afe57b39b97718a"
+    },
+    {
+      "file": "zotero-support/icons/refresh-cw.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "2e10dd403c85a24f163d59fc6151aa21147fe9402e1305dfc8979208caee8944"
+    },
+    {
+      "file": "zotero-support/icons/rotate-ccw.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "622685386ab4017eabfde01cd74550a20b1924df233b353f73b6b155371f2afd"
+    },
+    {
+      "file": "zotero-support/icons/save.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "ee9d56a7fec4b20dd6689546d41f68219ea8cbd67f99bd17a1bdaff5be6edb53"
+    },
+    {
+      "file": "zotero-support/icons/search.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "f329111f7cfd9235b1d840b15cc752b0c7c3f739f359e46da8fdb5573ac484f6"
+    },
+    {
+      "file": "zotero-support/icons/settings.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "3c7bee2696ce0c2d48d34e813f4fcda31f0ad21ab9309aee3751cde4280ad737"
+    },
+    {
+      "file": "zotero-support/icons/SOURCE.txt",
+      "packaged_bytes_equal": true,
+      "sha256": "fb64dfb9aac51f0659240686088859ba41872c5cc8030dbe649a0d946c0ff4db"
+    },
+    {
+      "file": "zotero-support/icons/tablet.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "12062f1cb4a08ab60d08bb5eab260bf7eb96b5c06fc48d776baa5398bc2776c9"
+    },
+    {
+      "file": "zotero-support/icons/tag.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "85e11c07b29f5b67410e0f14c84799d9406320cd4575b7c8322f31910e0582cc"
+    },
+    {
+      "file": "zotero-support/icons/trash-2.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "e63698acf757d3043fcb4a9ea6ffceff9dd84708707eafc879c86b34a6ff2786"
+    },
+    {
+      "file": "zotero-support/icons/unlink.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "1cdf08c7f396b292a2e8ad037a22a3a5098ab6a6ce38eaec4164f17e023c0884"
+    },
+    {
+      "file": "zotero-support/icons/x.svg",
+      "packaged_bytes_equal": true,
+      "sha256": "4a9cdab38fbb96162e7dace28e33f4ca0e49d8963a6162abc3d4691b7d675117"
+    },
+    {
+      "file": "zotero-support/library.js",
+      "packaged_bytes_equal": true,
+      "sha256": "775f2edaa0b8706355b7222667d85f353367e1af93383327249c51ad53c1c5c6"
+    },
+    {
+      "file": "zotero-support/manifest.json",
+      "packaged_bytes_equal": true,
+      "sha256": "ad9fc2fea0f31a5c558366d1c49a1127eb7c3cc18eec87e8a3cab1ad97e908d6"
+    },
+    {
+      "file": "zotero-support/ui.js",
+      "packaged_bytes_equal": true,
+      "sha256": "03c2c17871908ae79f9f868f3702f2205f9ce26e3b563b2095e47183e91b8750"
+    },
+    {
+      "file": "zotero-support/workspace.css",
+      "packaged_bytes_equal": true,
+      "sha256": "aa92165788b200d6afaae60e9efd62813db2e8647dd12743dc75f343fee70468"
+    },
+    {
+      "file": "zotero-support/workspace.js",
+      "packaged_bytes_equal": true,
+      "sha256": "7bff3e9ff425866c62166279c74516f3c3a16400b35224254d1c848d3519ca28"
+    },
+    {
+      "file": "zotero-support/workspace.xhtml",
+      "packaged_bytes_equal": true,
+      "sha256": "93e39fd9d1948884d3e74429c9111cb5ea06b911a76856d7f609cbb1120e032d"
+    }
+  ],
+  "runtime_manifest": {
+    "files": [
+      {
+        "md5": "1e5f059f9257ccb9beaf5d79fda81cb5",
+        "path": "notable-worker.exe"
+      }
+    ],
+    "id": "ba1f5a41526c3d038a4b36f4"
+  },
+  "packaged_runtime_md5": "1e5f059f9257ccb9beaf5d79fda81cb5",
+  "entrypoint": {
+    "file": "tools\\notable_worker.py",
+    "sha256": "877ad05536048f2803d7ef9b6e79ad9bd5eaf8f3ceb8601181644b3c21017a02",
+    "code_object_equal": true
+  },
+  "component_notice": {
+    "entry": "licenses\\ZOTERO_PLUGIN_NOTICES.md",
+    "packaged_bytes_equal": true,
+    "sha256": "6e2fbade99daaf2c00bb415f95e470a42f2d6736201b6269b4ddd7d60cfb9f2e",
+    "pillow_label": "MIT-CMU"
+  },
+  "diagnostics": {
+    "safe_python_sampler_in_frozen_source": true,
+    "worker_module_source_sha256": "f566d2d2c66d5a9b23f904365419f2ee1aa35080167b6115f72416da1d8abcf7"
+  }
+}

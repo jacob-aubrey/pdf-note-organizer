@@ -6,11 +6,12 @@ rmscene. Unknown page formats fail closed instead of dropping annotations.
 from io import BytesIO
 import json
 import math
+import re
 
 import pymupdf as fitz
 
 
-RENDER_REVISION = 4
+RENDER_REVISION = 5
 
 
 class UnsupportedAnnotations(ValueError):
@@ -266,7 +267,136 @@ def apply_scene(document, page, page_id, tree, *, expand_margins=True):
         annot.update()
 
 
+def restore_navigation(original, output, pages, cancelled=lambda: False):
+    """Rebuild destinations after page order, deletions, and added note pages."""
+    destinations = {}
+    for index, (_, source_index) in enumerate(pages):
+        if source_index >= 0:
+            destinations.setdefault(source_index, index)
+
+    def native_matrix(page):
+        # MuPDF returns navigation in displayed page coordinates. In 1.28.2,
+        # transformation_matrix omits the crop offset on rotated pages, while
+        # insert_link uses that matrix. Derive the reader's actual transform
+        # from its effective CropBox, then use the insertion API's own matrix.
+        media, crop = page.mediabox, page.cropbox
+        visible = fitz.Rect(crop.x0, media.y1 - crop.y1, crop.x1, media.y1 - crop.y0) & media
+        rotation = {0: fitz.Matrix(1, 0, 0, 1, 0, 0),
+                    90: fitz.Matrix(0, 1, -1, 0, visible.height, 0),
+                    180: fitz.Matrix(-1, 0, 0, -1, visible.width, visible.height),
+                    270: fitz.Matrix(0, -1, 1, 0, 0, visible.width)}[page.rotation]
+        return ~(fitz.Matrix(1, 0, 0, -1, -visible.x0, visible.y1) * rotation)
+
+    def inserted_position(value, source_index, index):
+        return value * native_matrix(original[source_index]) * output[index].transformation_matrix
+
+    for index, (_, source_index) in enumerate(pages):
+        if cancelled():
+            raise InterruptedError("reMarkable PDF conversion stopped")
+        if source_index < 0:
+            continue
+        for source_link in original[source_index].get_links():
+            link = {key: value for key, value in source_link.items() if key not in {"xref", "id"}}
+            link["from"] = inserted_position(fitz.Rect(link["from"]), source_index, index)
+            if link.get("kind") == fitz.LINK_GOTO:
+                target = link.get("page", -1)
+                if target not in destinations:
+                    continue  # A deleted destination must not point at another paper page.
+                link["page"] = destinations[target]
+                link["to"] = inserted_position(fitz.Point(link.get("to", (0, 0))), target, link["page"])
+            output[index].insert_link(link)
+    toc, native_destinations = [], []
+    for level, title, page, destination in original.get_toc(simple=False):
+        if cancelled():
+            raise InterruptedError("reMarkable PDF conversion stopped")
+        destination = dict(destination)
+        source_xref = destination.pop("xref", None)
+        native_destination = None
+        if destination.get("kind") == fitz.LINK_GOTO:
+            source_index = page - 1
+            if source_index not in destinations:
+                continue
+            page = destinations[source_index] + 1
+            destination["page"] = page - 1
+            point = fitz.Point(destination.get("to", (0, 0))) * native_matrix(original[source_index])
+            native_destination = (source_xref, page - 1, point, destination.get("zoom", 0))
+        # Removing a parent destination can otherwise leave an invalid level gap.
+        level = min(level, toc[-1][0] + 1 if toc else 1)
+        toc.append([level, title, page, destination])
+        native_destinations.append(native_destination)
+    if toc:
+        output.set_toc(toc)
+        outline_xrefs = output.get_outline_xrefs()
+        # set_toc's crop/rotation round trip drifts on the installed 1.28.2.
+        # Keep its hierarchy/style handling, then restore native PDF targets.
+        # Page copies keep native content coordinates even when margins grow.
+        for index, destination in enumerate(native_destinations):
+            if destination is None:
+                continue
+            source_xref, page, point, zoom = destination
+            kind, value = original.xref_get_key(source_xref, "A/D") if source_xref else ("null", "null")
+            if kind == "null" and source_xref:
+                kind, value = original.xref_get_key(source_xref, "Dest")
+            array = re.fullmatch(r"\[\s*\d+\s+\d+\s+R\s+(.+)\]", value, re.S) if kind == "array" else None
+            target = array[1].strip() if array else f"/XYZ {point.x:.8f} {point.y:.8f} {zoom}"
+            output.xref_set_key(outline_xrefs[index], "A",
+                               f"<</S/GoTo/D[{output.page_xref(page)} 0 R {target}]>>")
+
+
+def _repair_copy_source(data, cancelled):
+    """Rebuild broken object references only when all visible content survives."""
+    from pypdf import PdfReader, PdfWriter
+    reader = PdfReader(BytesIO(data))
+    writer = PdfWriter()
+    writer.clone_document_from_reader(reader)
+    stream = BytesIO()
+    writer.write(stream)
+    repaired = stream.getvalue()
+    with fitz.open(stream=data, filetype='pdf') as before, fitz.open(stream=repaired, filetype='pdf') as after:
+        if (len(before) != len(after) or before.get_toc() != after.get_toc()
+                or before.get_page_labels() != after.get_page_labels()
+                or before.embfile_names() != after.embfile_names()):
+            raise UnsupportedAnnotations('The source PDF needs repair; its navigation could not be preserved.')
+        for index in range(len(before)):
+            if cancelled():
+                raise InterruptedError('reMarkable PDF conversion stopped')
+            left, right = before[index], after[index]
+            if (left.rect != right.rect or left.mediabox != right.mediabox or left.cropbox != right.cropbox
+                    or left.rotation != right.rotation or list(left.widgets() or []) or list(right.widgets() or [])):
+                raise UnsupportedAnnotations('The source PDF needs repair; its page geometry or forms require review.')
+            links = lambda page: [{key: str(value) for key, value in link.items() if key not in {'xref', 'id'}} for link in page.get_links()]
+            annotations = lambda page: [(a.type, tuple(a.rect), a.info, a.vertices, a.colors, a.opacity) for a in page.annots() or []]
+            if links(left) != links(right) or annotations(left) != annotations(right):
+                raise UnsupportedAnnotations('The source PDF needs repair; its links or annotations require review.')
+            left_image, right_image = left.get_pixmap(alpha=False), right.get_pixmap(alpha=False)
+            if (left_image.width, left_image.height, left_image.samples) != (right_image.width, right_image.height, right_image.samples):
+                raise UnsupportedAnnotations('The source PDF needs repair; rebuilding it changed its appearance.')
+        for name in before.embfile_names():
+            if before.embfile_get(name) != after.embfile_get(name):
+                raise UnsupportedAnnotations('The source PDF needs repair; an embedded file changed.')
+    return repaired
+
+
 def annotated_pdf(item, bundle, cancelled=lambda: False, *, expand_margins=True):
+    try:
+        return _annotated_pdf(item, bundle, cancelled, expand_margins=expand_margins)
+    except RuntimeError as error:
+        if 'source object number out of range' not in str(error):
+            raise
+        # Some readable publisher PDFs contain dangling, unused references.
+        # Keep the raw original and use the existing pypdf dependency to rebuild
+        # a rendering source. Verify every page before applying any tablet ink.
+        try:
+            repaired = _repair_copy_source(bundle[item.id + '.pdf'], cancelled)
+            return _annotated_pdf(item, {**bundle, item.id + '.pdf': repaired}, cancelled,
+                                  expand_margins=expand_margins)
+        except InterruptedError:
+            raise
+        except (ValueError, RuntimeError, KeyError) as repair_error:
+            raise UnsupportedAnnotations('The source PDF could not be copied safely. Its original and tablet notes were retained for repair.') from repair_error
+
+
+def _annotated_pdf(item, bundle, cancelled=lambda: False, *, expand_margins=True):
     content = json.loads(bundle[item.id + ".content"])
     if content.get("fileType") != "pdf":
         raise UnsupportedAnnotations("Only imported PDFs are supported")
@@ -274,10 +404,16 @@ def annotated_pdf(item, bundle, cancelled=lambda: False, *, expand_margins=True)
         if original.needs_pass:
             raise UnsupportedAnnotations("The source PDF is password protected")
         pages = page_map(content, len(original))
+        # Tombstoned page sources remain in cloud bundles for history. They
+        # are known sources, but must never be rendered as live pages.
+        records = content.get("cPages", {}).get("pages", []) if isinstance(content.get("cPages"), dict) else []
+        historical_ids = {row.get("id") for row in records if isinstance(row, dict) and row.get("deleted", {}).get("value", False)}
         known_layers = {item.id + "/" + pid + ".rm" for pid, _ in pages}
+        known_layers.update(item.id + "/" + pid + ".rm" for pid in historical_ids if isinstance(pid, str))
         if any(name.endswith(".rm") and name not in known_layers for name in bundle):
             raise UnsupportedAnnotations("Annotation layers exist outside the PDF's page map")
         known_highlights = {item.id + ".highlights/" + pid + ".json" for pid, _ in pages}
+        known_highlights.update(item.id + ".highlights/" + pid + ".json" for pid in historical_ids if isinstance(pid, str))
         if any(".highlights/" in name and name.endswith(".json") and name not in known_highlights for name in bundle):
             raise UnsupportedAnnotations("Highlight data exists outside the PDF's page map")
         labels = []
@@ -287,7 +423,7 @@ def annotated_pdf(item, bundle, cancelled=lambda: False, *, expand_margins=True)
             data = bundle.get(item.id + "/" + pid + ".rm")
             tree = scene(data) if data else None
             if source_index >= 0:
-                output.insert_pdf(original, from_page=source_index, to_page=source_index)
+                output.insert_pdf(original, from_page=source_index, to_page=source_index, links=False)
                 label = original[source_index].get_label() or str(source_index + 1)
             else:
                 size = getattr(tree.scene_info, "paper_size", None) if tree else None
@@ -302,8 +438,13 @@ def annotated_pdf(item, bundle, cancelled=lambda: False, *, expand_margins=True)
             legacy = bundle.get(item.id + ".highlights/" + pid + ".json")
             if legacy:
                 raise UnsupportedAnnotations("Legacy JSON highlights need an additional annotation adapter")
+        if cancelled():
+            raise InterruptedError("reMarkable PDF conversion stopped")
+        restore_navigation(original, output, pages, cancelled)
         output.set_page_labels(labels)
         metadata = dict(original.metadata)
         metadata["keywords"] = (metadata.get("keywords", "") + "; reMarkable imported PDF").strip("; ")
         output.set_metadata(metadata)
+        if cancelled():
+            raise InterruptedError("reMarkable PDF conversion stopped")
         return output.tobytes(garbage=4, deflate=True)

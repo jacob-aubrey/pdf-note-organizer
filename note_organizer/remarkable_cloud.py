@@ -4,6 +4,7 @@ Protocol reference: https://github.com/SamMorrowDrums/remarkable-mcp
 Writes create items only; they never replace existing documents or delete data.
 """
 import base64
+import copy
 import ctypes
 from ctypes import wintypes
 from dataclasses import dataclass
@@ -342,14 +343,21 @@ def crc32c_header(data):
 
 class CloudClient:
     """Pair once, renew sessions, and fetch immutable cloud blobs with checks."""
-    def __init__(self, token="", cache_dir=None, stop=None, cache_limit_bytes=64 * 1024 * 1024):
+    def __init__(self, token="", cache_dir=None, stop=None, cache_limit_bytes=64 * 1024 * 1024, progress=None):
         self.device_token = token
         self.user_token = ""
         self.cache_dir = Path(cache_dir) if cache_dir else None
         self.cache_limit_bytes = cache_limit_bytes
         self.baseline_dir = None
+        self.progress = progress
+        self._cache_size = None
         self.stop = stop or threading.Event()
         self.opener = urllib.request.build_opener(_SafeRedirect())
+
+    def _progress(self, message):
+        callback = getattr(self, 'progress', None)
+        if callback:
+            callback(message)
 
     def check_stop(self):
         if self.stop.is_set():
@@ -394,6 +402,7 @@ class CloudClient:
                 delay = 2 ** (attempt + 1)
             if self.stop.wait(delay):
                 self.check_stop()
+            self._progress(f'Waiting for reMarkable; retrying the current request ({attempt + 2} of 3)…')
 
     def pair(self, code):
         """Exchange a single-use pairing code for a device token."""
@@ -447,13 +456,20 @@ class CloudClient:
             raise CloudError("Cloud download failed its integrity check; previous copy retained.")
         if (cached and not filename.endswith((".pdf", ".rm")) and self.cache_limit_bytes > 0
                 and len(data) <= min(4 * 1024 * 1024, self.cache_limit_bytes)):
+            previous_size = cached.stat().st_size if cached.exists() else 0
             atomic_write(cached, data)
-            self.prune_cache()
+            if getattr(self, '_cache_size', None) is None:
+                self.prune_cache()
+            else:
+                self._cache_size += len(data) - previous_size
+                if self._cache_size > self.cache_limit_bytes:
+                    self.prune_cache()
         return data
 
     def prune_cache(self):
         """Bound disposable blobs; baselines, strokes, exports and notes stay."""
         if not self.cache_dir or not self.cache_dir.is_dir():
+            self._cache_size = 0
             return 0
         files = []
         for path in self.cache_dir.iterdir():
@@ -474,15 +490,26 @@ class CloudClient:
                 continue
             total -= size
             removed += 1
+        self._cache_size = total
         return removed
 
     def library(self):
         """List metadata for scope discovery; PDF contents are fetched separately."""
+        self._progress('Reading reMarkable’s file list…')
         root = json.loads(self.get(SYNC + "/v4/root"))
+        if getattr(self, '_catalog_hash', None) == root['hash']:
+            self.check_stop()
+            self._progress('reMarkable’s file list is up to date.')
+            return copy.deepcopy(self._catalog_items)
         entries = parse_index(self.blob(root["hash"], "root.docSchema"))
         items = []
-        for entry in entries:
+        reported = 0.0
+        for number, entry in enumerate(entries, 1):
             self.check_stop()
+            now = time.monotonic()
+            if number == 1 or number == len(entries) or now - reported >= 1:
+                self._progress(f'Reading reMarkable’s file list: {number} of {len(entries)}')
+                reported = now
             uuid.UUID(entry["id"])
             files = parse_index(self.blob(entry["hash"], entry["id"] + ".docSchema"))
             meta = next((f for f in files if f["id"] == entry["id"] + ".metadata"), None)
@@ -492,6 +519,8 @@ class CloudClient:
             items.append(CloudItem(entry["id"], entry["hash"], metadata.get("visibleName", entry["id"]),
                                    metadata.get("parent", ""), metadata["type"],
                                    bool(metadata.get("deleted", False)), files))
+        self._catalog_hash, self._catalog_items = root['hash'], copy.deepcopy(items)
+        self._progress(f'Finished reading reMarkable’s file list: {len(items)} files.')
         return items
 
     def pdf_bundle(self, item):

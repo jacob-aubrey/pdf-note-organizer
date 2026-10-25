@@ -63,6 +63,19 @@ class TagTests(unittest.TestCase):
         self.assertIs(type(next(t for t in content['tags'] if t['name'] == 'Publisher')['timestamp']), int)
         self.assertEqual(content['pageTags'][0]['timestamp'], 456)
 
+    def test_unrepresentable_native_tag_is_retained_without_partial_writes(self):
+        self.zot.items['PARENT23']['tags'] = [{'tag': 'Keep\x02original', 'type': 0}]
+        parent = copy.deepcopy(self.zot.items['PARENT23'])
+        row = copy.deepcopy(self.row)
+        old_item, old_bundle = self.current()
+        with self.assertRaisesRegex(PilotError, 'Tags must be'):
+            self.sync()
+        self.assertEqual(self.zot.items['PARENT23'], parent)
+        self.assertEqual(self.row, row)
+        item, bundle = self.current()
+        self.assertEqual(item.hash, old_item.hash)
+        self.assertEqual(bundle, old_bundle)
+
     def test_tag_only_write_never_rewrites_pdf_or_pen_layers_or_render_fingerprint(self):
         old_item, old = self.current()
         before = render_fingerprint(old_item.id, old)

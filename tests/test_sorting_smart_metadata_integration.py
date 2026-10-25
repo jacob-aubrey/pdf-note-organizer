@@ -150,6 +150,35 @@ class SmartMetadataIntegrationTests(unittest.TestCase):
         self.assertNotIn("Foreign", build_proposed_filename(details, ".pdf"))
         self.assertNotIn("2001", build_proposed_filename(details, ".pdf"))
 
+    def test_similar_reference_title_cannot_verify_a_different_paper(self) -> None:
+        local_title = "Computed tomography imaging of gold nanoparticles in rabbits"
+        reference = DOIResolution(doi="10.1234/rats.2025", provider="fixture", evidence_label="Fixture",
+            title="Computed tomography imaging of gold nanoparticles in rats", authors=("Alice Rat",),
+            journal="Journal of Rats", year="2025", document_type="journal_article")
+        local = DocumentExtraction(text=local_title + "\nAuthors: Jane Rabbit\nYear: 2026\nAbstract\n"
+            "A rabbit experiment.\nReferences\nA Rat. " + reference.title + ". DOI: " + reference.doi,
+            metadata={"title": local_title, "author": "Jane Rabbit"}, document_format="PDF")
+        self.assertGreater(core_logic._title_match_score(local_title, reference.title), 0.97)
+        with patch.object(core_logic, "extract_document", return_value=local), \
+                patch.object(core_logic, "resolve_doi", return_value=reference):
+            details = get_document_details(self.root / "rabbits.pdf", "", allow_cloud_ai=False)
+        self.assertEqual(details["title"], local_title)
+        self.assertEqual(details["primary_creator"], "Jane Rabbit")
+        self.assertEqual(details["year"], "2026")
+        self.assertNotEqual(details["source"], "DOI")
+        self.assertNotEqual(details["evidence_label"], "Verified by DOI metadata")
+
+    def test_document_doi_remains_usable_when_repeated_in_references(self) -> None:
+        for metadata_doi in (False, True):
+            with self.subTest(metadata_doi=metadata_doi):
+                local = _article_extraction(text="A Careful Example Article\n" +
+                    ("" if metadata_doi else f"DOI: {ARTICLE_DOI}\n") +
+                    f"References\nA Careful Example Article. DOI: {ARTICLE_DOI}")
+                if metadata_doi:
+                    local.metadata["doi"] = ARTICLE_DOI
+                self.assertEqual(core_logic._verify_doi_matches_document(_article_resolution(), local)[:2],
+                                 (True, False))
+
     def test_disabling_online_metadata_never_calls_doi_resolver(self) -> None:
         """The local-only setting must be a real privacy boundary."""
 

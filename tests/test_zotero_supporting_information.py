@@ -64,12 +64,12 @@ class SupportingInformationTests(unittest.TestCase):
         self.approve()
         self.assertEqual(self.zot.items['PARENT23']['title'], self.main['title'])
 
-    def test_detected_SI_cannot_bypass_main_paper_choice_by_selecting_journal_article(self):
+    def test_detected_SI_can_be_corrected_by_selecting_journal_article(self):
         payload = self.row['payload']
         payload['details']['is_supplementary_material'] = True
         self.worker.review.offer('cloud', self.item.id, self.row['digest'], payload)
-        with self.assertRaisesRegex(PilotError, 'Choose the main paper'):
-            self.approve(document_type='journal_article', main_reference='')
+        self.approve(document_type='journal_article', main_reference='')
+        self.assertEqual(self.worker.review.row(self.row['id'])['status'], 'approved')
 
     def test_existing_Zotero_SI_moves_as_an_attachment_and_keeps_its_previous_reference(self):
         self.zot.items['SUPREF23'] = {'key': 'SUPREF23', 'itemType': 'document', 'title': 'Old SI placeholder', 'collections': ['ROOT2345']}

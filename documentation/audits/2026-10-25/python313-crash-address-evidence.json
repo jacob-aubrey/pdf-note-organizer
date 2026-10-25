@@ -1,0 +1,30 @@
+{
+  "runtime": "0.8.5 notable-worker.exe",
+  "dll_sha256": "78b1dd211c0e66a0603df48da2c9b67a915ab3258701b9285d3faa255ed8dc25",
+  "fault_rva": "0x2af768",
+  "function_begin_rva": "0x2af734",
+  "function_end_rva": "0x2af883",
+  "fault_function_offset": "0x34",
+  "fault_instruction_bytes": "48 8b 46 70",
+  "instruction": "mov rax, qword ptr [rsi + 0x70]",
+  "source_mapping_status": "Confirmed with exact official CPython 3.13.1 AMD64 PDB via DbgHelp SymFromAddrW; symbols loaded with SYMOPT_EXACT_SYMBOLS.",
+  "source_mapping": "dump_frame: code->co_filename access after writing File prefix; code object is in rsi.",
+  "pdb_signature": "C6444A4F7C03465DA42A9B0947908D3E1",
+  "function_bytes": "48 89 5c 24 08 48 89 74 24 10 48 89 7c 24 18 41 54 41 56 41 57 48 83 ec 20 48 8b 32 45 33 c9 4c 8b f2 8b d9 48 8d 15 91 75 21 00 45 8d 41 07 e8 c4 00 db ff 48 8b 46 70 41 bf 03 00 00 00 45 8d 67 fe 48 85 c0 74 37 48 8b 40 08 f7 80 a8 00 00 00 00 00 00 10 74 27 48 8d 3d 32 ff 1f 00 45 33 c9 48 8b d7 45 8b c4 8b cb e8 8a 00 db ff 48 8b 56 70 8b cb e8 7b fa ff ff 45 8b c4 eb 0a 48 8d 3d 83 10 21 00 4d 8b c7 45 33 c9 48 8b d7 8b cb e8 63 00 db ff 49 8b ce e8 bb ad dd ff 45 33 c9 48 63 f8 48 8d 15 0a 75 21 00 8b cb 45 8d 41 07 e8 43 00 db ff 8b cb 85 ff 78 0a 48 8b d7 e8 d5 fb ff ff eb 12 45 33 c9 48 8d 15 39 10 21 00 4d 8b c7 e8 21 00 db ff 45 33 c9 48 8d 15 47 a9 20 00 8b cb 45 8d 41 04 e8 0c 00 db ff 48 8b 56 78 48 85 d2 74 19 48 8b 42 08 f7 80 a8 00 00 00 00 00 00 10 74 09 8b cb e8 e8 f9 ff ff eb 14 45 33 c9 48 8d 15 f0 0f 21 00 4d 8b c7 8b cb e8 d6 ff da ff 45 33 c9 48 8d 15 a4 79 00 00 4d 8b c4 8b cb 48 8b 5c 24 40 48 8b 74 24 48 48 8b 7c 24 50 48 83 c4 20 41 5f 41 5e 41 5c e9 a9 ff da ff",
+  "sources": [
+    "https://raw.githubusercontent.com/python/cpython/v3.13.1/Python/traceback.c",
+    "https://github.com/python/cpython/issues/140815",
+    "https://github.com/python/cpython/pull/140985",
+    "https://raw.githubusercontent.com/python/cpython/v3.13.10/Misc/NEWS.d/3.13.10.rst"
+  ],
+  "first_fix_release": "3.13.10 (2025-12-02), gh-140815 invalid/freed frame/code detection",
+  "limits": "No crash dump or register values were acquired; this is not proof of a specific use-after-free object lifetime. No production retry performed.",
+  "symbol": "dump_frame",
+  "symbol_displacement": "0x34",
+  "pdb_source_file": "D:\\a\\1\\s\\Python\\traceback.c",
+  "pdb_source_line": 898,
+  "pdb_line_displacement": 0,
+  "pdb_source": "https://www.python.org/ftp/python/3.13.1/amd64/core_pdb.msi",
+  "pdb_msi_sha256": "c212644c9f3381fbc4fc1b32e6663bee33e6db328c78b963dd4aee334d2f92b2",
+  "pdb_sha256": "3fafef15fba5ff3cef079b10b25c276104fdf238c74547ba8b17adb9ee21d944"
+}

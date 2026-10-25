@@ -1,0 +1,21 @@
+{
+  "package": "dist/reMarkable-Sync-for-Zotero-0.8.6.xpi",
+  "package_sha256": "bde735d23f0b0577aa71c2960c4da6b99c29f02d38a470165117168b5536ee77",
+  "fixture": ".test-tmp\\full-audit-20261025\\packaged086",
+  "port": 23167,
+  "ready": {
+    "version": "10.0.6",
+    "server": "LoBreknM1VbR",
+    "pid": 32288
+  },
+  "native_checks_passed": 53,
+  "all_pass": true,
+  "error": null,
+  "done_marker": true,
+  "harness_exit_code": 0,
+  "diagnostics_enabled": true,
+  "diagnostic_log_bytes": 3620,
+  "safe_stack_snapshots": 4,
+  "diagnostic_log_sha256": "591835b538e559c0f53cd9eb8fd2ae46bca1faae948eacf6f58145e38b5fd216",
+  "scope": "New synthetic Zotero profile with MemoryCloud only; no production data/cloud credentials; bundled runtime and OCR exercised; scoped done marker closed fixture."
+}

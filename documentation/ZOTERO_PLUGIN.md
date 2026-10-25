@@ -10,6 +10,34 @@ no application upgrade is needed. Development tests used disposable profiles
 and did not install the plugin into the production library. This local preview
 has no published automatic-update feed.
 
+Version **0.8.7** also counts staged PDFs that have not finished uploading in
+the approved waiting-for-sync total. Office documents filed locally do not
+inflate the tablet-transfer count.
+
+Version **0.8.6** replaces the optional native diagnostic watchdog with safe
+Python-thread stack snapshots. This avoids an upstream Python 3.13.1 traceback
+crash encountered during the real-library sync checks. Sync, OCR, and the saved
+connection still use the existing helper and adapters.
+
+Version **0.8.5** includes the full-audit recovery fixes. Interrupted conflict
+resolution recognizes completed steps, resumed filing preserves later tablet
+edits, and invalid Windows filenames leave collection membership unchanged.
+The bundled helper verifies every packaged runtime file before reuse. Partly
+unreadable PowerPoint files require review, and citation-lookup wording now
+describes the title-verified DOI route and manual fallback accurately.
+
+Version **0.8.1** also handles readable PDFs with broken internal object
+references. It retains the original and rebuilds a separate rendering source
+only after verifying every page's appearance, geometry, links, and annotations.
+A PDF that cannot be rebuilt safely waits for review without blocking other papers.
+
+Version **0.8.0** packages the October 24 recovery repairs: interrupted filing
+retries reuse completed steps, incomplete paper links recover their retained
+originals, and PDF updates preserve Zotero account-upload state. It also includes
+the import, OCR, navigation, and interface fixes validated in the scheduled repair
+session. Updating does not delete old empty references or restore earlier folder
+moves automatically. Confirm each recovered PDF and its notes before cleanup.
+
 ## Setup
 
 1. In Zotero 10, open **Tools → Plugins**, choose **Install Plugin From File**
@@ -53,10 +81,12 @@ separate from ToSort, which is for new arrivals.
 1. Connect Zotero. Tablet pairing can wait. Choose a personal Zotero collection
    such as **Windows imports — to organize** and your existing literature folder.
 2. Leave normal citation lookup enabled, or disable it for a local-only import.
-   Supported DOI translators are preferred when the citation title agrees with
-   the document text. Zotero's normal PDF recognition is the fallback and sends
-   initial PDF text to Zotero's recognition service. No additional AI service is
-   introduced. Existing curated references are retained on exact file reuse.
+   Supported DOI translators retrieve citation metadata only when its title
+   agrees with the document's own title. If no citation can be verified, the
+   file receives a local document reference and a warning to review its citation
+   in Zotero. This import route does not send PDF text to Zotero's recognition
+   service or add an AI service. Existing curated references are retained on
+   exact file reuse.
 3. Choose **Scan folder — no library changes**. The recursive scan groups exact
    file copies, finds exact matches already stored in Zotero, and previews the
    exceptions. It does not reproduce old Windows categories as tablet folders.

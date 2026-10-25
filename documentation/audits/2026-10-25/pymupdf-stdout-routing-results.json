@@ -1,0 +1,28 @@
+{
+  "scope": "Synthetic malformed content only; pinned packaged dependency; no real PDFs/accounts",
+  "results": [
+    {
+      "PYMUPDF_MESSAGE": null,
+      "returncode": 0,
+      "stdout": "{\"case\": \"q garbage Q\"}\r\nMuPDF error: syntax error: unknown keyword: 'garbage'\r\n\r\nMuPDF error: syntax error: unknown keyword: 'garbage'\r\n\r\n{\"done\": true}\r\n{\"case\": \"/MissingXObject Do\"}\r\nMuPDF error: syntax error: cannot find XObject resource 'MissingXObject'\r\n\r\nMuPDF error: syntax error: cannot find XObject resource 'MissingXObject'\r\n\r\n{\"done\": true}\r\n",
+      "stderr": "",
+      "non_json_stdout_lines": [
+        "MuPDF error: syntax error: unknown keyword: 'garbage'",
+        "",
+        "MuPDF error: syntax error: unknown keyword: 'garbage'",
+        "",
+        "MuPDF error: syntax error: cannot find XObject resource 'MissingXObject'",
+        "",
+        "MuPDF error: syntax error: cannot find XObject resource 'MissingXObject'",
+        ""
+      ]
+    },
+    {
+      "PYMUPDF_MESSAGE": "fd:2",
+      "returncode": 0,
+      "stdout": "{\"case\": \"q garbage Q\"}\r\n{\"done\": true}\r\n{\"case\": \"/MissingXObject Do\"}\r\n{\"done\": true}\r\n",
+      "stderr": "MuPDF error: syntax error: unknown keyword: 'garbage'\r\n\r\nMuPDF error: syntax error: unknown keyword: 'garbage'\r\n\r\nMuPDF error: syntax error: cannot find XObject resource 'MissingXObject'\r\n\r\nMuPDF error: syntax error: cannot find XObject resource 'MissingXObject'\r\n\r\n",
+      "non_json_stdout_lines": []
+    }
+  ]
+}

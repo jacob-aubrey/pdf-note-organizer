@@ -1,0 +1,33 @@
+[
+  {
+    "mode": "httpx",
+    "variant": "off",
+    "code": 0,
+    "stdout": "{\"mode\": \"httpx\", \"watchdog\": false, \"safe\": false, \"count\": 9734, \"seconds\": 6.391, \"python\": \"3.13.1 (tags/v3.13.1:0671451, Dec  3 2024, 19:06:28) [MSC v.1942 64 bit (AMD64)]\"}\r\n",
+    "stderr": "",
+    "stack_bytes": 0,
+    "trace_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "trace_bytes": 0
+  },
+  {
+    "mode": "httpx",
+    "variant": "native",
+    "code": 3221225477,
+    "stdout": "",
+    "stderr": "",
+    "stack_bytes": 77961,
+    "trace_sha256": "45d5022ecd5dfb9b1fef4b2bf03617384e3d05afe59cb419d0acd85873cba420",
+    "trace_bytes": 77961,
+    "retained_trace": "documentation/audits/2026-10-25/watchdog-native-crash-trace.log"
+  },
+  {
+    "mode": "httpx",
+    "variant": "safe",
+    "code": 0,
+    "stdout": "{\"mode\": \"httpx\", \"watchdog\": false, \"safe\": true, \"count\": 9694, \"seconds\": 6.015, \"python\": \"3.13.1 (tags/v3.13.1:0671451, Dec  3 2024, 19:06:28) [MSC v.1942 64 bit (AMD64)]\"}\r\n",
+    "stderr": "",
+    "stack_bytes": 2587612,
+    "trace_sha256": "29c92b8ed8b120ae33c4da94313a92d834111861739f872cc755b4ea06d935ce",
+    "trace_bytes": 2587612
+  }
+]

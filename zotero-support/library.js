@@ -37,6 +37,15 @@ function notableDOI(value) {
   return String(value || '').replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '').replace(/^doi:\s*/i, '').trim().toLowerCase();
 }
 
+function notableTitleMatches(candidate, title) {
+  // Bibliography text is not evidence of this document's identity. Compare
+  // only its independently extracted front title, retaining word boundaries.
+  const words = value => new Set(String(value || '').toLowerCase().match(/[\p{L}\p{N}]+/gu) || []);
+  const left = words(candidate), right = words(title);
+  if (Math.min(left.size, right.size) < 3) return false;
+  return [...left].filter(word => right.has(word)).length / Math.max(left.size, right.size) >= .72;
+}
+
 async function notableBulkImport(data) {
   const collection = await Zotero.Collections.getByLibraryAndKeyAsync(Zotero.Libraries.userLibraryID, data.collection);
   if (!collection || collection.deleted) throw new Error('The destination collection changed. Scan again.');
@@ -64,9 +73,10 @@ async function notableBulkImport(data) {
     }
   }
   let parent = attachment?.parentKey ? await notableItem(attachment.parentKey) : null;
+  let newMetadata = null;
   if (!attachment) {
     // DOI translators return metadata without saving another reference or PDF.
-    // Accept a candidate only when its title is supported by the source text.
+    // Accept a candidate only when its title matches the source's own title.
     let metadata = null;
     if (data.lookup && !Zotero.HTTP.browserIsOffline()) {
       for (const doi of (data.dois || []).slice(0, 3)) {
@@ -77,9 +87,7 @@ async function notableBulkImport(data) {
           translate.setTranslator(translators);
           const records = await translate.translate({libraryID: false, saveAttachments: false});
           const candidate = records[0];
-          const words = String(candidate?.title || '').toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || [];
-          const evidence = new Set(String(data.evidence || '').toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []);
-          if (candidate && words.length >= 3 && words.filter(w => evidence.has(w)).length / words.length >= .8
+          if (candidate && notableTitleMatches(candidate.title, data.identity_title || data.title)
               && notableDOI(candidate.DOI) === notableDOI(doi)) { metadata = candidate; break; }
         } catch (_) { /* A failed citation lookup does not reject a readable PDF. */ }
       }
@@ -94,9 +102,8 @@ async function notableBulkImport(data) {
       }
       if (candidates.length) parent = candidates[0];
       else {
-        parent = new Zotero.Item(metadata.itemType || 'document');
-        parent.libraryID = Zotero.Libraries.userLibraryID;
-        parent.fromJSON(metadata); parent.setCollections([collection.id]); await parent.saveTx();
+        // Store the file first. A failed copy must not leave an empty citation.
+        newMetadata = metadata;
       }
     }
     attachment = await Zotero.Attachments.importFromFile({file: source.path, libraryID: Zotero.Libraries.userLibraryID,
@@ -106,25 +113,24 @@ async function notableBulkImport(data) {
       throw new Error('The stored copy did not verify. The original Windows file was retained.');
     }
   }
-  if (!parent && data.lookup && attachment.attachmentLinkMode !== Zotero.Attachments.LINK_MODE_LINKED_FILE
-      && attachment.isPDFAttachment() && data.evidence && !Zotero.HTTP.browserIsOffline()) {
-    // Reuse Zotero's own recognizer when no locally supported DOI resolves.
-    // This uses Zotero's normal service; never an added AI provider.
-    await Zotero.RecognizeDocument.recognizeItems([attachment]);
-    if (attachment.parentKey) parent = await notableItem(attachment.parentKey);
-  }
+  // RecognizeDocument creates a parent before its result can be checked.
+  // Reuse the metadata-only DOI translators above; otherwise retain a local
+  // document reference for manual review rather than risking a cited identity.
+  const citationUnavailable = !parent && !newMetadata && !!data.lookup;
   if (!parent) {
     // A shutdown between these two saves must not leave an empty duplicate
     // reference. File storage has finished; only metadata is transactional.
     await Zotero.DB.executeTransaction(async () => {
-      parent = new Zotero.Item('document'); parent.libraryID = Zotero.Libraries.userLibraryID;
-      parent.setField('title', String(data.title || source.leafName).slice(0, 1000));
+      parent = new Zotero.Item(newMetadata?.itemType || 'document'); parent.libraryID = Zotero.Libraries.userLibraryID;
+      if (newMetadata) parent.fromJSON(newMetadata);
+      else parent.setField('title', String(data.title || source.leafName).slice(0, 1000));
       parent.setCollections([collection.id]); await parent.save();
       attachment.parentID = parent.id; attachment.setCollections([]); await attachment.save();
     });
   }
   parent.addToCollection(collection.id); await parent.saveTx();
   const issues = [];
+  if (citationUnavailable) issues.push('Citation metadata could not be verified against this document\'s own title. The local document was imported; review its citation metadata in Zotero.');
   const doi = notableDOI(parent.getField('DOI'));
   if (doi) {
     for (const item of await Zotero.Items.getAll(Zotero.Libraries.userLibraryID, false, false)) {
@@ -148,46 +154,69 @@ function notableRegisterLibraryEndpoint(Base) {
       if (data.action === 'bulk_import' || data.action === 'bulk_import_status') {
         if (!/^[a-f0-9]{64}$/.test(data.digest || '')) return reply(400, {error: 'Invalid import identity'});
         if (!/^[23456789ABCDEFGHIJKLMNPQRSTUVWXYZ]{8}$/.test(data.collection || '')) return reply(400, {error: 'Choose a collection'});
-        const key = data.digest + ':' + data.collection;
-        let job = notableBulkJobs.get(key);
+        // Different destination choices share a digest lock. An import which
+        // outlives Stop may finish before the next destination is applied.
+        const key = data.digest;
+        let group = notableBulkJobs.get(key);
+        if (!group && data.action === 'bulk_import') {
+          group = {tail: Promise.resolve(), jobs: new Map()}; notableBulkJobs.set(key, group);
+        }
+        let job = group?.jobs.get(data.collection);
         const signature = data.action === 'bulk_import' ? JSON.stringify(data) : null;
         if (job && !job.pending && signature && job.signature !== signature) {
-          notableBulkJobs.delete(key); job = null;
+          group.jobs.delete(data.collection); job = null;
         }
         if (!job && data.action === 'bulk_import') {
-          job = {pending: true, signature}; notableBulkJobs.set(key, job);
-          notableBulkImport(data).then(result => { job.result = result; job.pending = false; }, error => {
+          job = {pending: true, signature}; group.jobs.set(data.collection, job);
+          group.tail = group.tail.catch(() => {}).then(() => notableBulkImport(data)).then(result => { job.result = result; job.pending = false; }, error => {
             job.error = error.message; job.pending = false;
           });
         }
         if (!job) return reply(409, {error: 'This import was interrupted. Scan the folder again.'});
         if (job.pending) return reply(200, {pending: true});
-        if (job.error) { notableBulkJobs.delete(key); return reply(200, {error: job.error}); }
+        if (job.error) { group.jobs.delete(data.collection); return reply(200, {error: job.error}); }
         // Keep completed results for a lost HTTP response or repeated poll.
         // Different collection choices have separate, revalidated operations.
         if (notableBulkJobs.size > 1000) {
           for (const [oldKey, old] of notableBulkJobs) {
-            if (oldKey !== key && !old.pending) { notableBulkJobs.delete(oldKey); break; }
+            if (oldKey !== key && [...old.jobs.values()].every(value => !value.pending)) { notableBulkJobs.delete(oldKey); break; }
           }
         }
         return reply(200, job.result);
       }
       if (data.action === 'catalog') {
         const attachments = [], parents = {};
-        for (const item of await Zotero.Items.getAll(Zotero.Libraries.userLibraryID, false, false)) {
-          if (item.deleted) continue;
-          await item.loadAllData();
+        const items = (await Zotero.Items.getAll(Zotero.Libraries.userLibraryID, false, false))
+          .filter(item => !item.deleted && (item.isRegularItem() || item.isFileAttachment()));
+        // Zotero's existing batch loader avoids thousands of sequential database
+        // reads on a cold library. Annotation bodies are not catalog entries.
+        await Zotero.Items.loadDataTypes(items);
+        for (const item of items) {
           if (item.isRegularItem()) { parents[item.key] = item.toJSON(); continue; }
           if (!item.isFileAttachment()) continue;
           const path = await item.getFilePathAsync();
           if (!path || !/\.(pdf|docx|pptx)$/i.test(path)) continue;
           attachments.push({data: item.toJSON(), path});
           if (item.parentKey && !parents[item.parentKey]) {
-            const parent = await notableItem(item.parentKey);
+            const parent = Zotero.Items.getByLibraryAndKey(Zotero.Libraries.userLibraryID, item.parentKey);
             if (parent && !parent.deleted) parents[item.parentKey] = parent.toJSON();
           }
         }
         return reply(200, {attachments, parents, data_directory: Zotero.DataDirectory.dir});
+      }
+      if (data.action === 'reparent') {
+        const item = await notableItem(data.key), parent = await notableItem(data.parent);
+        if (!item || item.deleted || !item.isFileAttachment() || !parent || parent.deleted || !parent.isRegularItem()
+            || item.libraryID !== parent.libraryID) return reply(409, {error: 'Attachment or destination unavailable'});
+        const previous = item.parentKey || '';
+        const path = await item.getFilePathAsync();
+        if (!path || await Zotero.Utilities.Internal.md5Async(path) !== data.md5
+            || ![data.previous_parent || '', parent.key].includes(previous)) return reply(409, {error: 'Attachment changed'});
+        if (previous !== parent.key) { item.parentKey = parent.key; await item.saveTx(); }
+        if (item.parentKey !== parent.key || await Zotero.Utilities.Internal.md5Async(await item.getFilePathAsync()) !== data.md5) {
+          return reply(409, {error: 'Reparent verification failed'});
+        }
+        return reply(200, {key: item.key, parent: parent.key});
       }
       if (data.action === 'inventory') {
         const parent = await notableItem(data.parent);
@@ -196,18 +225,45 @@ function notableRegisterLibraryEndpoint(Base) {
       }
       if (data.action === 'prepare_upload') {
         const item = await notableItem(data.key);
-        if (!item || item.deleted || !item.isPDFAttachment() || !item.getNote().includes('Notable pilot:')) {
-          return reply(409, {error: 'Managed attachment unavailable'});
+        if (!item || item.deleted || !item.isFileAttachment() || !item.isStoredFileAttachment()) {
+          return reply(409, {error: 'Stored attachment unavailable'});
+        }
+        if (typeof data.md5 !== 'string' || !/^(?:[a-f0-9]{32})?$/.test(data.md5)) return reply(400, {error: 'Invalid PDF hash'});
+        const path = await item.getFilePathAsync();
+        const actual = path && await IOUtils.exists(path) ? await Zotero.Utilities.Internal.md5Async(path) : '';
+        if (actual !== data.md5) return reply(409, {error: 'PDF changed'});
+        const remote_md5 = item.attachmentSyncedHash || '';
+        const remote_mtime = item.attachmentSyncedModificationTime || 0;
+        // The local API authorizes against attachmentSyncedHash, including
+        // If-None-Match:* for unsynced imports which already have local bytes.
+        // Keep preparation read-only so a lost response cannot turn a local
+        // seed into a fictitious account receipt before Python persists it.
+        const verified = path && await IOUtils.exists(path) ? await Zotero.Utilities.Internal.md5Async(path) : '';
+        if (verified !== data.md5) return reply(409, {error: 'PDF changed'});
+        return reply(200, {md5: data.md5, authorization_md5: item.attachmentSyncedHash || '', remote_md5, remote_mtime});
+      }
+      if (data.action === 'finish_upload') {
+        const item = await notableItem(data.key);
+        if (!item || item.deleted || !item.isFileAttachment() || !item.isStoredFileAttachment()) {
+          return reply(409, {error: 'Stored attachment unavailable'});
+        }
+        if (typeof data.md5 !== 'string' || !/^[a-f0-9]{32}$/.test(data.md5)
+            || typeof data.remote_md5 !== 'string' || !/^(?:[a-f0-9]{32})?$/.test(data.remote_md5)
+            || !Number.isSafeInteger(data.remote_mtime) || data.remote_mtime < 0) {
+          return reply(400, {error: 'Invalid upload receipt'});
         }
         const path = await item.getFilePathAsync();
-        if (!path || await Zotero.Utilities.Internal.md5Async(path) !== data.md5) return reply(409, {error: 'PDF changed'});
-        // The local API exposes a computed MD5, but authorizes uploads against
-        // attachmentSyncedHash. Native imports have no synced hash initially.
-        // Seed only the verified existing bytes; never write a PDF here.
-        item.attachmentSyncedHash = data.md5;
+        if (!path || !await IOUtils.exists(path) || await Zotero.Utilities.Internal.md5Async(path) !== data.md5) {
+          return reply(409, {error: 'PDF changed'});
+        }
+        // Account upload uses this previous remote hash for If-Match. The
+        // local API's hash describes local bytes and must not replace it.
+        item.attachmentSyncedHash = data.remote_md5 || null;
+        item.attachmentSyncedModificationTime = data.remote_mtime;
+        item.attachmentSyncState = 'to_upload';
         await item.saveTx();
         if (await Zotero.Utilities.Internal.md5Async(path) !== data.md5) return reply(409, {error: 'PDF changed'});
-        return reply(200, {md5: data.md5});
+        return reply(200, {md5: data.md5, sync_state: 'to_upload'});
       }
       if (data.action === 'rename') {
         const item = await notableItem(data.key);
@@ -229,7 +285,7 @@ function notableRegisterLibraryEndpoint(Base) {
         const path = await item.getFilePathAsync();
         if (!path || await Zotero.Utilities.Internal.md5Async(path) !== data.md5) return reply(409, {error: 'Source bytes changed'});
         const independent = item.getAnnotations().filter(a => !a.deleted && !a.annotationIsExternal).length;
-        if (independent) return reply(200, {adopted: false, native: independent});
+        if (independent || item.attachmentLinkMode === Zotero.Attachments.LINK_MODE_LINKED_FILE) return reply(200, {adopted: false, native: independent});
         if (item.getNote().includes('Notable pilot:') && !item.getNote().includes(data.marker)) return reply(409, {error: 'Another managed link owns this PDF'});
         if (!item.getNote().includes(data.marker)) {
           item.setNote(item.getNote() + '<p>' + data.marker + '</p>');

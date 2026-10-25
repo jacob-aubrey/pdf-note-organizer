@@ -1,0 +1,23 @@
+{
+  "controllerSource": "zotero-support/ui.js",
+  "controller_sha256": "7e58f713f7087985448fd2f025ac5c1a31c116c480dd19f02d5e4d714db289c4",
+  "scenario": "Real controller launches synthetic process; real PyMuPDF diagnostic precedes valid matching response",
+  "results": [
+    {
+      "noise": "",
+      "resolved": {
+        "validPacket": true
+      },
+      "killed": 0,
+      "pending": 0,
+      "processCleared": false
+    },
+    {
+      "noise": "MuPDF error: syntax error: unknown keyword: 'garbage'\n\n",
+      "rejected": "The background helper sent an invalid response. Retry your action to restart it.",
+      "killed": 1,
+      "pending": 0,
+      "processCleared": true
+    }
+  ]
+}

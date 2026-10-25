@@ -1,0 +1,89 @@
+{
+  "read_only": true,
+  "authorization_dialogs": false,
+  "sources_examined": 3,
+  "results": [
+    {
+      "label": "expected_pdf_1",
+      "native_source_exists": true,
+      "source_trashed": false,
+      "native_parent_exists": true,
+      "parent_trashed": false,
+      "content_type_pdf": true,
+      "saved_home_is_live_in_scope": true,
+      "parent_in_saved_home": false,
+      "parent_in_any_current_scope": true,
+      "scoped_home_count": 1,
+      "source_excluded_by_prior_connection": false,
+      "source_excluded_by_document_key": false,
+      "already_current_managed_view": false,
+      "source_has_notable_pilot_marker": false,
+      "available_same_pdf_baseline_mappings": 1,
+      "saved_home_is_currently_mapped": true,
+      "native_parent_matches_approval": true,
+      "current_review_status": "approved",
+      "local_file_present": true,
+      "local_extension_pdf": true,
+      "file_digest_matches_approval": true,
+      "observed_blockers": [
+        "Parent reference is no longer a member of its approved tablet-home collection.",
+        "An existing available tablet connection has the exact same original PDF; the upload loop deliberately requires reference reconciliation instead of uploading another copy."
+      ]
+    },
+    {
+      "label": "expected_pdf_2",
+      "native_source_exists": true,
+      "source_trashed": false,
+      "native_parent_exists": true,
+      "parent_trashed": false,
+      "content_type_pdf": true,
+      "saved_home_is_live_in_scope": true,
+      "parent_in_saved_home": false,
+      "parent_in_any_current_scope": true,
+      "scoped_home_count": 2,
+      "source_excluded_by_prior_connection": false,
+      "source_excluded_by_document_key": false,
+      "already_current_managed_view": false,
+      "source_has_notable_pilot_marker": false,
+      "available_same_pdf_baseline_mappings": 1,
+      "saved_home_is_currently_mapped": true,
+      "native_parent_matches_approval": true,
+      "current_review_status": "approved",
+      "local_file_present": true,
+      "local_extension_pdf": true,
+      "file_digest_matches_approval": true,
+      "observed_blockers": [
+        "Parent reference is no longer a member of its approved tablet-home collection.",
+        "An existing available tablet connection has the exact same original PDF; the upload loop deliberately requires reference reconciliation instead of uploading another copy."
+      ]
+    },
+    {
+      "label": "expected_pdf_3",
+      "native_source_exists": true,
+      "source_trashed": false,
+      "native_parent_exists": true,
+      "parent_trashed": false,
+      "content_type_pdf": true,
+      "saved_home_is_live_in_scope": true,
+      "parent_in_saved_home": false,
+      "parent_in_any_current_scope": true,
+      "scoped_home_count": 1,
+      "source_excluded_by_prior_connection": false,
+      "source_excluded_by_document_key": false,
+      "already_current_managed_view": false,
+      "source_has_notable_pilot_marker": false,
+      "available_same_pdf_baseline_mappings": 1,
+      "saved_home_is_currently_mapped": true,
+      "native_parent_matches_approval": true,
+      "current_review_status": "approved",
+      "local_file_present": true,
+      "local_extension_pdf": true,
+      "file_digest_matches_approval": true,
+      "observed_blockers": [
+        "Parent reference is no longer a member of its approved tablet-home collection.",
+        "An existing available tablet connection has the exact same original PDF; the upload loop deliberately requires reference reconciliation instead of uploading another copy."
+      ]
+    }
+  ],
+  "limits": "Native API/file checks only; no cloud writes, no reapproval, no source movement."
+}

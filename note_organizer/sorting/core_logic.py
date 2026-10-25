@@ -353,6 +353,10 @@ def _verify_doi_matches_document(
     review it rather than being told it is a verified document match.
     """
 
+    reference_heading = re.search(r"(?im)^\s*(?:references|bibliography)\s*[:.]?\s*$", extraction.text)
+    if (reference_heading and resolution.doi not in _metadata_doi_candidates(extraction.metadata)
+            and resolution.doi not in extract_doi_candidates(extraction.text[:reference_heading.start()])):
+        return False, True, "The DOI was found only in the reference list, not as this document's identifier."
     local_title = _likely_local_title(extraction)
     score = _title_match_score(local_title, resolution.title)
     if local_title:

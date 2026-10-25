@@ -1,0 +1,50 @@
+{
+  "version": "0.8.6",
+  "installed_active": true,
+  "installed_xpi_sha256": "f7ec29a3f9c908f202436b3bc3b00dccc86b279ee58c720d22045643c3ea5e6d",
+  "worker_sha256": "5a1fdddcc86c12b0da09449c83c13ef4c6237a665a660ba22d439367931033ee",
+  "diagnostics_enabled": true,
+  "sync_started_at": "2026-10-25T17:29:55Z",
+  "pre_sync": {
+    "pending_reviews": 57,
+    "approved_eligible_pdfs_waiting": 3,
+    "linked": 456
+  },
+  "state": "failed-under-investigation",
+  "observations": [
+    {
+      "at": "2026-10-25T17:30:12Z",
+      "stage": "Finished reading all716 cloud catalog entries"
+    },
+    {
+      "at": "2026-10-25T17:32:32Z",
+      "stage": "Checking Zotero paper215 of551"
+    },
+    {
+      "at": "2026-10-25T17:33:21Z",
+      "stage": "Checking approved paper107 of456"
+    },
+    {
+      "at": "2026-10-25T17:34:51Z",
+      "stage": "Sending approved paper405 of456 to reMarkable"
+    }
+  ],
+  "failure": {
+    "observed_at": "2026-10-25T17:46:20Z",
+    "message": "The background helper stopped. Retry your action to restart it.",
+    "stage": "Linked-paper processing, last observed paper5of454",
+    "windows_application_crash_event_last_hour": "none observed via approved Get-WinEvent query",
+    "native_crash_confirmed": false,
+    "attribution": "Pending investigation; PyMuPDF cached stdout can bypass dispatch redirection, but original transport line was not retained."
+  },
+  "post_stop_summary": "post-086-stopped-verification.json",
+  "completed_before_stop": {
+    "eligible_staged_pdfs_uploaded": 43,
+    "prior_mapping_identities_missing": 0,
+    "prior_mapping_baselines_changed": 0,
+    "duplicate_source_groups": 0,
+    "duplicate_view_groups": 0,
+    "new_received_revisions": 8,
+    "individual_paused_staged_pdfs_retained": 2
+  }
+}

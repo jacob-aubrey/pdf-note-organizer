@@ -14,7 +14,7 @@ import sqlite3
 from urllib.parse import urlsplit
 from urllib.request import url2pathname
 
-INDEX_REVISION = 1
+INDEX_REVISION = 2
 
 class PilotError(RuntimeError):
     pass
@@ -117,6 +117,7 @@ class Ledger:
                 CREATE TABLE IF NOT EXISTS pilot_collections (key TEXT PRIMARY KEY);
                 CREATE TABLE IF NOT EXISTS text_indexes (source TEXT PRIMARY KEY, content_sha TEXT);
                 CREATE TABLE IF NOT EXISTS reader_state (source TEXT PRIMARY KEY, pdf_sha TEXT);
+                CREATE TABLE IF NOT EXISTS upload_intents (source TEXT PRIMARY KEY, receipt TEXT);
             """)
 
     @contextmanager
@@ -184,6 +185,16 @@ class Ledger:
             db.execute("INSERT OR IGNORE INTO publications(source) VALUES(?)", (source,))
             for name, value in changes.items():
                 db.execute(f"UPDATE publications SET {name}=? WHERE source=?", (value, source))
+
+    def upload_intent(self, source, receipt=None, *, clear=False):
+        """Retain account-sync metadata until native replacement is complete."""
+        with self.connect() as db:
+            if clear:
+                db.execute("DELETE FROM upload_intents WHERE source=?", (source,))
+            elif receipt is not None:
+                db.execute("INSERT OR REPLACE INTO upload_intents VALUES(?,?)", (source, json.dumps(receipt)))
+            row = db.execute("SELECT receipt FROM upload_intents WHERE source=?", (source,)).fetchone()
+            return json.loads(row[0]) if row else None
 
 
 class LocalZotero:
@@ -321,7 +332,7 @@ class LocalZotero:
         import httpx2
         import time
         self.authorize()
-        retryable = action in {'catalog', 'inventory', 'bulk_import', 'bulk_import_status', 'prepare_upload'}
+        retryable = action in {'catalog', 'inventory', 'bulk_import', 'bulk_import_status', 'prepare_upload', 'finish_upload', 'reparent'}
         for attempt in range(3 if retryable else 1):
             try:
                 # Keep long import polling separate from the SDK connection.
@@ -401,7 +412,19 @@ class LocalZotero:
             # published items still fail the caller's missing-file guard.
             return ""
 
-    def upload(self, key, path, previous_md5):
+    def prepare_file_upload(self, key, previous_md5):
+        receipt = self.review_action("prepare_upload", {"key": key, "md5": previous_md5})
+        if receipt.get("md5") != previous_md5 or self.file_md5(key) != previous_md5:
+            raise PilotError("The imported PDF changed before its tablet update.")
+        return {"key": key, **receipt}
+
+    def finish_file_upload(self, key, md5, receipt):
+        result = self.review_action("finish_upload", {"key": key, "md5": md5,
+            "remote_md5": receipt["remote_md5"], "remote_mtime": receipt["remote_mtime"]})
+        if result.get("md5") != md5 or result.get("sync_state") != "to_upload":
+            raise PilotError("The updated PDF is waiting for its account-sync receipt. Retry synchronization.")
+
+    def upload(self, key, path, previous_md5, *, upload_intent=None):
         from pyzotero import Zupload
         import shutil
         import tempfile
@@ -421,25 +444,21 @@ class LocalZotero:
         filename = (record or {}).get("filename") or Path(path).name
         if Path(filename).name != filename or "/" in filename or "\\" in filename:
             raise PilotError("The attachment has an invalid stored filename.")
-        if previous_md5:
-            # A normal native import has bytes but no attachmentSyncedHash.
-            # Zotero 10's local API checks If-Match against that synced hash,
-            # not against the actual file. The native adapter seeds only that
-            # verified metadata property, without replacing any file bytes.
-            if self.file_md5(key) != previous_md5:
-                raise PilotError("The imported PDF changed before its first tablet update.")
-            seed = self.review_action("prepare_upload", {"key": key, "md5": previous_md5})
-            if seed.get("md5") != previous_md5 or self.file_md5(key) != previous_md5:
-                raise PilotError("The imported PDF could not be verified for its first tablet update.")
+        receipt = upload_intent or self.prepare_file_upload(key, previous_md5)
+        if receipt.get("key") != key or self.file_md5(key) != previous_md5:
+            raise PilotError("The imported PDF changed before its tablet update.")
         with tempfile.TemporaryDirectory(prefix="notable-upload-") as temporary:
             staged = Path(temporary) / filename
             shutil.copyfile(path, staged)
             result = LocalUpload(self.zot, [{"key": key, "filename": str(staged),
-                                            "md5": previous_md5 or None}]).upload()
+                                            "md5": receipt["authorization_md5"] or None}]).upload()
         if result["failure"] or not (result["success"] or result["unchanged"]):
             raise PilotError("The attachment upload did not complete. Retry the same manifest.")
+        if upload_intent is None:
+            self.finish_file_upload(key, hashlib.md5(Path(path).read_bytes()).hexdigest(), receipt)
 
     def index(self, key, path, saved_annotations=()):
+        self.index_complete = False
         text, count, empty_pages = searchable_content(path, saved_annotations, printed_ocr=self.printed_ocr,
                                                     handwriting_ocr=self.handwriting_ocr)
         native_text = self.native_annotation_text(key)
@@ -450,7 +469,8 @@ class LocalZotero:
             raise PilotError("The attachment text index was not accepted. Retry to finish indexing.")
         if self.index_digest(key) != hashlib.sha256(text.encode()).hexdigest():
             raise PilotError("The text index changed before verification. Retry to finish indexing.")
-        self.index_diagnostics.append({"attachment": key,
+        self.index_complete = not self.printed_ocr or getattr(self.printed_ocr, 'complete', True)
+        self.index_diagnostics.append({"attachment": key, "incomplete": not self.index_complete,
             "printed_ocr": list(self.printed_ocr.warnings) if self.printed_ocr else [],
             "handwriting": list(self.handwriting_ocr.warnings) if self.handwriting_ocr else []})
         return empty_pages
@@ -527,6 +547,45 @@ def stage(ledger, paper):
     return target, hashlib.md5(data).hexdigest()
 
 
+def upload_attachment(client, ledger, source, key, path, current, wanted):
+    """Replace stored bytes and resume the account-sync receipt independently."""
+    receipt = ledger.upload_intent(source)
+    if receipt and receipt.get("key") != key:
+        raise PilotError("The pending upload belongs to another attachment. Review its mapping.")
+    if current != wanted:
+        if hasattr(client, "prepare_file_upload"):
+            prepared = client.prepare_file_upload(key, current)
+            if receipt:
+                # A repeated local upload retains the account's original
+                # conflict precondition, rather than its intermediate hash.
+                prepared.update({name: receipt[name] for name in ("remote_md5", "remote_mtime")})
+            receipt = prepared
+            ledger.upload_intent(source, receipt)
+            client.upload(key, path, current, upload_intent=receipt)
+        else:
+            client.upload(key, path, current)
+    if client.file_md5(key) != wanted:
+        raise PilotError("Upload verification failed; retry the same document to recover.")
+    if receipt:
+        client.finish_file_upload(key, wanted, receipt)
+        ledger.upload_intent(source, clear=True)
+
+
+def reparent_attachment(client, key, parent):
+    """The local item JSON API does not reliably apply parentItem changes."""
+    item = client.get('item', key)
+    if not item or item.get('deleted'):
+        raise PilotError('The PDF is unavailable. Its reference was not changed.')
+    if item.get('parentItem') == parent:
+        return
+    path = client.file_path(key)
+    digest = hashlib.md5(path.read_bytes()).hexdigest()
+    client.review_action('reparent', {'key': key, 'parent': parent, 'previous_parent': item.get('parentItem', ''), 'md5': digest})
+    verified = client.get('item', key)
+    if verified.get('parentItem') != parent or hashlib.md5(client.file_path(key).read_bytes()).hexdigest() != digest:
+        raise PilotError('The PDF reference move did not verify. Its files were retained.')
+
+
 def publish(client, ledger, namespace, papers, *, apply=False, collection_key=None, reference_keys=None, attachment_keys=None):
     """Plan without Zotero writes; apply only stable-key, owned attachments.
 
@@ -565,6 +624,9 @@ def publish(client, ledger, namespace, papers, *, apply=False, collection_key=No
             key = attachment_keys.get(paper.source_id) or stable_key(namespace, "attachment", paper.source_id)
             parent, attachment = client.get("item", parent_key), client.get("item", key)
             state = ledger.get(paper.source_id)
+            upload_intent = ledger.upload_intent(paper.source_id)
+            if upload_intent and upload_intent.get("key") != key:
+                raise PilotError("The pending upload belongs to another attachment. Review its mapping.")
             native_text = client.native_annotation_text(key) if attachment and hasattr(client, "native_annotation_text") else []
             index_token = hashlib.sha256(json.dumps([INDEX_REVISION, paper.sha256, paper.annotations,
                                                      native_text,
@@ -601,7 +663,8 @@ def publish(client, ledger, namespace, papers, *, apply=False, collection_key=No
                 continue
             needs_reader = (getattr(client, "can_refresh_reader", False)
                             and ledger.reader_revision(paper.source_id) != paper.sha256)
-            if action == "unchanged" and state["indexed_sha"] == index_token and not needs_reader and not needs_link:
+            if (action == "unchanged" and state["indexed_sha"] == index_token
+                    and not needs_reader and not needs_link and not upload_intent):
                 expected_index = ledger.index_digest(paper.source_id)
                 if expected_index and client.index_digest(key) == expected_index:
                     result["applied"] = True
@@ -632,9 +695,7 @@ def publish(client, ledger, namespace, papers, *, apply=False, collection_key=No
                 client.update(attachment)
             if current != wanted:
                 ledger.save(paper.source_id, pending_md5=wanted)
-                client.upload(key, path, current)
-                if client.file_md5(key) != wanted:
-                    raise PilotError("Upload verification failed; retry the same manifest to recover.")
+            upload_attachment(client, ledger, paper.source_id, key, path, current, wanted)
             ledger.save(paper.source_id, published=1, md5=wanted, pending_md5="")
             if needs_reader:
                 client.refresh_reader(key)
@@ -642,7 +703,12 @@ def publish(client, ledger, namespace, papers, *, apply=False, collection_key=No
             # Retry indexing independently after a crash or failed API response.
             result["pages_without_text"] = client.index(key, path, paper.annotations)
             ledger.index_digest(paper.source_id, client.index_digest(key))
-            ledger.save(paper.source_id, indexed_sha=index_token)
+            # Native text remains searchable after an OCR error, but that
+            # partial index must not suppress recognition on the next sync.
+            ledger.save(paper.source_id, indexed_sha=index_token if getattr(client, 'index_complete', True) else '')
+            diagnostics = getattr(client, 'index_diagnostics', [])
+            if diagnostics:
+                result['index_warnings'] = diagnostics[-1]
             result["applied"] = True
         return {"server_id": client.server_id, "collection_key": root_key,
                 "mode": "apply" if apply else "plan", "papers": reports}

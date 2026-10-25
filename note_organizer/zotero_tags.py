@@ -103,6 +103,10 @@ def reconcile(bridge, parent_key, item, bundle, row, save):
             return
     target = packed(desired)
     paper, pages = target['paper'], target['pages']
+    # Validate the cloud boundary before either side or the retry journal moves.
+    names(paper)
+    for values in pages.values():
+        names(values)
     # Preserve the exact intended edit across a process exit between writes.
     row["tag_pending"] = {'target': target, 'desktop': packed(local), 'tablet': packed(remote)}
     save()

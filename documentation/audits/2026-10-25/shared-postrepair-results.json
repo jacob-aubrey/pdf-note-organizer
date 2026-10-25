@@ -1,0 +1,29 @@
+{
+  "partial_pptx": {
+    "declared_slides": 2,
+    "warnings": [
+      "A referenced PowerPoint slide was missing or unsafe and was skipped."
+    ],
+    "requires_manual_review": true,
+    "proposal_needs_review": true,
+    "proposal_review_reasons": [
+      "This file format could not be read completely; check the proposed name."
+    ],
+    "plugin_proposal_needs_review": true,
+    "plugin_proposal_review_reasons": [
+      "This file format could not be read completely; check the proposed name."
+    ]
+  },
+  "reference_doi_false_match": {
+    "document_title": "Computed tomography imaging of gold nanoparticles in rabbits",
+    "reference_title": "Computed tomography imaging of gold nanoparticles in rats",
+    "match_score": 0.9743589743589743,
+    "proposal_title": "Computed tomography imaging of gold nanoparticles in rabbits",
+    "proposal_author": "Jane Rabbit",
+    "evidence_label": "Suggested from local document information",
+    "needs_review": true,
+    "candidate_dois": [
+      "10.1234/rats.2025"
+    ]
+  }
+}

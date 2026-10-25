@@ -118,6 +118,7 @@ def _extract_pptx(path: Path, *, max_chars: int, max_slides: int) -> Presentatio
             slide_members, declared_slide_count = _ordered_slide_members(
                 archive, member_names, presentation, warnings
             )
+            incomplete_slides = len(slide_members) != declared_slide_count
 
             parts: list[str] = []
             used = 0
@@ -131,6 +132,7 @@ def _extract_pptx(path: Path, *, max_chars: int, max_slides: int) -> Presentatio
                     slide = _read_xml_member(archive, slide_member)
                 except PresentationExtractionError as exc:
                     warnings.append(f"Could not read a PowerPoint slide: {exc}")
+                    incomplete_slides = True
                     continue
                 slide_text = _slide_text(slide)
                 used, did_truncate = _append_bounded_text(parts, slide_text, used, max_chars)
@@ -149,7 +151,7 @@ def _extract_pptx(path: Path, *, max_chars: int, max_slides: int) -> Presentatio
                 warnings=warnings,
                 document_format="PPTX",
                 slide_count=declared_slide_count,
-                requires_manual_review=not bool(text) or slide_limit_reached or text_truncated,
+                requires_manual_review=not bool(text) or incomplete_slides or slide_limit_reached or text_truncated,
             )
     except PresentationExtractionError:
         raise

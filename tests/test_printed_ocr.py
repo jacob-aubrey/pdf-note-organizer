@@ -55,6 +55,20 @@ class PrintedOCRTests(unittest.TestCase):
         self.assertEqual(call.call_count, 4)
         self.assertTrue(self.engine.warnings)
         self.assertFalse(list((self.root / "cache").rglob("*.json")))
+        self.assertFalse(self.engine.complete)
+
+    def test_small_screenshot_on_an_otherwise_empty_page_receives_ocr(self):
+        image = self.root / "screenshot.pdf"
+        with pymupdf.open(self.path) as scanned, pymupdf.open() as output:
+            page = output.new_page(width=1000, height=1000)
+            page.insert_image(pymupdf.Rect(100, 100, 400, 400), stream=scanned[0].get_pixmap().tobytes("png"))
+            output.save(image)
+        with patch.object(pymupdf.Page, "get_textpage_ocr", autospec=True,
+                          side_effect=lambda page, **kwargs: page.get_textpage()) as recognize:
+            self.engine.content(image)
+        self.assertEqual(recognize.call_count, 1)
+        self.assertTrue(self.engine.complete)
+        self.assertTrue(list((self.root / "cache").rglob("*.json")))
 
     def test_cancel_does_not_cache_incomplete_document(self):
         self.engine.cancelled = lambda: True

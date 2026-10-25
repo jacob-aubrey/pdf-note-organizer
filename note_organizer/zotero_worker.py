@@ -3,7 +3,7 @@
 The plugin owns setup and review. No terminal or Python installation is part of
 the user workflow. New inputs remain gated by durable, content-bound approvals.
 """
-from contextlib import contextmanager, redirect_stdout
+from contextlib import contextmanager, nullcontext, redirect_stdout
 import hashlib
 import json
 import logging
@@ -18,7 +18,8 @@ import time
 from .remarkable_cloud import CloudClient, CloudError, TokenVault, atomic_write
 from .zotero_bridge import Bridge, BridgeState, descendants
 from .zotero_pilot import AuthorizationRequired, LocalZotero, PilotError, TransportInterrupted, stable_key
-from .zotero_review import ReviewStore, fingerprint
+from .zotero_review import (ReviewStore, fingerprint, cloud_change_intent,
+                            cloud_change_done)
 from . import zotero_connections as connections
 
 
@@ -39,6 +40,19 @@ def citation_signature(record):
         "title", "itemType", "creators", "date", "DOI", "publicationTitle", "publisher", "university", "extra")})
 
 
+def creator_record(name, creator_type):
+    """Use Zotero's structured personal-name fields; retain corporate names."""
+    name = str(name).strip()
+    if re.search(r'\b(?:university|institute|institution|consortium|collaboration|organization|organisation|committee|society|group|team|council|academy|foundation|laboratory|centre|center)\b', name, re.I):
+        return {'creatorType': creator_type, 'name': name}
+    if ',' in name:
+        last, first = (part.strip() for part in name.split(',', 1))
+    else:
+        parts = name.rsplit(None, 1)
+        first, last = parts if len(parts) == 2 else ('', name)
+    return {'creatorType': creator_type, 'firstName': first, 'lastName': last}
+
+
 def write_packet(transport, packet):
     # JSON escapes preserve every character without depending on the Windows
     # pipe's locale encoding (often cp1252, even in a frozen executable).
@@ -52,7 +66,7 @@ def progress_links(worker):
     if state is None:
         return None
     fields = ('name', 'parent', 'collection', 'revision', 'view_key', 'desktop_annotations_preserved')
-    return [{'cloud': key, **{field: row[field] for field in fields if field in row}}
+    return [{'cloud': key, 'unavailable': bool(row.get('unavailable')), **{field: row[field] for field in fields if field in row}}
             for key, row in state.read('documents', {}).items()]
 
 
@@ -110,7 +124,7 @@ class Worker:
     def save(self):
         atomic_write(self.directory / "config.json", json.dumps(self.config, ensure_ascii=False).encode())
 
-    def zotero(self, *, interactive=False, ocr=False):
+    def zotero(self, *, interactive=False, ocr=False, reconnect=False):
         if self.zotero_factory:
             return self.zotero_factory()
         printed, handwriting = None, None
@@ -121,7 +135,7 @@ class Worker:
             handwriting = HandwritingOCR(self.resources / "models/handwriting", self.directory / "handwriting-cache", cancelled=self.stop.is_set)
         client = LocalZotero(self.port, printed_ocr=printed, handwriting_ocr=handwriting,
                              grant_store=TokenVault(self.directory / "zotero-grant.dpapi"), interactive=interactive)
-        if self.config.get("server_id") and client.server_id != self.config["server_id"]:
+        if not reconnect and self.config.get("server_id") and client.server_id != self.config["server_id"]:
             client.close()
             raise PilotError("A different Zotero library is open. Reconnect in Setup before using saved mappings.")
         return client
@@ -132,37 +146,61 @@ class Worker:
         token = TokenVault(self.directory / "tablet-token.dpapi").load()
         if not token:
             raise PilotError("Pair reMarkable from Setup first.")
-        return CloudClient(token, cache_dir=self.directory / "blobs", stop=self.stop)
+        return CloudClient(token, cache_dir=self.directory / "blobs", stop=self.stop, progress=self.progress)
 
     def status(self):
         from .sorting.core_logic import DOCUMENT_TYPE_LABELS
         config = {k: v for k, v in self.config.items() if k != "server_id"}
         documents = self.state.read('documents', {})
+        available = {key: row for key, row in documents.items() if not row.get('unavailable')}
         linked_sources = {row.get('source_key') for row in documents.values()}
         waiting = {row['approval'].get('source') or row['kind'] + ':' + row['identity']
                    for row in self.review.rows(pending_only=False)
                    if row['status'] == 'approved' and row['kind'] in {'cloud', 'zotero', 'inbox'}
+                   and (row['kind'] == 'cloud' or Path(row['payload'].get('path') or row['approval'].get('filename')
+                                                     or row['payload'].get('filename', '')).suffix.lower() == '.pdf')
                    and row['identity'] not in documents and row['approval'].get('source') not in linked_sources}
+        staged = {identity: row['source_key'] for identity, row in available.items()
+                  if row.get('origin') == 'zotero' and row.get('uploaded') is False and row.get('source_key')}
+        if staged:
+            suspended = self.review.suspended_documents()
+            waiting.update(source for identity, source in staged.items() if identity not in suspended)
         return {"config": config, "status": self.last, "reviews": self.review.rows(),
                 "deletions": self.review.deletions(), "local_deletions": self.review.local_deletions(), "types": DOCUMENT_TYPE_LABELS,
                 "collections": self.collections, "mappings": self.state.read("folders", {}),
                 "cleanup_pending": len(self.review.cleanups()), "bulk": self.bulk.read(),
-                'filing_summary': {'approved_waiting_sync': len(waiting), 'linked': len(documents),
-                                   'pdfs_received': sum(bool(row.get('revision')) for row in documents.values())},
+                'filing_summary': {'approved_waiting_sync': len(waiting), 'linked': len(available),
+                                   'pdfs_received': sum(bool(row.get('revision')) for row in available.values())},
                 "links": [{"cloud": key, **row, **self.review.link_control(key)} for key, row in self.state.read("documents", {}).items()],
-                'connection': {'linked_papers': len(self.state.read('documents', {})),
+                'connection': {'linked_papers': len(available),
                   'previous': [{**{key: row.get(key, '') for key in ('zotero_root', 'tablet_root', 'zotero_path', 'tablet_path')},
                                 'linked_papers': len(connections.values(self.directory, row)['documents'])}
                                for row in self.config.get('connection_history', [])]}}
 
     def connect(self):
-        client = self.zotero(interactive=True)
+        client = self.zotero(interactive=True, reconnect=True)
         try:
             client.authorize()
-            self.config["server_id"] = client.server_id
-            self.collections = client.collections()
-            self.save()
-            return {"connected": True, "collections": self.collections}
+            collections = client.collections()
+            changed = bool(self.config.get('server_id') and self.config['server_id'] != client.server_id)
+            proposed = {**self.config, 'server_id': client.server_id}
+            if changed:
+                # Explicit Connect authorizes a new binding, never reuse old
+                # item keys or approvals in another Zotero instance.
+                proposed = connections.switch(self.directory, self.config, {**proposed,
+                    'zotero_root': '', 'tablet_root': '', 'default_folder': '',
+                    'zotero_path': '', 'tablet_path': ''})
+                plan = self.bulk.read()
+                if plan:
+                    # Invalidate before committing the binding. A failed save
+                    # cannot leave an old import authorization active elsewhere.
+                    self.bulk.save({**plan, 'invalidated': 'The Zotero instance changed. Scan the folder again before importing.'})
+            atomic_write(self.directory / 'config.json', json.dumps(proposed, ensure_ascii=False).encode())
+            self.config, self.collections = proposed, collections
+            if changed:
+                self._open_connection()
+                self.last = {'state': 'setup_required', 'message': 'Connected to the new Zotero instance. Previous mappings were retained separately. Choose folders in Setup.'}
+            return {**self.status(), 'connected': True, 'server_changed': changed}
         finally:
             client.close()
 
@@ -263,7 +301,18 @@ class Worker:
         if not record or record.get('deleted'):
             raise PilotError('The paper reference changed before its keyword tags could be saved.')
         existing = record.get('tags', [])
-        keywords = document_keywords(path, [row['tag'] for row in existing])
+        keyword_path = path
+        for link in self.state.read('documents', {}).values():
+            if link.get('parent') != parent:
+                continue
+            if not any(key and client.file_path(key) == path for key in (link.get('view_key'), link.get('source_key'))):
+                continue
+            baseline = link.get('baseline', '')
+            original = self.state.directory / 'sources' / 'remarkable' / 'baselines' / (baseline + '.pdf')
+            if original.is_file() and file_sha(original) == baseline:
+                keyword_path = original
+                break
+        keywords = document_keywords(keyword_path, [row['tag'] for row in existing])
         if digest and file_sha(path) != digest:
             raise PilotError('The paper changed while reading its keywords. Its existing tags were retained.')
         plan = self._tag_plans().get('review:' + identity, {}) if identity else {}
@@ -305,11 +354,12 @@ class Worker:
                 validate_filename_template(template)
         client = self.zotero()
         try:
-            proposed = {**self.config, **values}
+            proposed = {**self.config, **values, 'sync_paused': True}
             collections = client.collections()
             zscope = descendants(collections, proposed["zotero_root"], lambda r: r["key"], lambda r: r.get("parentCollection"))
-            folders = [r for r in self.cloud().library() if not r.deleted and r.kind == "CollectionType"]
-            cscope = descendants(folders, proposed["tablet_root"], lambda r: r.id, lambda r: r.parent)
+            folders = [r for r in self.cloud().library() if r.kind == 'CollectionType']
+            cscope = descendants(folders, proposed['tablet_root'], lambda r: r.id, lambda r: r.parent,
+                                 unavailable={r.id for r in folders if r.deleted})
             if proposed.get("default_folder", proposed["tablet_root"]) not in cscope:
                 raise PilotError("Choose a default tablet folder inside the selected scope.")
             inbox = str(proposed.get("inbox", "")).strip()
@@ -319,7 +369,8 @@ class Worker:
                     raise PilotError("Choose an existing ToSort folder.")
                 catalog = client.review_action("catalog")
                 # Do not scan Zotero's own storage as an intake folder.
-                if any(Path(a["path"]).resolve().is_relative_to(inbox_path) for a in catalog["attachments"]):
+                data = Path(catalog['data_directory']).resolve() if catalog.get('data_directory') else None
+                if (data and (inbox_path.is_relative_to(data) or data.is_relative_to(inbox_path))) or any(Path(a["path"]).resolve().is_relative_to(inbox_path) for a in catalog["attachments"]):
                     raise PilotError("Choose a separate download folder, outside Zotero's managed storage.")
                 proposed["inbox"] = str(inbox_path)
             def path(rows, identity, key, parent):
@@ -369,6 +420,38 @@ class Worker:
         return self._setup_plan(values)
 
     def configure(self, confirmation=None, **values):
+        local_keys = {'inbox', 'templates', 'automatic', 'ocr'}
+        roots = {'zotero_root', 'tablet_root', 'default_folder'}
+        if (set(values) <= local_keys | roots
+                and all(values.get(key, self.config.get(key, '')) == self.config.get(key, '') for key in roots)):
+            # Naming, OCR and intake preferences are local. An unavailable cloud
+            # catalog must not prevent saving them for the next connection.
+            from .sorting.core_logic import DOCUMENT_TYPES, validate_filename_template
+            for kind, template in values.get('templates', {}).items():
+                if kind not in DOCUMENT_TYPES:
+                    raise PilotError('Choose a supported document type.')
+                if template:
+                    validate_filename_template(template)
+            proposed = {**self.config, **values, 'sync_paused': True}
+            inbox = str(proposed.get('inbox', '')).strip()
+            if inbox:
+                path = Path(inbox).resolve(strict=True)
+                if not path.is_dir():
+                    raise PilotError('Choose an existing ToSort folder.')
+                if inbox != self.config.get('inbox', ''):
+                    client = self.zotero()
+                    try:
+                        catalog = client.review_action('catalog')
+                        data = Path(catalog['data_directory']).resolve() if catalog.get('data_directory') else None
+                        if (data and (path.is_relative_to(data) or data.is_relative_to(path))) or any(Path(a['path']).resolve().is_relative_to(path) for a in catalog['attachments']):
+                            raise PilotError("Choose a separate download folder, outside Zotero's managed storage.")
+                    finally:
+                        client.close()
+                proposed['inbox'] = str(path)
+            atomic_write(self.directory / 'config.json', json.dumps(proposed, ensure_ascii=False).encode())
+            self.config = proposed
+            self.last = {'state': 'paused', 'message': 'Setup saved. Check your preferences, then click Sync now when ready.'}
+            return self.status()
         plan = self._setup_plan(values)
         if plan['changed'] and (self.config.get('tablet_root') or self.config.get('connection_history')):
             if confirmation != plan['token']:
@@ -412,7 +495,28 @@ class Worker:
             details["creators"] = [c.get("name") or " ".join(filter(None, [c.get("firstName"), c.get("lastName")])) for c in creators]
             details["primary_creator"] = details["creators"][0]
         if metadata.get("date"):
-            details["year"] = metadata["date"][:4]
+            from .sorting.core_logic import _normalize_year
+            year = _normalize_year(metadata['date'])
+            if year != 'Unknown':
+                details['year'] = year
+        if metadata.get('publicationTitle'):
+            details['journal'] = metadata['publicationTitle']
+        # Extraction warnings about missing fields stop being true when the
+        # authoritative Zotero citation supplies them.
+        from .sorting.core_logic import _missing_citation_fields, _normalize_year
+        warnings = []
+        missing = _missing_citation_fields(details)
+        for warning in details.get('review_reasons', []):
+            if warning == 'No reliable author or responsible organization was found.' and creators:
+                continue
+            if warning == 'No reliable publication or release year was found.' and _normalize_year(details.get('year')) != 'Unknown':
+                continue
+            if warning.startswith('Missing citation fields:'):
+                if missing:
+                    warnings.append('Missing citation fields: ' + ', '.join(missing) + '. Review and complete the proposed name.')
+                continue
+            warnings.append(warning)
+        details.update(review_reasons=warnings, needs_review=bool(warnings), missing_citation_fields=missing)
         template = self.config.get("templates", {}).get(details["document_type"], "")
         name = build_proposed_filename(details, path.suffix, filename_format="custom" if template else "smart", custom_template=template)
         if not template and (not details.get("year") or details.get("primary_creator", "").casefold() in {"", "unknown", "unknown author"}):
@@ -447,11 +551,14 @@ class Worker:
             return
         from .zotero_bulk import observed_digest
         digest = observed_digest(path, self.file_digests)
+        if kind == 'inbox':
+            self.review.supersede_inbox(path, identity)
         old = next((r for r in self.review.rows(pending_only=False) if r["kind"] == kind and r["identity"] == identity), None)
         signature = citation_signature(metadata)
-        if old and old["digest"] == digest and (old["status"] in {"approved", "applying"} or old["payload"].get("metadata_signature") == signature):
+        if old and old["digest"] == digest and (old["status"] in {"approved", "applying", "ignored"} or (old['status'] == 'pending' and old["payload"].get("metadata_signature") == signature and not old['payload'].get('unavailable'))):
             return  # Do not re-extract every paper on every timer tick.
-        payload = {**self._proposal(path, metadata), "path": str(path), "source": kind, "metadata_signature": signature, **extra}
+        payload = {**self._proposal(path, metadata), "path": str(path), "source": kind, "metadata_signature": signature,
+                   'source_collections': (metadata or {}).get('collections', []) if kind == 'zotero' else [], **extra}
         payload["review_token"] = fingerprint(payload)
         self.review.offer(kind, identity, digest, payload)
 
@@ -516,16 +623,34 @@ class Worker:
             if record["key"] in managed_sources or "Notable pilot:" in record.get("note", ""):
                 continue
             self.progress(f'Checking Zotero file {number} of {len(native["attachments"])}: {path.name}')
-            self._offer("zotero", record["key"], path, metadata=native["parents"].get(record.get("parentItem")), attachment=record["key"])
+            try:
+                self._offer("zotero", record["key"], path, metadata=native["parents"].get(record.get("parentItem")), attachment=record["key"])
+            except (OSError, ValueError, PilotError) as error:
+                self.catalog_issues.append({'cloud': '', 'attachment': record['key'], 'title': path.name,
+                                            'reason': f'Could not check this local paper: {error}'})
         inbox = self.config.get("inbox")
         if inbox:
             from .inbox import file_signature
-            for path in Path(inbox).iterdir():
-                if path.is_file() and path.suffix.lower() in {".pdf", ".docx", ".pptx"} and not path.name.startswith("~$"):
-                    self._offer("inbox", str(path.resolve()) + "|" + fingerprint(file_signature(path))[:16], path)
+            try:
+                paths = [path for path in Path(inbox).iterdir() if path.is_file() and path.suffix.lower() in {'.pdf', '.docx', '.pptx'} and not path.name.startswith('~$')]
+            except OSError as error:
+                # A temporarily disconnected intake directory is not proof its
+                # individual files were removed.
+                self.catalog_issues.append({'cloud': '', 'title': 'Intake folder', 'reason': str(error)})
+            else:
+                self.review.retire_missing_inbox(paths)
+                for path in paths:
+                    try:
+                        identity = str(path.resolve()) + '|' + fingerprint(file_signature(path))[:16]
+                        self.review.supersede_inbox(path, identity)
+                        self._offer('inbox', identity, path)
+                    except (OSError, ValueError, PilotError) as error:
+                        self.catalog_issues.append({'cloud': '', 'title': path.name, 'reason': f'Could not check this intake paper: {error}'})
+        self.progress('Reading reMarkable’s file list…')
         catalog = cloud.library()
-        folders = [r for r in catalog if not r.deleted and r.kind == "CollectionType"]
-        scope = descendants(folders, self.config["tablet_root"], lambda r: r.id, lambda r: r.parent)
+        folders = [r for r in catalog if r.kind == 'CollectionType']
+        scope = descendants(folders, self.config['tablet_root'], lambda r: r.id, lambda r: r.parent,
+                            unavailable={r.id for r in folders if r.deleted})
         scope = connections.filtered_scope(scope, excluded['tablet'], lambda r: r.id, lambda r: r.parent, self.config['tablet_root'])
         candidates = []
         native_by_digest = None
@@ -556,6 +681,13 @@ class Worker:
                 candidates.append({"key": item.id, "title": item.name, "digest": digest, "parent": item.parent, "side": "cloud"})
                 old = self.review.approval("cloud", item.id, digest)
                 repair = previous['payload'].get('repair_required', '') if previous and previous['status'] == 'pending' else ''
+                interrupted_changed = False
+                if previous and previous['status'] == 'applying' and previous['approval'].get('cloud_change'):
+                    try:
+                        cloud_change_done(cloud, item, previous['approval']['cloud_change'])
+                    except PilotError:
+                        interrupted_changed = True
+                        repair = 'This tablet paper changed while filing was interrupted. Review its current name and destination before filing again.'
                 if old is not None:
                     if native_by_digest is None:
                         native_by_digest = self._native_pdf_matches(native)
@@ -586,7 +718,7 @@ class Worker:
                         payload.update(repair_required=repair, previous_approval=previous['payload'].get('previous_approval') or previous['approval'])
                     payload["review_token"] = fingerprint(payload)
                     if repair:
-                        self.review.reopen(previous['id'], digest, payload)
+                        self.review.reopen(previous['id'], digest, payload, applying=interrupted_changed)
                     self.review.offer("cloud", item.id, digest, payload)
         for row in self.review.rows():
             if row["kind"] in {"zotero", "inbox"} and row["payload"]["path"].lower().endswith(".pdf"):
@@ -598,6 +730,22 @@ class Worker:
                 self.review.offer(row["kind"], row["identity"], row["digest"], payload)
         for identity, link in documents.items():
             item = next((r for r in catalog if r.id == identity), None)
+            interrupted = prior.get(('cloud', identity))
+            if interrupted and interrupted['status'] == 'applying':
+                approved = interrupted['approval']
+                original = self.state.directory / 'originals' / (interrupted['digest'] + '.pdf')
+                source = client.get('item', link.get('source_key')) if link.get('source_key') else None
+                if (approved.get('match') and link.get('source_key') == approved.get('source')
+                        and link.get('parent') == approved.get('parent') and link.get('collection') == approved.get('collection')
+                        and link.get('baseline') == interrupted['digest'] and original.is_file()
+                        and file_sha(original) == interrupted['digest'] and source and not source.get('deleted')
+                        and source.get('parentItem') == approved['parent']):
+                    # Registration is the final side-effecting filing step.
+                    # Finish only its bookkeeping; later tablet edits belong
+                    # to ordinary sync and must never replay this old rename.
+                    self.review.complete_counterpart('zotero', approved['source'], interrupted['digest'],
+                                                     interrupted['payload'], approved)
+                    self.review.finish(interrupted['id'], approval=approved)
             if self.review.link_control(identity)["paused"]:
                 continue
             self.review.observe_live(item)
@@ -605,6 +753,8 @@ class Worker:
                 parent = client.get("item", link["parent"])
                 key = link.get("view_key") or link.get("source_key")
                 view = client.get("item", key) if key else None
+                self.review.observe_zotero_live(identity, parent)
+                self.review.observe_zotero_live(identity, view)
                 self.review.confirm_zotero_deleted(item, link, parent if parent and parent.get("deleted") else view)
             if item and (item.deleted or item.parent == "trash") and link.get("parent"):
                 published = self.state.directory / "publisher"
@@ -629,14 +779,24 @@ class Worker:
             if row["status"] == "applying":
                 continue  # Preserve the existing recovery journal.
             payload = {**row["payload"], "issues": policy[row["id"]], "routine": not policy[row["id"]]}
+            if row['kind'] == 'zotero':
+                parent = catalog.get('parents', {}).get(payload.get('parent'), {})
+                payload['source_collections'] = parent.get('collections', [])
             payload["review_token"] = fingerprint({k: v for k, v in payload.items() if k != "review_token"})
             self.review.offer(row["kind"], row["identity"], row["digest"], payload)
 
     def scan_library(self, root, collection, lookup=True):
         return self.bulk.scan(root, collection, lookup)
 
-    def import_library(self, plan_id):
-        return self.bulk.apply(plan_id)
+    def import_library(self, plan_id, root=None, collection=None, lookup=None):
+        return self.bulk.apply(plan_id, root=root, collection=collection, lookup=lookup)
+
+    def retry_bulk(self, plan_id, row_id, dismiss=False, root=None, collection=None, lookup=None):
+        return self.bulk.retry(plan_id, row_id, dismiss=dismiss, root=root, collection=collection, lookup=lookup)
+
+    def dismiss_review(self, identity, digest):
+        self.review.dismiss(identity, digest)
+        return self.status()
 
     def approve_routine(self, entries, collection):
         """One explicit batch decision, revalidated file by file, never blind approval."""
@@ -663,19 +823,29 @@ class Worker:
             row = self.review.row(expected["id"])
             if row and row["status"] == "approved":
                 continue  # Linking one side can also resolve its identical counterpart's review.
-            if (not row or row["status"] != "pending" or row["digest"] != expected["digest"]
+            if (not row or row["status"] not in {'pending', 'applying'} or row["digest"] != expected["digest"]
                     or not row["payload"].get("routine") or row["payload"].get("review_token") != expected.get("review_token")):
                 held += 1
                 continue
             payload = row["payload"]
             matches = payload.get("matches", [])
             home = collection
+            if row['kind'] == 'zotero' and not matches:
+                original_homes = [k for k in payload.get('source_collections', []) if k in self.state.read('folders', {})]
+                if len(original_homes) == 1:
+                    home = original_homes[0]
             if row['kind'] == 'cloud' or len(matches) == 1:
                 match_parent = payload.get('tablet_parent') if row['kind'] == 'cloud' else matches[0].get('parent')
                 home = next((key for key, value in self.state.read("folders", {}).items() if value["cloud"] == match_parent), home)
+            match = matches[0]['key'] if matches else ''
+            if row['status'] == 'applying' and (any(row['approval'].get(key) != value for key, value in {
+                    'filename': payload['filename'], 'title': payload['title'], 'document_type': payload['document_type'],
+                    'collection': home, 'match': match}.items()) or row['approval'].get('research')):
+                held += 1
+                continue
             try:
                 self.approve(row["id"], row["digest"], payload["filename"], payload["title"], payload["document_type"],
-                             home, match=matches[0]["key"] if matches else "", review_token=payload["review_token"], _batch=True)
+                             home, match=match, review_token=payload["review_token"], _batch=True)
                 completed += 1
             except InterruptedError:
                 self.stop.set()
@@ -683,6 +853,11 @@ class Worker:
             except Exception as error:
                 if self.stop.is_set():
                     break
+                if (self.review.row(row['id']) or {}).get('status') == 'applying':
+                    # Preserve the original approved snapshot and choices for
+                    # Resume after a partly committed operation.
+                    held += 1
+                    continue
                 payload = {**payload, "routine": False, "issues": [str(error)]}
                 self.review.offer(row["kind"], row["identity"], row["digest"], payload)
                 held += 1
@@ -708,6 +883,7 @@ class Worker:
             self.cleanup_intake(client)
             self.progress('Checking new papers and existing links…')
             self._catalog(client, cloud)
+            self.progress('Checking Zotero matches and saved review decisions…')
             self.refresh_review_policy(client)
             excluded = connections.exclusions(self.directory, self.config)
             excluded['documents'].update(issue['cloud'] for issue in self.catalog_issues if issue.get('cloud'))
@@ -715,6 +891,29 @@ class Worker:
                             progress=self.progress, exclusions=excluded).run(apply=True)
             catalog_failures = {row['cloud'] for row in self.catalog_issues}
             result['review'] = self.catalog_issues + [row for row in result['review'] if row.get('cloud') not in catalog_failures]
+            links = self.state.read('documents', {})
+            partial_indexes = 0
+            for action in result.get('actions', []):
+                diagnostics = action.get('index_warnings') or {}
+                if not diagnostics:
+                    continue
+                pages = {}
+                for kind, label in (('printed_ocr', 'printed text'), ('handwriting', 'handwriting')):
+                    values = diagnostics.get(kind, [])
+                    page_numbers = sorted({value.get('page') for value in values if isinstance(value.get('page'), int)})
+                    if page_numbers:
+                        pages[label] = ', '.join(str(page) for page in page_numbers)
+                if not diagnostics.get('incomplete') and not pages:
+                    continue
+                partial_indexes += 1
+                identity = action.get('cloud', '')
+                title = links.get(identity, {}).get('name') or 'Linked paper'
+                detail = '; '.join(f'{label} on page(s) {numbers}' for label, numbers in pages.items())
+                outcome = 'Search indexing is incomplete' if diagnostics.get('incomplete') else 'OCR reported a search-quality warning'
+                recovery = 'OCR will retry on the next sync.' if diagnostics.get('incomplete') else 'Review the OCR result before relying on full-text search.'
+                result['review'].append({'cloud': identity, 'title': title,
+                    'reason': outcome + (f': {detail}' if detail else '') + '. ' + recovery})
+            result['partial_indexes'] = partial_indexes
             self.collections = client.collections()
             self.last = {"state": "needs_review" if self.review.rows() or self.review.deletions() or self.review.local_deletions() or result["review"] else "ready",
                          "message": "Sync finished — some links need attention" if result["review"] else "Sync finished", "updated": time.time(), "result": result}
@@ -768,6 +967,19 @@ class Worker:
             parent = row["payload"].get("parent") or stable_key("notable-review", "reference", row["kind"] + row["identity"])
             source = row["identity"] if row["kind"] == "zotero" else stable_key("notable-review", "source", row["identity"])
             chosen_match = next((m for m in row["payload"].get("matches", []) if m["key"] == match), None)
+            if match and not chosen_match and row['kind'] == 'zotero' and row['status'] == 'applying':
+                # A partially committed link is omitted from the next discovery
+                # pass. Recover its exact saved decision, never a new match:
+                # the native PDF and live tablet bytes are checked below.
+                saved = row['approval']
+                link = self.state.read('documents', {}).get(match, {})
+                expected = {'filename': filename, 'title': title, 'document_type': document_type,
+                            'parent': parent, 'collection': collection, 'source': source,
+                            'research': research or [], 'match': match}
+                if (all(saved.get(key) == value for key, value in expected.items())
+                        and link.get('source_key') == source and link.get('parent') == parent
+                        and link.get('collection') == collection and link.get('baseline') == digest):
+                    chosen_match = {'key': match}
             if match and not chosen_match:
                 raise PilotError("Choose a displayed, byte-verified match or keep this document separate.")
             if row['kind'] == 'cloud':
@@ -785,8 +997,7 @@ class Worker:
                 matched_cloud = next((r for r in self.cloud().library() if r.id == match), None)
                 if not matched_cloud or matched_cloud.deleted or hashlib.sha256(self.cloud().pdf_bundle(matched_cloud)[match + ".pdf"]).hexdigest() != digest:
                     raise PilotError("The tablet original changed. Refresh the match before linking.")
-            supplement = (document_type == 'supporting_information' or row['payload'].get('details', {}).get('is_supplementary_material')
-                          or re.search(r'(?:^|[_ -])si$', path.stem, re.I))
+            supplement = document_type == 'supporting_information'
             source_parent = row['payload'].get('parent')
             source_reference = client.get('item', source_parent) if source_parent else None
             if supplement:
@@ -802,6 +1013,31 @@ class Worker:
                 parent = main_reference
             approval = {"filename": filename, "title": title, "document_type": document_type,
                         "parent": parent, "collection": collection, "source": source, "research": research or [], "match": match}
+            if row['kind'] == 'cloud' or chosen_match:
+                # Persist the observed revision and exact target before any
+                # citation/attachment mutation. Resume must recognize our own
+                # committed move, never authorize overwriting a newer edit.
+                cloud = self.cloud()
+                cloud_identity = row['identity'] if row['kind'] == 'cloud' else match
+                current = next((r for r in cloud.library() if r.id == cloud_identity), None)
+                folders = self.state.read('folders', {})
+                if not current or current.deleted or collection not in folders:
+                    raise PilotError('The tablet document or its selected home is unavailable. Sync before filing.')
+                destination = folders[collection]['cloud']
+                intent = row['approval'].get('cloud_change') if row['status'] == 'applying' else None
+                if intent is None:
+                    if row['kind'] == 'cloud' and current.hash != row['payload'].get('cloud_hash'):
+                        # Older journals have no post-write receipt. They can
+                        # finish an already-achieved target without any cloud
+                        # write, only after rechecking the original PDF bytes.
+                        completed = (row['status'] == 'applying' and current.name == Path(filename).stem
+                                     and current.parent == destination and
+                                     hashlib.sha256(cloud.pdf_bundle(current)[current.id + '.pdf']).hexdigest() == digest)
+                        if not completed:
+                            raise PilotError('The tablet document changed while filing was interrupted. Its newer changes were retained; review its current state before retrying.')
+                    intent = cloud_change_intent(cloud, current, Path(filename).stem, destination)
+                cloud_change_done(cloud, current, intent)
+                approval['cloud_change'] = intent
             reference = client.get("item", parent)
             if row["kind"] == "zotero" and source_parent and source_reference:
                 if row["status"] != "applying" and row["payload"].get("metadata_signature") != citation_signature(source_reference):
@@ -815,7 +1051,7 @@ class Worker:
                             "title": title, "collections": sorted(set([collection, *(research or [])]))}
                 creators = details.get("creators") or [details.get("primary_creator", "")]
                 creator_type = "presenter" if document_type == "presentation_poster" else "inventor" if document_type in {"patent", "patent_application"} else "author"
-                metadata["creators"] = [{"creatorType": creator_type, "name": str(name)} for name in creators if name and str(name).lower() not in {"unknown", "unknown author"}]
+                metadata["creators"] = [creator_record(name, creator_type) for name in creators if name and str(name).lower() not in {"unknown", "unknown author"}]
                 year = str(details.get("year", ""))
                 if len(year) == 4 and year.isdigit() and document_type not in {"patent", "patent_application"}:
                     metadata["date"] = year
@@ -829,7 +1065,15 @@ class Worker:
                 # Bibliographic metadata already curated in Zotero is retained;
                 # edits to it remain available through Zotero's native item pane.
                 client.update(reference)
+            # Zotero can automatically rename an attachment when its citation
+            # changes. Resolve by key again rather than using the pre-save path.
+            if row['kind'] == 'zotero':
+                path = client.file_path(source)
+                if file_sha(path) != digest:
+                    raise PilotError('The PDF changed while saving its citation. Its files were retained.')
             self.apply_document_keywords(client, parent, path, identity, digest)
+            if row['kind'] == 'zotero':
+                path = client.file_path(source)
             if row["kind"] == "inbox":
                 from .inbox import file_signature
                 self.review.cleanup(identity, {"source": str(path), "signature": file_signature(path), "sha256": digest, "target": source})
@@ -842,21 +1086,26 @@ class Worker:
                 wanted = hashlib.md5(path.read_bytes()).hexdigest()
                 if current not in {"", wanted}:
                     raise PilotError("A previously imported attachment changed. Both files were retained.")
-                if current != wanted:
-                    client.upload(source, path, current)
+                from .zotero_pilot import Ledger, upload_attachment
+                source_ledger = Ledger(self.connection_dir / 'source-imports')
+                with source_ledger.lock():
+                    source_ledger.bind(client.server_id, 'intake-source-files')
+                    # Even matching bytes may still need their account-upload
+                    # receipt completed after a lost response or interruption.
+                    upload_attachment(client, source_ledger, source, source, path, current, wanted)
                 if client.file_md5(source) != wanted:
                     raise PilotError("Import verification failed. The download was retained.")
                 # Gate the newly stored attachment under its Zotero identity too.
-                zreview = self.review.offer("zotero", source, digest, row["payload"])
-                self.review.begin(zreview, digest, approval)
-                self.review.finish(zreview)
+                self.review.complete_counterpart('zotero', source, digest, row['payload'], approval)
             elif row["kind"] == "zotero":
                 attachment = client.get("item", source)
                 if not attachment.get("parentItem") or (supplement and attachment.get('parentItem') != parent):
-                    attachment["parentItem"] = parent
-                    attachment.pop("collections", None)
-                    client.update(attachment)
+                    from .zotero_pilot import reparent_attachment
+                    reparent_attachment(client, source, parent)
                 client.review_action("rename", {"key": source, "filename": filename, "md5": hashlib.md5(path.read_bytes()).hexdigest()})
+                path = client.file_path(source)
+                if file_sha(path) != digest:
+                    raise PilotError('The renamed PDF changed. Its files were retained.')
             if row["kind"] == "cloud" or chosen_match:
                 cloud = self.cloud()
                 cloud_identity = row["identity"] if row["kind"] == "cloud" else match
@@ -867,18 +1116,43 @@ class Worker:
                 if collection not in folders:
                     raise PilotError("Sync the selected tablet home before filing.")
                 destination = folders[collection]["cloud"]
-                cloud.update_item(item.id, expected_hash=item.hash, name=Path(filename).stem, parent=destination, scope_id=self.config["tablet_root"])
+                previous = self.state.read('documents', {}).get(item.id, {}) if chosen_match else {}
+                if previous and previous.get('baseline') != digest:
+                    raise PilotError('The existing tablet connection belongs to a different PDF. Its files and location were retained.')
+                intent = approval['cloud_change']
+                if not cloud_change_done(cloud, item, intent):
+                    item = cloud.update_item(item.id, expected_hash=intent['before_hash'],
+                        name=intent['name'], parent=intent['parent'], scope_id=self.config['tablet_root'])
+                intent['after_hash'] = item.hash
+                self.review.checkpoint(identity, cloud_change=intent)
                 if chosen_match:
                     links = self.state.read("documents", {})
-                    links[item.id] = {"origin": "zotero", "source_key": source, "parent": parent, "collection": collection,
+                    previous = links.get(item.id, {})
+                    if previous and previous.get('baseline') != digest:
+                        raise PilotError('The existing tablet connection belongs to a different PDF. Its notes were retained.')
+                    if previous.get('view_key'):
+                        view = client.get('item', previous['view_key'])
+                        if not view or view.get('deleted') or view.get('parentItem') != previous.get('parent'):
+                            raise PilotError('The connected tablet PDF changed. Review its current reference before relinking.')
+                        from .zotero_pilot import reparent_attachment
+                        reparent_attachment(client, view['key'], parent)
+                        view = client.get('item', view['key'])
+                        source_note = 'Notable source attachment: ' + source
+                        if source_note not in view.get('note', ''):
+                            view['note'] = view.get('note', '') + '<p>' + source_note + '</p>'
+                        client.update(view)
+                    links[item.id] = {**previous, "origin": "zotero", "source_key": source, "parent": parent, "collection": collection,
                         "baseline": digest, "uploaded": True, "name": Path(filename).stem, "tablet_parent": destination}
-                    self.state.write("documents", links)
+                    if previous.get('parent') and previous['parent'] != parent:
+                        for field in ('tag_state', 'tag_pending', 'keyword_check'):
+                            links[item.id].pop(field, None)
                     original = self.state.directory / "originals" / (digest + ".pdf")
                     if not original.exists():
                         atomic_write(original, path.read_bytes(), require_absent=True)
-                    zreview = self.review.offer("zotero", source, digest, row["payload"])
-                    self.review.begin(zreview, digest, approval)
-                    self.review.finish(zreview)
+                    elif file_sha(original) != digest:
+                        raise PilotError('The retained original changed. It was preserved; repair it before linking this paper.')
+                    self.state.write("documents", links)
+                    self.review.complete_counterpart('zotero', source, digest, row['payload'], approval)
                     pending_cloud = next((r for r in self.review.rows() if r["kind"] == "cloud" and r["identity"] == item.id), None)
                     if pending_cloud:
                         self.review.begin(pending_cloud["id"], pending_cloud["digest"], approval)
@@ -911,10 +1185,10 @@ class Worker:
                 # and its recorded cleanup can be retried on a later cycle.
                 continue
 
-    def delete_decision(self, identity, choice):
+    def delete_decision(self, identity, choice, destination=''):
         client = self.zotero()
         try:
-            result = self.review.resolve_deletion(identity, choice, cloud=self.cloud(), zotero=client, scope=self.config["tablet_root"])
+            result = self.review.resolve_deletion(identity, choice, cloud=self.cloud(), zotero=client, scope=self.config["tablet_root"], destination=destination)
             return {"decision": result, **self.status()}
         finally:
             client.close()
@@ -934,6 +1208,8 @@ class Worker:
                 view = client.get("item", row.get("view_key") or row.get("source_key"))
                 if not parent or parent.get("deleted") or not view or view.get("deleted"):
                     raise PilotError("Restore the Zotero paper before resuming this link.")
+                self.review.observe_zotero_live(identity, parent)
+                self.review.observe_zotero_live(identity, view)
             finally:
                 client.close()
         self.review.link_control(identity, paused=paused, event={"action": "unlinked" if paused else "resumed"})
@@ -1128,37 +1404,98 @@ class Worker:
         row = self.review.row(identity)
         if not row or row["kind"] != "conflict" or row["digest"] != digest or side not in {"desktop", "tablet"}:
             raise PilotError("This mapping review changed. Refresh before deciding.")
+        if row['status'] == 'approved' and row['approval'].get('side') == side:
+            return self.status()
+        if row['status'] == 'applying' and row['approval'].get('side') != side:
+            raise PilotError('Finish recovering the saved conflict choice before choosing another version.')
         client = self.zotero()
         try:
             payload = row["payload"]
             paper = payload["type"] == "paper"
             record = client.get("item" if paper else "collection", payload["zotero"])
-            item = next((r for r in self.cloud().library() if r.id == payload["cloud"]), None)
-            if not record or not item or item.hash != payload["cloud_hash"] or record.get("version", 0) != payload["version"]:
-                raise PilotError("The folder changed since review. Sync again before choosing.")
-            if not paper and [record["name"], record.get("parentCollection")] != payload["desktop"]:
-                raise PilotError("The folder changed since review. Sync again before choosing.")
+            cloud = self.cloud()
+            item = next((r for r in cloud.library() if r.id == payload['cloud']), None)
+            if not record or record.get('deleted') or not item or item.deleted:
+                raise PilotError('The selected item is unavailable. Its saved conflict choice was retained.')
             links = self.state.read("documents", {})
             link = links.get(payload["cloud"]) if paper else None
+            mappings = self.state.read('folders', {})
+            chosen = payload[side]
+            if chosen[1] not in mappings:
+                raise PilotError('The chosen destination is no longer connected. Sync before resolving this conflict.')
             if paper:
+                if not link:
+                    raise PilotError('The paper connection changed. Sync before resolving its conflict.')
                 path = client.file_path(link.get("view_key") or link.get("source_key"))
                 if hashlib.md5(path.read_bytes()).hexdigest() != payload["file_md5"]:
                     raise PilotError("The PDF changed during review. Sync before choosing.")
-            self.review.begin(identity, digest, {"side": side})
-            chosen = payload[side]
+            intent = row['approval'].get('conflict_change') if row['status'] == 'applying' else None
+            bridge = Bridge(client, cloud, self.state, self.config['zotero_root'], self.config['tablet_root'])
+            if intent is None:
+                # Legacy applying reviews can close an already-achieved choice
+                # without replaying a mutation onto a newer revision.
+                position = ([path.stem, chosen[1]] if paper and chosen[1] in record.get('collections', [])
+                            else [record.get('name'), record.get('parentCollection')])
+                legacy_done = (row['status'] == 'applying' and position == chosen
+                               and item.name == chosen[0] and item.parent == mappings[chosen[1]]['cloud'])
+                if not legacy_done and (item.hash != payload['cloud_hash'] or record.get('version', 0) != payload['version']
+                                        or not paper and position != payload['desktop']):
+                    raise PilotError('The folder changed since review. Sync again before choosing.')
+                native = bridge.desktop_document_plan(link, chosen[0], chosen[1]) if paper else {
+                    'parent': {**record, 'name': chosen[0], 'parentCollection': chosen[1]}, 'files': []}
+                if side == 'desktop':
+                    native['parent'] = record
+                    for entry in native['files']:
+                        entry['filename'] = entry['before_filename']
+                intent = {'record_before': record, 'native': native,
+                          'cloud': cloud_change_intent(cloud, item, chosen[0], mappings[chosen[1]]['cloud']),
+                          'cloud_peer_hash': item.hash}
+                if legacy_done:
+                    intent['cloud']['after_hash'] = item.hash
+                self.review.begin(identity, digest, {'side': side, 'conflict_change': intent})
+
+            def native_value(value):
+                return fingerprint({key: item for key, item in value.items() if key != 'version'})
+
+            before, target = intent['record_before'], intent['native']['parent']
+            if side == 'desktop':
+                if record != before:
+                    raise PilotError('The desktop changed while resolving this conflict. Its newer changes were retained.')
+            elif native_value(record) not in {native_value(before), native_value(target)}:
+                raise PilotError('The desktop changed while resolving this conflict. Its newer changes were retained.')
+            native_done = native_value(record) == native_value(target)
+            for entry in intent['native']['files']:
+                attachment = client.get('item', entry['key'])
+                path = client.file_path(entry['key'])
+                name = (attachment or {}).get('filename') or path.name
+                if (not attachment or attachment.get('deleted') or attachment.get('parentItem') != payload['zotero']
+                        or hashlib.md5(path.read_bytes()).hexdigest() != entry['md5']
+                        or name not in {entry['before_filename'], entry['filename']}):
+                    raise PilotError('A desktop PDF changed while resolving this conflict. Its files were retained.')
+                native_done = native_done and name == entry['filename']
             if side == "desktop":
-                mappings = self.state.read("folders", {})
-                self.cloud().update_item(item.id, expected_hash=item.hash, name=chosen[0], parent=mappings[chosen[1]]["cloud"], scope_id=self.config["tablet_root"])
+                change = intent['cloud']
+                if not cloud_change_done(cloud, item, change):
+                    item = cloud.update_item(item.id, expected_hash=change['before_hash'],
+                        name=change['name'], parent=change['parent'], scope_id=self.config['tablet_root'])
+                change['after_hash'] = item.hash
+                self.review.checkpoint(identity, conflict_change=intent)
             else:
-                if paper:
-                    Bridge(client, self.cloud(), self.state, self.config["zotero_root"], self.config["tablet_root"]).set_desktop_document(link, chosen[0], chosen[1], self.state.read("folders", {}))
-                else:
-                    record["name"], record["parentCollection"] = chosen
-                    client.update_collection(record)
+                if item.hash != intent['cloud_peer_hash']:
+                    raise PilotError('The tablet changed while resolving this conflict. Its newer changes were retained.')
+                if not native_done:
+                    target = {**target, 'version': record.get('version', 0)}
+                    if paper:
+                        bridge.set_desktop_document(link, chosen[0], chosen[1], mappings,
+                            plan={**intent['native'], 'parent': target})
+                    else:
+                        client.update_collection(target)
             if paper:
-                mappings = self.state.read("folders", {})
                 link.update(name=chosen[0], desktop_name=chosen[0], collection=chosen[1], tablet_parent=mappings[chosen[1]]["cloud"])
                 self.state.write("documents", links)
+            else:
+                mappings[payload['zotero']].update(name=chosen[0], zparent=chosen[1], cparent=mappings[chosen[1]]['cloud'])
+                self.state.write('folders', mappings)
             self.review.finish(identity)
             return self.status()
         finally:
@@ -1166,12 +1503,54 @@ class Worker:
 
     def dispatch(self, method, params):
         allowed = {"status", "connect", "pair", "folders", "configure", "preview_connection", "preview_disconnect", "disconnect_folder", "pause_sync", "sync", "preview", "approve", "delete_decision", "resolve_conflict", "link", "reindex", "local_delete_decision", "move_link", "scan_library", "import_library", "approve_routine", "tag_context", "set_page_tags", "tag_search", "combine_tag_copies", "remove_unavailable_page_tags"}
-        allowed.update({'paper_tag_candidates', 'suggest_paper_tags', 'save_paper_tags'})
+        allowed.update({'paper_tag_candidates', 'suggest_paper_tags', 'save_paper_tags', 'retry_bulk', 'dismiss_review'})
         if method not in allowed:
             raise PilotError("Unsupported plugin request.")
         if method not in {'status', 'pause_sync', 'preview_disconnect'}:
             self._begin_operation()
         return getattr(self, method)(**params)
+
+
+@contextmanager
+def _periodic_stack_diagnostics(path, *, interval=20):
+    """Optional stack snapshots on an ordinary Python thread holding the GIL."""
+    import traceback
+    stream = Path(path).open('w', encoding='utf-8')
+    stopped = threading.Event()
+    def emit():
+        try:
+            while not stopped.wait(interval):
+                # CPython gh-140815 / gh-140985: the native faulthandler
+                # watchdog can traverse freed frames on the bundled 3.13.1.
+                # Retained Python frames and traceback.print_stack avoid that
+                # unsynchronized native stack walk; never inspect locals.
+                frames = sys._current_frames()
+                try:
+                    stream.write(f'Periodic stack snapshot ({interval:g} seconds)\n')
+                    for identity, frame in sorted(frames.items()):
+                        stream.write(f'\nThread 0x{identity:x}:\n')
+                        traceback.print_stack(frame, file=stream)
+                    stream.flush()
+                finally:
+                    frames.clear()
+                    frame = None
+        except Exception:
+            pass  # Optional diagnostic I/O must not interrupt sync.
+        finally:
+            stream.close()
+    thread = threading.Thread(target=emit, name='Notable stack diagnostics', daemon=True)
+    try:
+        thread.start()
+    except BaseException:
+        stream.close()
+        raise
+    try:
+        yield thread
+    finally:
+        stopped.set()
+        thread.join(timeout=2)
+        # A stalled filesystem may outlast this bound. The thread owns its
+        # stream and closes it on exit, so shutdown never closes beneath it.
 
 
 def main(argv=None, *, worker_factory=Worker):
@@ -1185,12 +1564,20 @@ def main(argv=None, *, worker_factory=Worker):
     # user-entered tags or filenames arriving through the private stdin pipe.
     if hasattr(sys.stdin, 'reconfigure'):
         sys.stdin.reconfigure(encoding='utf-8')
-    debug_stream = None
     if args.debug_stacks:
-        import faulthandler
         args.state.mkdir(parents=True, exist_ok=True)
-        debug_stream = (args.state / "test-worker-stack.log").open("w", encoding="utf-8")
-        faulthandler.dump_traceback_later(20, repeat=True, file=debug_stream)
+    diagnostics = (_periodic_stack_diagnostics(args.state / 'test-worker-stack.log')
+                   if args.debug_stacks else nullcontext())
+    with diagnostics:
+        return _serve(args, worker_factory)
+
+
+def _serve(args, worker_factory):
+    import pymupdf
+    # PyMuPDF caches its message/log streams at import, so redirect_stdout
+    # around dispatch cannot keep its PDF diagnostics off the JSON pipe.
+    pymupdf.set_messages(stream=sys.stderr)
+    pymupdf.set_log(stream=sys.stderr)
     resources = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
     worker = worker_factory(args.state, args.port, resources=resources)
     # NumPy/OpenBLAS's Windows DLL initialization inspects piped stdin. A
@@ -1199,7 +1586,10 @@ def main(argv=None, *, worker_factory=Worker):
     # when handwriting recognition will only be requested later in the session.
     # Upstream: numpy/numpy#24290; modelcontextprotocol/python-sdk#2832.
     if sys.platform == "win32":
-        import numpy  # noqa: F401
+        try:
+            import numpy  # noqa: F401
+        except ModuleNotFoundError:
+            pass
     pending = queue.Queue()
     def read():
         for line in sys.stdin:
@@ -1225,6 +1615,10 @@ def main(argv=None, *, worker_factory=Worker):
     threading.Thread(target=read, daemon=True).start()
     logging.disable(logging.CRITICAL)
     transport = sys.stdout
+    packet_lock = threading.Lock()
+    def send(packet):
+        with packet_lock:
+            write_packet(transport, packet)
     last_links = None
     def progress(message):
         nonlocal last_links
@@ -1235,13 +1629,21 @@ def main(argv=None, *, worker_factory=Worker):
             if signature != last_links:
                 packet['links'] = links
                 last_links = signature
-        write_packet(transport, packet)
+        send(packet)
     worker.progress = progress
     while True:
         request = pending.get()
         if request is None:
             break
         response = {"id": request.get("id")}
+        heartbeat_stop = threading.Event()
+        heartbeat = None
+        if request.get("method") not in {"status", "shutdown"}:
+            def keep_alive():
+                while not heartbeat_stop.wait(15):
+                    send({'event': 'progress', 'message': 'Still working...'})
+            heartbeat = threading.Thread(target=keep_alive, name='Notable transport heartbeat', daemon=True)
+            heartbeat.start()
         try:
             # Third-party diagnostic output must never corrupt the JSON stream.
             with redirect_stdout(sys.stderr):
@@ -1250,12 +1652,16 @@ def main(argv=None, *, worker_factory=Worker):
             if isinstance(error, InterruptedError):
                 worker.last = {"state": "paused", "message": "Sync stopped. Your files and pending reviews were retained."}
                 response["result"] = worker.status()
-                write_packet(transport, response)
+                send(response)
                 continue
             safe = str(error) if isinstance(error, (PilotError, CloudError, ValueError, FileNotFoundError)) else "The operation could not finish. Your files were retained; retry from Notable."
             worker.last = {"state": "needs_attention", "message": safe, "error": type(error).__name__}
             response["error"] = {"message": safe, "type": type(error).__name__}
-        write_packet(transport, response)
+        finally:
+            heartbeat_stop.set()
+            if heartbeat:
+                heartbeat.join(timeout=2)
+        send(response)
 
 
 if __name__ == "__main__":

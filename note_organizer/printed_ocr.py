@@ -23,12 +23,14 @@ class PrintedOCR:
         models = [(name, hashlib.sha256((self.tessdata / (name + ".traineddata")).read_bytes()).hexdigest())
                   for name in language.split("+")]
         self.language, self.dpi, self.cancelled = language, dpi, cancelled
-        self.profile = hashlib.sha256(json.dumps([1, pymupdf.VersionBind, models, dpi]).encode()).hexdigest()
+        self.profile = hashlib.sha256(json.dumps([3, pymupdf.VersionBind, models, dpi]).encode()).hexdigest()
         self.warnings = []
+        self.complete = True
 
     def content(self, path):
         """Return body text per page; cache complete results by PDF/model hashes."""
         data = Path(path).read_bytes()
+        self.complete = False
         digest = hashlib.sha256(data).hexdigest()
         target = self.cache / self.profile / (digest + ".json")
         if target.exists():
@@ -42,6 +44,7 @@ class PrintedOCR:
                         and isinstance(cached["pages"], list) and len(cached["pages"]) == count
                         and all(isinstance(t, str) for t in cached["pages"])):
                     self.warnings = cached["warnings"]
+                    self.complete = True
                     return cached["pages"]
             except (ValueError, KeyError, TypeError):
                 pass  # A corrupt rebuildable cache must not prevent source retrieval.
@@ -59,7 +62,11 @@ class PrintedOCR:
                          for info in page.get_image_info()]
                 large_image = (max(areas, default=0) >= page.rect.get_area() * .45
                                or sum(areas) >= page.rect.get_area() * .75)
-                if large_image:
+                # A screenshot or outlined text may occupy little of an
+                # otherwise empty page. It still needs recognition; genuine
+                # blank pages and small logos beside native text do not.
+                needs_ocr = large_image or (not text.strip() and (bool(areas) or bool(page.get_drawings())))
+                if needs_ocr:
                     rotation = page.rotation
                     try:
                         if page.mediabox.get_area() * (self.dpi / 72) ** 2 > 40_000_000:
@@ -68,8 +75,10 @@ class PrintedOCR:
                         # only this in-memory document, then restore immediately.
                         page.set_rotation(0)
                         tp = page.get_textpage_ocr(language=self.language, dpi=self.dpi,
-                                                  full=False, tessdata=str(self.tessdata))
+                                                  full=not text.strip(), tessdata=str(self.tessdata))
                         text = page.get_text(textpage=tp)
+                    except InterruptedError:
+                        raise
                     except Exception:
                         complete = False
                         warnings.append({"page": index + 1, "reason": "Printed OCR failed; native text retained."})
@@ -79,6 +88,7 @@ class PrintedOCR:
                     warnings.append({"page": index + 1, "reason": "No printed text recognized."})
                 texts.append(text)
         self.warnings = warnings
+        self.complete = complete
         if complete:
             # Rebuildable cache only. An incomplete result must be retried.
             content_sha = hashlib.sha256(json.dumps([texts, warnings], ensure_ascii=False).encode()).hexdigest()

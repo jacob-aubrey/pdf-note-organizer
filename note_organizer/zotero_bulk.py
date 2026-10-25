@@ -12,7 +12,7 @@ import re
 import time
 
 from .remarkable_cloud import atomic_write
-from .zotero_pilot import PilotError, TransportInterrupted
+from .zotero_pilot import PilotError, TransportInterrupted, stable_key
 from .zotero_review import fingerprint
 
 
@@ -64,7 +64,7 @@ def library_index(catalog, documents=None, *, cancelled=lambda: False, cache=Non
     cache = {} if cache is None else cache
     for row in catalog["attachments"]:
         if cancelled():
-            raise PilotError("Stopped. Your files were retained.")
+            raise InterruptedError("Stopped. Your files were retained.")
         path = Path(row["path"])
         try:
             digest = observed_digest(path, cache)
@@ -89,6 +89,31 @@ def candidate_references(info, catalog):
     return [p for p in catalog["parents"].values() if
             (doi_key(p.get("DOI", "")) in dois if doi_key(p.get("DOI", "")) else False)
             or (len(title) >= 18 and title_key(p.get("title", "")) == title)]
+
+
+def ensure_collections(client, root, paths, records):
+    """Reuse native collections, including case variants; persist stable IDs."""
+    result = []
+    for parts in sorted(set(tuple(value) for value in paths)):
+        parent = root
+        for part in parts:
+            if not part or part in {'.', '..'} or any(c in part for c in '\r\n\x00'):
+                raise PilotError('The source folder path is invalid.')
+            siblings = [r for r in records.values() if r.get('parentCollection') == parent and r['name'].casefold() == part.casefold() and not r.get('deleted')]
+            if len(siblings) > 1:
+                raise PilotError('Several sibling collections have the same name. Resolve their folder mapping first.')
+            if siblings:
+                parent = siblings[0]['key']
+                continue
+            key = stable_key('notable-source-folders', 'collection', parent + ':' + part.casefold())
+            existing = client.get('collection', key)
+            if existing and (existing.get('deleted') or existing.get('parentCollection') != parent or existing['name'].casefold() != part.casefold()):
+                raise PilotError('A saved folder identity belongs to a different collection.')
+            record = existing or client.create('collection', {'key': key, 'name': part, 'parentCollection': parent})
+            records[key] = record
+            parent = key
+        result.append(parent)
+    return sorted(set(result))
 
 
 class BulkLibrary:
@@ -181,6 +206,7 @@ class BulkLibrary:
             for digest in collisions:
                 grouped[digest]["issues"].append("Another source file has the same name or title but different content; check the versions.")
             plan = {"id": fingerprint([str(root), collection, time.time_ns()]), "root": str(root),
+                    'server_id': worker.config.get('server_id', ''),
                     "collection": collection, "lookup": bool(lookup), "rows": list(grouped.values()), "failures": failures}
             self.save(plan)
             worker.collections = collections
@@ -188,26 +214,69 @@ class BulkLibrary:
         finally:
             client.close()
 
-    def apply(self, plan_id):
+    def retry(self, plan_id, row_id, *, dismiss=False, root=None, collection=None, lookup=None):
+        plan = self.read()
+        if not plan or plan['id'] != plan_id:
+            raise PilotError('The folder scan changed. Review its current summary first.')
+        row = next((row for row in plan['rows'] if row['id'] == row_id), None)
+        if not row:
+            raise PilotError('This import exception is no longer in the current scan.')
+        if dismiss:
+            row['status'] = 'dismissed'
+            self.save(plan)
+            return self.worker.status()
+        if ((root is not None and Path(root).resolve() != Path(plan['root']).resolve())
+                or (collection is not None and collection != plan['collection'])
+                or (lookup is not None and bool(lookup) != plan['lookup'])):
+            raise PilotError('The import settings changed. Scan again before retrying with these settings.')
+        if plan.get('invalidated') or plan.get('server_id', '') != self.worker.config.get('server_id', ''):
+            raise PilotError('The Zotero instance changed. Scan the folder again before importing.')
+        # Reuse the existing scanner's current content/collision policy; an
+        # exception cannot bypass identity checks just because Retry was clicked.
+        self.scan(plan['root'], plan['collection'], plan['lookup'])
+        refreshed = self.read()
+        selected = next((row for row in refreshed['rows'] if row['id'] == row_id), None)
+        if selected and not selected['issues']:
+            return self.apply(refreshed['id'], row_id=row_id)
+        self.worker.last = {'state': 'needs_review', 'message': 'Rechecked this file. Resolve its current exceptions before importing.'}
+        return self.worker.status()
+
+    def apply(self, plan_id, *, root=None, collection=None, lookup=None, row_id=None):
         worker = self.worker
         plan = self.read()
         if not plan or plan["id"] != plan_id:
             raise PilotError("The folder scan changed. Review its current summary first.")
+        if plan.get('invalidated') or plan.get('server_id', '') != worker.config.get('server_id', ''):
+            raise PilotError('The Zotero instance changed. Scan the folder again before importing.')
+        if ((root is not None and Path(root).resolve() != Path(plan['root']).resolve())
+                or (collection is not None and collection != plan['collection'])
+                or (lookup is not None and bool(lookup) != plan['lookup'])):
+            raise PilotError('The import settings changed. Scan again before importing with these settings.')
         worker.stop.clear()
         client = worker.zotero()
         try:
             catalog = client.review_action("catalog")
             indexed, _ = library_index(catalog, worker.state.read("documents", {}), cancelled=worker.stop.is_set)
-            for number, row in enumerate(plan["rows"], 1):
+            collection_records = {r['key']: r for r in client.collections()}
+            eligible = [row for row in plan['rows'] if not row['issues'] and row['status'] not in {'complete', 'dismissed'}
+                        and (row_id is None or row['id'] == row_id)]
+            for number, row in enumerate(eligible, 1):
                 if worker.stop.is_set():
                     break
-                if row["issues"] or row["status"] == "complete":
-                    continue
-                worker.progress(f'Importing / reusing document {number} of {len(plan["rows"])}…')
+                worker.progress(f'Importing / reusing document {number} of {len(eligible)}…')
                 path = Path(row["path"])
                 try:
                     if not path.resolve(strict=True).is_relative_to(Path(plan["root"])) or digest_file(path) != row["digest"]:
                         raise PilotError("The source changed after scanning. Scan again before importing it.")
+                    source_root = Path(plan['root']).resolve()
+                    relatives = []
+                    for copy in row['copies']:
+                        copied = Path(copy).resolve(strict=True)
+                        if not copied.is_relative_to(source_root) or digest_file(copied) != row['digest']:
+                            raise PilotError('A source copy changed after scanning. Scan again before preserving its folder.')
+                        relatives.append(copied.relative_to(source_root).parent.parts)
+                    homes = ensure_collections(client, plan['collection'], relatives, collection_records)
+                    home = homes[0]
                     matches = indexed.get(row["digest"], [])
                     if len(matches) > 1:
                         raise PilotError("An identical PDF now belongs to several Zotero attachments.")
@@ -217,10 +286,17 @@ class BulkLibrary:
                     if existing:
                         parent_key = existing['data'].get('parentItem')
                         parent = catalog['parents'].get(parent_key, {})
-                        if plan['collection'] in parent.get('collections', []):
-                            # Already stored and filed: nothing needs writing or
-                            # recognizing again. This also reuses a managed view
+                        if parent_key:
+                            # Already stored and filed: no native import or
+                            # citation lookup. Retry idempotent keywords, whose
+                            # earlier write may have been interrupted. Reuse a managed view
                             # whose private original matches this source digest.
+                            worker.apply_document_keywords(client, parent_key, Path(existing['path']), digest=existing['digest'])
+                            parent = client.get('item', parent_key)
+                            wanted = sorted(set(parent.get('collections', [])) | set(homes))
+                            if sorted(parent.get('collections', [])) != wanted:
+                                parent['collections'] = wanted
+                                client.authorize(); client.update(parent)
                             row.update(status='complete', attachment=existing['data']['key'], parent=parent_key)
                             if number % 20 == 0:
                                 self.save(plan)
@@ -231,7 +307,7 @@ class BulkLibrary:
                     row["status"] = "applying"
                     self.save(plan)
                     result = client.review_action("bulk_import", {"source": str(path), "root": plan["root"],
-                        "digest": row["digest"], "md5": digest_file(path, "md5"), "collection": plan["collection"],
+                        "digest": row["digest"], "md5": digest_file(path, "md5"), "collection": home,
                         "existing": existing["data"]["key"] if existing else "",
                         "existing_md5": digest_file(existing["path"], "md5") if existing else "",
                         "lookup": plan["lookup"], "dois": info.get("dois", []), "evidence": info.get("evidence", ""),
@@ -239,20 +315,32 @@ class BulkLibrary:
                     deadline = time.monotonic() + 120
                     while result.get("pending"):
                         if worker.stop.wait(.2):
-                            raise PilotError("Stopped. Zotero may finish the current file; rescan to resume without duplicates.")
+                            raise InterruptedError("Stopped. Zotero may finish the current file; retry to resume without duplicates.")
                         if time.monotonic() > deadline:
                             raise TransportInterrupted("Zotero is still processing this file. The batch is saved; retry to resume without duplicates.")
-                        result = client.review_action("bulk_import_status", {"digest": row["digest"], "collection": plan['collection']})
+                        result = client.review_action("bulk_import_status", {"digest": row["digest"], "collection": home})
                     if result.get("error"):
                         raise PilotError(result["error"])
                     if result.get("issues"):
                         row["issues"].extend(result["issues"])
-                    row.update({"status": "complete", "attachment": result["attachment"], "parent": result["parent"]})
+                    row.update({'attachment': result['attachment'], 'parent': result['parent']})
                     result['reference'] = worker.apply_document_keywords(client, result['parent'], Path(result['path']), digest=row['digest'])
+                    reference = client.get('item', result['parent'])
+                    wanted = sorted(set(reference.get('collections', [])) | set(homes))
+                    if sorted(reference.get('collections', [])) != wanted:
+                        reference['collections'] = wanted
+                        client.authorize(); client.update(reference)
+                    result['reference'] = reference
                     value = {"data": result["data"], "path": result["path"], "digest": row["digest"]}
                     indexed[row["digest"]] = [value]
                     catalog["attachments"].append(value)
                     catalog["parents"][result["parent"]] = result["reference"]
+                    row['status'] = 'complete'
+                except InterruptedError:
+                    row['status'] = 'pending'
+                    self.save(plan)
+                    worker.last = {'state': 'paused', 'message': f'Import paused. {sum(r["status"] == "complete" for r in eligible)} of {len(eligible)} selected documents completed; retry to resume.'}
+                    return worker.status()
                 except TransportInterrupted as error:
                     self.save(plan)
                     worker.last = {'state': 'waiting', 'message': str(error)}
@@ -268,7 +356,15 @@ class BulkLibrary:
                 # Import changes which tablet documents already have a Zotero
                 # counterpart; do not leave the visible review snapshot stale.
                 worker.refresh_review_policy(client, catalog)
-            worker.last = {"state": "ready", "message": "Bulk import saved. Original Windows files remain in place."}
+            completed = sum(row['status'] == 'complete' for row in eligible)
+            held = sum(bool(row['issues']) for row in plan['rows'] if row['status'] != 'dismissed')
+            paused = worker.stop.is_set()
+            worker.last = {'state': 'paused' if paused else 'needs_review' if held else 'ready',
+                           'message': (f'Import paused. {completed} of {len(eligible)} selected documents completed; retry to resume.' if paused else
+                                       f'Bulk import saved: {completed} selected documents completed; {held} held for review. Original Windows files remain in place.')}
+            return worker.status()
+        except InterruptedError:
+            worker.last = {'state': 'paused', 'message': 'Import paused. The batch and original files were retained; retry to resume.'}
             return worker.status()
         finally:
             client.close()

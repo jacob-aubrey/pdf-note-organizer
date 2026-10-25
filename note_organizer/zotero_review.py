@@ -15,6 +15,42 @@ def fingerprint(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+def cloud_change_content(cloud, item):
+    """Identify bytes/metadata a rename or move must leave unchanged."""
+    metadata_file = next((row for row in item.files if row['id'] == item.id + '.metadata'), None)
+    if metadata_file is None:
+        raise PilotError('The tablet metadata is unavailable. Sync before retrying this change.')
+    metadata = json.loads(cloud.blob(metadata_file['hash'], metadata_file['id']))
+    # update_item changes these fields, and always normalizes deleted to bool.
+    metadata = {**metadata, 'deleted': bool(metadata.get('deleted'))}
+    for key in ('visibleName', 'parent', 'lastModified'):
+        metadata.pop(key, None)
+    return fingerprint({'kind': item.kind, 'metadata': metadata,
+                        'files': sorted((row for row in item.files if row['id'] != metadata_file['id']),
+                                        key=lambda row: row['id'])})
+
+
+def cloud_change_intent(cloud, item, name, parent):
+    return {'cloud': item.id, 'before_hash': item.hash, 'name': name, 'parent': parent,
+            'content': cloud_change_content(cloud, item)}
+
+
+def cloud_change_done(cloud, item, intent):
+    """Recover our exact target without replaying onto an independent edit."""
+    if not item or item.deleted or item.id != intent.get('cloud'):
+        raise PilotError('The tablet document is unavailable. Its saved filing was retained.')
+    if intent.get('after_hash'):
+        if item.hash == intent['after_hash']:
+            return True
+        raise PilotError('The tablet document changed after filing. Its newer changes were retained; review its current state before retrying.')
+    target = item.name == intent['name'] and item.parent == intent['parent']
+    if item.hash == intent['before_hash']:
+        return target
+    if target and cloud_change_content(cloud, item) == intent['content']:
+        return True  # A successful response was lost; no write is needed.
+    raise PilotError('The tablet document changed while filing was interrupted. Its newer changes were retained; review its current state before retrying.')
+
+
 class ReviewStore(Ledger):
     def __init__(self, directory):
         super().__init__(directory)
@@ -39,7 +75,10 @@ class ReviewStore(Ledger):
         return [{**dict(row), "payload": json.loads(row["payload"])} for row in rows]
 
     def confirm_zotero_deleted(self, item, link, record):
-        if not item or item.deleted or not record or not record.get("deleted"):
+        if not item or item.deleted or not record:
+            return
+        if not record.get('deleted'):
+            self.observe_zotero_live(item.id, record)
             return
         key = fingerprint(["zotero-trash", item.id, item.hash, record["key"]])[:24]
         payload = {"cloud": item.id, "cloud_hash": item.hash, "title": link["name"], "key": record["key"]}
@@ -48,6 +87,16 @@ class ReviewStore(Ledger):
                 if json.loads(old["payload"])["cloud"] == item.id:
                     db.execute("UPDATE local_deletions SET status='resolved',action='superseded' WHERE id=?", (old["id"],))
             db.execute("INSERT OR IGNORE INTO local_deletions VALUES(?,?,'pending','')", (key, json.dumps(payload)))
+
+    def observe_zotero_live(self, cloud_id, record):
+        """A native Undo/restore resolves only the notice for that exact item."""
+        if not record or record.get('deleted'):
+            return
+        with self.connect() as db:
+            for row in db.execute("SELECT id,payload FROM local_deletions WHERE status!='resolved'").fetchall():
+                payload = json.loads(row['payload'])
+                if payload['cloud'] == cloud_id and payload['key'] == record.get('key'):
+                    db.execute("UPDATE local_deletions SET status='resolved',action='restored_in_zotero' WHERE id=?", (row['id'],))
 
     def observe_live(self, item):
         if not item or item.deleted or item.parent == "trash":
@@ -120,11 +169,57 @@ class ReviewStore(Ledger):
             rows = db.execute("SELECT * FROM review_queue" + (" WHERE status IN ('pending','applying')" if pending_only else "") + " ORDER BY rowid").fetchall()
         return [{**dict(row), "payload": json.loads(row["payload"]), "approval": json.loads(row["approval"])} for row in rows]
 
-    def reopen(self, identity, expected_digest, payload):
-        """Hold an approved, unpublished action when new evidence makes it unsafe."""
+    def reopen(self, identity, expected_digest, payload, *, applying=False):
+        """Require a fresh decision when new evidence invalidates old consent."""
         with self.connect() as db:
-            db.execute("UPDATE review_queue SET status='pending',payload=?,approval='{}' WHERE id=? AND digest=? AND status='approved'",
-                       (json.dumps(payload), identity, expected_digest))
+            db.execute("UPDATE review_queue SET status='pending',payload=?,approval='{}' WHERE id=? AND digest=? AND status=?",
+                       (json.dumps(payload), identity, expected_digest, 'applying' if applying else 'approved'))
+
+    def dismiss(self, identity, digest):
+        with self.connect() as db:
+            row = db.execute('SELECT digest,status FROM review_queue WHERE id=?', (identity,)).fetchone()
+            if not row or row['digest'] != digest or row['status'] != 'pending':
+                raise PilotError('Only a current pending review can be dismissed. Finish or recover an active filing first.')
+            db.execute("UPDATE review_queue SET status='ignored' WHERE id=?", (identity,))
+
+    def mark_unavailable(self, identity, reason):
+        with self.connect() as db:
+            row = db.execute("SELECT payload FROM review_queue WHERE id=? AND status='pending'", (identity,)).fetchone()
+            if row:
+                payload = {**json.loads(row['payload']), 'unavailable': reason, 'routine': False}
+                db.execute('UPDATE review_queue SET payload=? WHERE id=?', (json.dumps(payload), identity))
+
+    def supersede_inbox(self, path, current_identity):
+        """Keep history, but offer only the current instance of an intake path."""
+        with self.connect() as db:
+            rows = db.execute("SELECT id,identity,payload FROM review_queue WHERE kind='inbox' AND status='pending'").fetchall()
+            for row in rows:
+                if row['identity'] != current_identity and Path(json.loads(row['payload']).get('path', '')).resolve() == Path(path).resolve():
+                    db.execute("UPDATE review_queue SET status='superseded' WHERE id=?", (row['id'],))
+
+    def retire_missing_inbox(self, current_paths):
+        """Retain vanished inputs as history instead of presenting dead approvals."""
+        present = {str(Path(path).resolve()).casefold() for path in current_paths}
+        with self.connect() as db:
+            rows = db.execute("SELECT id,payload FROM review_queue WHERE kind='inbox' AND status='pending'").fetchall()
+            for row in rows:
+                if str(Path(json.loads(row['payload'])['path']).resolve()).casefold() not in present:
+                    db.execute("UPDATE review_queue SET status='unavailable' WHERE id=?", (row['id'],))
+
+    def complete_counterpart(self, kind, identity, digest, payload, approval):
+        """Commit a verified substep atomically, including an already-finished retry.
+
+        The original action owns consent and has rechecked the bytes. A second
+        review journal is bookkeeping, not another user approval gate.
+        """
+        key = fingerprint([kind, identity])[:24]
+        with self.connect() as db:
+            old = db.execute('SELECT digest FROM review_queue WHERE id=?', (key,)).fetchone()
+            if old and old['digest'] != digest:
+                raise PilotError('The matching document changed. Refresh before completing its filing.')
+            db.execute("INSERT INTO review_queue(id,kind,identity,digest,payload,status,approval) VALUES(?,?,?,?,?,'approved',?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,status='approved',approval=excluded.approval",
+                       (key, kind, identity, digest, json.dumps(payload), json.dumps(approval)))
+        return key
 
     def row(self, identity):
         with self.connect() as db:
@@ -133,14 +228,32 @@ class ReviewStore(Ledger):
 
     def begin(self, identity, expected_digest, approval):
         with self.connect() as db:
-            row = db.execute("SELECT digest,status FROM review_queue WHERE id=?", (identity,)).fetchone()
+            row = db.execute("SELECT digest,status,approval FROM review_queue WHERE id=?", (identity,)).fetchone()
             if not row or row[0] != expected_digest or row[1] not in {"pending", "applying"}:
                 raise PilotError("This review changed. Refresh it before approving.")
+            if row['status'] == 'applying':
+                previous = json.loads(row['approval'])
+                if any(key in previous and previous[key] != value for key, value in approval.items()):
+                    raise PilotError('This filing is being recovered with its saved choices. Finish it before changing those choices.')
+                approval = {**previous, **approval}
             db.execute("UPDATE review_queue SET status='applying',approval=? WHERE id=?", (json.dumps(approval), identity))
+
+    def checkpoint(self, identity, **changes):
+        """Advance an existing action journal without replacing its consent."""
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute("SELECT approval FROM review_queue WHERE id=? AND status='applying'", (identity,)).fetchone()
+            if not row:
+                raise PilotError('This filing changed before its recovery step could be saved.')
+            approval = {**json.loads(row['approval']), **changes}
+            db.execute('UPDATE review_queue SET approval=? WHERE id=?', (json.dumps(approval), identity))
+        return approval
 
     def finish(self, identity, *, approval=None):
         with self.connect() as db:
             if approval is not None:
+                row = db.execute('SELECT approval FROM review_queue WHERE id=?', (identity,)).fetchone()
+                approval = {**(json.loads(row['approval']) if row else {}), **approval}
                 db.execute("UPDATE review_queue SET approval=? WHERE id=?", (json.dumps(approval), identity))
             db.execute("UPDATE review_queue SET status='approved' WHERE id=? AND status='applying'", (identity,))
 
@@ -178,7 +291,7 @@ class ReviewStore(Ledger):
             rows = db.execute("SELECT * FROM deletion_decisions" + (" WHERE status!='resolved'" if pending_only else "") + " ORDER BY rowid").fetchall()
         return [{**dict(row), "payload": json.loads(row["payload"]), "result": json.loads(row["result"])} for row in rows]
 
-    def resolve_deletion(self, identity, action, *, cloud, zotero, scope):
+    def resolve_deletion(self, identity, action, *, cloud, zotero, scope, destination=''):
         if action not in {"restore", "pdf_only", "everything"}:
             raise PilotError("Choose Restore, Delete PDF only, or Delete everything.")
         with self.lock():
@@ -189,20 +302,30 @@ class ReviewStore(Ledger):
                 if row["action"] != action:
                     raise PilotError("This deletion already has a different recorded decision.")
                 return row["result"]
-            if row["action"] and row["action"] != action:
-                raise PilotError("A different deletion action is being recovered. Refresh its status.")
             data = row["payload"]
-            item = next((r for r in cloud.library() if r.id == data["cloud"]), None)
+            catalog = cloud.library()
+            item = next((r for r in catalog if r.id == data["cloud"]), None)
+            # A prior restore that demonstrably did not commit can be changed.
+            if row['action'] and row['action'] != action:
+                if not (row['action'] == 'restore' and item and item.hash == data['cloud_hash'] and (item.deleted or item.parent == 'trash')):
+                    raise PilotError('A different deletion action is being recovered. Refresh its status.')
+            if action == 'restore' and destination:
+                data = {**data, 'restore_parent': destination}
             # Recognize an interrupted, already-completed restore by its recorded
             # destination. Other newer cloud edits require a fresh decision.
             restored = action == "restore" and row["status"] == "applying" and item and not item.deleted and item.parent == data["restore_parent"]
             if not restored and (not item or item.hash != data["cloud_hash"] or not (item.deleted or item.parent == "trash")):
                 raise PilotError("The tablet item changed since this notification. Refresh before deciding.")
+            if action == 'restore' and not restored:
+                from .zotero_bridge import descendants
+                folders = [r for r in catalog if r.kind == 'CollectionType']
+                live = descendants(folders, scope, lambda r: r.id, lambda r: r.parent,
+                                   unavailable={r.id for r in folders if r.deleted})
+                if not data.get('restore_parent') or data['restore_parent'] not in live:
+                    raise PilotError('Choose a live destination inside the connected tablet folder before restoring this paper.')
             with self.connect() as db:
-                db.execute("UPDATE deletion_decisions SET status='applying',action=? WHERE id=?", (action, identity))
+                db.execute("UPDATE deletion_decisions SET status='applying',action=?,payload=? WHERE id=?", (action, json.dumps(data), identity))
             if action == "restore":
-                if not data["restore_parent"]:
-                    raise PilotError("Choose a live destination before restoring this paper.")
                 if not restored:
                     cloud.update_item(item.id, expected_hash=item.hash, parent=data["restore_parent"], scope_id=scope, restore=True)
             else:

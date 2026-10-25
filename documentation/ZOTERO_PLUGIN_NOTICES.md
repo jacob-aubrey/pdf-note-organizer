@@ -5,7 +5,7 @@ Zotero itself is installed separately and is AGPL-3.0-or-later:
 https://github.com/zotero/zotero
 
 The managed worker includes PyMuPDF (AGPL-3.0), rmscene (MIT), Pyzotero
-(BlueOak-1.0.0), Pillow (HPND), pypdf (BSD-3-Clause), fontTools (MIT),
+(BlueOak-1.0.0), Pillow (MIT-CMU), pypdf (BSD-3-Clause), fontTools (MIT),
 python-docx (MIT), RapidOCR (Apache-2.0), ONNX Runtime (MIT), and their
 runtime dependencies including NumPy (BSD-3-Clause) and OpenCV (Apache-2.0).
 Installed distribution metadata, available license files

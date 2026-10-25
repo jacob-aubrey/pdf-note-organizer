@@ -1,6 +1,6 @@
-# Deferred plugin updates
+# Plugin follow-up status
 
-## Import progress should count the selected routine batch
+## Import progress counts the selected routine batch — fixed October 24, 2026
 
 Recorded October 23, 2026. The user explicitly deferred this as nonurgent.
 
@@ -10,6 +10,7 @@ the full scanned plan. For example, a 489-file routine batch displays a total
 of 573, including 84 held-back cases. The importer skips those cases; the
 display does not represent additional import authorization.
 
-Later, make the current position and total reflect the eligible work in that
-invocation, including resumed batches. Keep skipped cases separate, preserve
-all existing checks, and test mixed routine/exception/completed plans.
+The scheduled repair now counts only eligible, unfinished work in the active
+invocation, including resumed batches. Held cases remain separate. Mixed
+routine/exception/completed plans have targeted regression coverage; see
+`SCHEDULED_REPAIR_2026-10-24.md` for the session results and remaining limits.

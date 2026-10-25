@@ -1,0 +1,18 @@
+[
+  {
+    "mode": "churn",
+    "watchdog": false,
+    "code": 3221225477,
+    "stdout": "{\"mode\": \"churn\", \"watchdog\": false, \"count\": 17117268, \"seconds\": 12.0, \"python\": \"3.13.1 (tags/v3.13.1:0671451, Dec  3 2024, 19:06:28) [MSC v.1942 64 bit (AMD64)]\"}\r\n",
+    "stderr": "Fatal Python error: _enter_buffered_busy: could not acquire lock for <_io.BufferedReader name='<stdin>'> at interpreter shutdown, possibly due to daemon threads\nPython runtime state: finalizing (tstate=0x00007ffc0c391da0)\n\nCurrent thread 0x00002714 (most recent call first):\n  <no Python frame>\n",
+    "stack_bytes": 0
+  },
+  {
+    "mode": "churn",
+    "watchdog": true,
+    "code": 3221225477,
+    "stdout": "{\"mode\": \"churn\", \"watchdog\": true, \"count\": 22224022, \"seconds\": 12.0, \"python\": \"3.13.1 (tags/v3.13.1:0671451, Dec  3 2024, 19:06:28) [MSC v.1942 64 bit (AMD64)]\"}\r\n",
+    "stderr": "Fatal Python error: _enter_buffered_busy: could not acquire lock for <_io.BufferedReader name='<stdin>'> at interpreter shutdown, possibly due to daemon threads\nPython runtime state: finalizing (tstate=0x00007ffc0c391da0)\n\nCurrent thread 0x00001de0 (most recent call first):\n  <no Python frame>\n",
+    "stack_bytes": 761162
+  }
+]

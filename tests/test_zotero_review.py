@@ -115,6 +115,26 @@ class ReviewDecisionTests(unittest.TestCase):
         self.assertFalse(next(i for i in self.cloud.library() if i.id == self.paper.id).deleted)
         self.zot.review_action.assert_not_called()
 
+    def test_missing_restore_destination_does_not_commit_unrecoverable_action(self):
+        self.link['tablet_parent'] = 'missing-folder'
+        key, _ = self.deleted()
+        with self.assertRaisesRegex(PilotError, 'live destination'):
+            self.store.resolve_deletion(key, 'restore', cloud=self.cloud, zotero=self.zot, scope=self.root.id)
+        row = self.store.deletions()[0]
+        self.assertEqual((row['status'], row['action']), ('pending', ''))
+        self.store.resolve_deletion(key, 'pdf_only', cloud=self.cloud, zotero=self.zot, scope=self.root.id)
+        self.assertEqual(self.store.deletions(), [])
+
+    def test_legacy_failed_restore_can_change_choice_or_select_new_destination(self):
+        self.link['tablet_parent'] = 'missing-folder'
+        key, _ = self.deleted()
+        with self.store.connect() as db:
+            db.execute("UPDATE deletion_decisions SET status='applying',action='restore' WHERE id=?", (key,))
+        self.store.resolve_deletion(key, 'restore', cloud=self.cloud, zotero=self.zot,
+                                    scope=self.root.id, destination=self.root.id)
+        self.assertEqual(self.store.deletions(), [])
+        self.assertFalse(next(item for item in self.cloud.library() if item.id == self.paper.id).deleted)
+
     def test_pdf_only_and_everything_remain_distinct_native_trash_actions(self):
         for action in ("pdf_only", "everything"):
             with self.subTest(action=action), tempfile.TemporaryDirectory() as temporary:

@@ -1,0 +1,30 @@
+{
+  "observed_at_utc": "2026-10-25T17:56:07.914799+00:00",
+  "cloud_read_only": true,
+  "catalog_items": 758,
+  "active_pdfs": 512,
+  "expected_newly_uploaded_identities": 43,
+  "present_active_cloud_identities": 43,
+  "cloud_pdf_blob_digests_match": 43,
+  "fresh_remote_blob_samples": [
+    {
+      "bytes": 254562,
+      "sha256_matches": true
+    },
+    {
+      "bytes": 647662,
+      "sha256_matches": true
+    },
+    {
+      "bytes": 709033,
+      "sha256_matches": true
+    }
+  ],
+  "all_uploaded_mapping_identities": 454,
+  "all_uploaded_mapping_identities_present_active": 454,
+  "all_uploaded_mapping_pdf_digests_match": 454,
+  "limits": [
+    "Metadata checks cover the 43 uploaded identities, blob byte checks are sampled.",
+    "This does not establish a physical tablet download or fresh pen-stroke round trip."
+  ]
+}

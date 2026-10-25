@@ -1,0 +1,42 @@
+ M .github/workflows/validate.yml
+ M documentation/ZOTERO_PLUGIN.md
+ M documentation/ZOTERO_PLUGIN_BACKLOG.md
+ M documentation/ZOTERO_PLUGIN_NOTICES.md
+ M note_organizer/printed_ocr.py
+ M note_organizer/remarkable_cloud.py
+ M note_organizer/remarkable_pdf.py
+ M note_organizer/sorting/core_logic.py
+ M note_organizer/sorting/presentation_extraction.py
+ M note_organizer/zotero_bridge.py
+ M note_organizer/zotero_bulk.py
+ M note_organizer/zotero_connections.py
+ M note_organizer/zotero_pilot.py
+ M note_organizer/zotero_review.py
+ M note_organizer/zotero_tagging.py
+ M note_organizer/zotero_tags.py
+ M note_organizer/zotero_worker.py
+ M tests/test_printed_ocr.py
+ M tests/test_render_audit.py
+ M tests/test_sorting_presentation_extraction.py
+ M tests/test_sorting_smart_metadata_integration.py
+ M tests/test_zotero_review.py
+ M tests/test_zotero_supporting_information.py
+ M tests/test_zotero_tags.py
+ M tests/test_zotero_transport.py
+ M tests/test_zotero_worker.py
+ M tools/test_zotero_plugin_live.py
+ M zotero-support/library.js
+ M zotero-support/manifest.json
+ M zotero-support/ui.js
+?? documentation/SCHEDULED_REPAIR_2026-10-24.md
+?? documentation/audits/
+?? tests/test_remarkable_pdf_repair.py
+?? tests/test_zotero_082_repairs.py
+?? tests/test_zotero_083_progress.py
+?? tests/test_zotero_audit_repairs.py
+?? tests/test_zotero_bridge_recovery.py
+?? tests/test_zotero_live_transport.py
+?? tests/test_zotero_publication_recovery.py
+?? tests/test_zotero_recovery_regressions.py
+?? tools/test_zotero_library_recovery.cjs
+?? tools/test_zotero_ui_recovery.cjs

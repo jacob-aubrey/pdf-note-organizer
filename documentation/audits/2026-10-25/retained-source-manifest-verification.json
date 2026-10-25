@@ -1,0 +1,28 @@
+{
+  "scope": "Read-only stopped-state SQLite copy plus retained manifest metadata; no live database access",
+  "received_revision": 147,
+  "retained_source_manifest_receipts": {
+    "checked": true,
+    "mapping_revision_history_present": 7,
+    "present": 147,
+    "selected_latest_manifest_fallback": 140,
+    "mapping_revision_matches_selected_source": 7,
+    "mapping_revision_differs_from_selected_source": 140,
+    "different_revision_with_completed_tag_state": 140,
+    "manifest_identity_matches": 147,
+    "selected_source_revision_history_present": 147,
+    "baseline_matches": 147,
+    "baseline_file_present": 147,
+    "layers_file_present": 147,
+    "self_hash_valid": 147
+  },
+  "baseline_backup_source_check": {
+    "checked": false,
+    "reason": "Source files were excluded from this baseline backup."
+  },
+  "limits": [
+    "Mapping revisions may advance after cloud tag writes without downloading a new source bundle.",
+    "A completed tag-state receipt is consistent with this difference; it is not independent remote-content verification.",
+    "Manifest self-hashes and referenced-file existence do not validate every current PDF/layer byte or cloud/device state."
+  ]
+}
