@@ -1,0 +1,22 @@
+MuPDF error: syntax error: unknown keyword: 'garbage'
+
+{
+  "scope": "Synthetic disposable Zotero profile only; no cloud calls",
+  "helper": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\zotero-plugin-093-dist\\notable-worker.exe",
+  "helper_sha256": "3d2547dc6c9d3e0c2f443098b6e43897283f1d7e84969c94a1dbfae911136a7d",
+  "fixture": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\sync-diagnostics-20261026\\native093-final",
+  "port": 23175,
+  "zotero_version": "10.0.6",
+  "native_attachment_key": "9B2X8E75",
+  "managed_annotation_read_passed": true,
+  "returncode": 0,
+  "reindex_response_received": true,
+  "following_status_received": true,
+  "actual_native_diagnostic_on_stderr": true,
+  "source_sha256": "4616c75b55a59cd276214b7ad346aedc62eadcfbd99def46744935c7298fb651",
+  "source_unchanged": true,
+  "stored_pdf_unchanged": true,
+  "diagnostics_enabled": true,
+  "launch_message_environment_unset": true,
+  "result": "PASS"
+}

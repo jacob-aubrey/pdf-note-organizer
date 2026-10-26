@@ -11,8 +11,11 @@ import json
 from pathlib import Path
 import re
 import sqlite3
+import time
+import uuid
 from urllib.parse import urlsplit
 from urllib.request import url2pathname
+from .remarkable_cloud import trace_event
 
 INDEX_REVISION = 2
 ZOTERO_REQUEST_TIMEOUT = 30
@@ -123,13 +126,24 @@ class Ledger:
 
     @contextmanager
     def connect(self):
-        db = sqlite3.connect(self.path, timeout=1)
+        callback = getattr(self, 'trace', None)
+        identity, started = uuid.uuid4().hex, time.monotonic()
+        role = self.directory.name if self.directory.name in {'bridge', 'review', 'publisher', 'edition-recovery', 'source-imports'} else 'helper_state'
+        trace_event(callback, 'database_started', request_id=identity, role=role)
         try:
-            db.row_factory = sqlite3.Row
-            with db:
-                yield db
-        finally:
-            db.close()
+            db = sqlite3.connect(self.path, timeout=1)
+            try:
+                db.row_factory = sqlite3.Row
+                with db:
+                    yield db
+            finally:
+                db.close()
+        except Exception as error:
+            trace_event(callback, 'database_failed', request_id=identity, role=role, error_type=type(error).__name__)
+            raise
+        else:
+            trace_event(callback, 'database_finished', request_id=identity, role=role,
+                        duration_ms=round((time.monotonic() - started) * 1000))
 
     @contextmanager
     def lock(self):
@@ -200,7 +214,8 @@ class Ledger:
 
 class LocalZotero:
     """Reuse Pyzotero with localhost pinning and optional encrypted grants."""
-    def __init__(self, port=23119, *, printed_ocr=None, handwriting_ocr=None, grant_store=None, interactive=True):
+    def __init__(self, port=23119, *, printed_ocr=None, handwriting_ocr=None, grant_store=None, interactive=True, trace=None):
+        self.trace = trace
         self.printed_ocr = printed_ocr
         self.handwriting_ocr = handwriting_ocr
         self.index_diagnostics = []
@@ -208,13 +223,15 @@ class LocalZotero:
         try:
             import httpx2
             from pyzotero import Zotero
-        except ImportError:
-            raise PilotError("Install requirements-zotero-pilot.txt in a separate environment.") from None
+        except ImportError as error:
+            self._trace('dependency_missing', module=error.name or 'zotero_runtime', optional=False)
+            raise PilotError("The bundled Zotero integration is incomplete. Repair or reinstall the plugin; ordinary Sync does not require handwriting OCR.") from error
         if not isinstance(port, int) or not 1 <= port <= 65535:
             raise PilotError("Invalid local Zotero port.")
         self.endpoint = f"http://127.0.0.1:{port}/api"
         self.http = httpx2.Client(trust_env=False, timeout=ZOTERO_REQUEST_TIMEOUT, follow_redirects=False, headers={'Connection': 'close'},
                                  event_hooks={"request": [self.guard]})
+        self._trace_client(self.http)
         self.zot = Zotero("0", "user", local=True, client=self.http, upload_timeout=60)
         self.zot.endpoint = self.endpoint
         try:
@@ -249,6 +266,36 @@ class LocalZotero:
         if ((candidate.scheme, candidate.netloc) != (endpoint.scheme, endpoint.netloc)
                 or not candidate.path.startswith("/api/")):
             raise PilotError("Zotero returned a request outside its selected localhost API.")
+
+    def _trace(self, event, **fields):
+        try:
+            callback = getattr(self, 'trace', None)
+            if callback:
+                callback(event, **fields)
+        except Exception:
+            pass
+
+    def _trace_client(self, client):
+        if not getattr(self, 'trace', None):
+            return client
+        original = client.send
+        def send(request, *args, **kwargs):
+            identity, started = uuid.uuid4().hex, time.monotonic()
+            # Path only: no query, headers, credentials or request bodies.
+            self._trace('zotero_request_started', request_id=identity, verb=request.method,
+                        route=urlsplit(str(request.url)).path, timeout_s=ZOTERO_REQUEST_TIMEOUT,
+                        effective_timeouts=request.extensions.get('timeout'), streamed=bool(kwargs.get('stream')))
+            try:
+                result = original(request, *args, **kwargs)
+            except Exception as error:
+                self._trace('zotero_request_failed', request_id=identity, error_type=type(error).__name__,
+                            duration_ms=round((time.monotonic() - started) * 1000))
+                raise
+            self._trace('zotero_request_finished', request_id=identity, status=result.status_code,
+                        duration_ms=round((time.monotonic() - started) * 1000))
+            return result
+        client.send = send
+        return client
 
     def close(self):
         self.http.close()
@@ -341,8 +388,8 @@ class LocalZotero:
             try:
                 # Keep long import polling separate from the SDK connection.
                 # A stale pooled socket must not poison every remaining paper.
-                with httpx2.Client(trust_env=False, timeout=ZOTERO_REQUEST_TIMEOUT, follow_redirects=False,
-                                   event_hooks={'request': [self.guard]}) as connection:
+                with self._trace_client(httpx2.Client(trust_env=False, timeout=ZOTERO_REQUEST_TIMEOUT, follow_redirects=False,
+                                   event_hooks={'request': [self.guard]})) as connection:
                     response = connection.post(self.endpoint + '/notable/action', json={**(payload or {}), 'action': action},
                         headers={'Zotero-Server-ID': self.server_id, 'Zotero-API-Key': self.zot.local_api_key,
                                  'Connection': 'close'})
@@ -355,9 +402,11 @@ class LocalZotero:
                 if response.status_code >= 400:
                     raise PilotError('Zotero could not complete this reviewed action. The original files were retained.')
                 return response.json()
-            except (httpx2.TransportError, ValueError):
+            except (httpx2.TransportError, ValueError) as error:
                 if not retryable or attempt == 2:
+                    self._trace('zotero_action_failed', action=action, attempt=attempt + 1, error_type=type(error).__name__)
                     raise TransportInterrupted('The connection to Zotero was interrupted. The batch is saved; retry to resume without duplicates.') from None
+                self._trace('zotero_retry', action=action, attempt=attempt + 1, delay_s=.25 * 2 ** attempt, error_type=type(error).__name__)
                 time.sleep(.25 * 2 ** attempt)
 
     def file_path(self, key):
@@ -463,8 +512,16 @@ class LocalZotero:
 
     def index(self, key, path, saved_annotations=()):
         self.index_complete = False
+        diagnostic = lambda event, **fields: self._trace(event, attachment_key=key, **fields)
+        diagnostic('index_started')
+        for recognizer in (self.printed_ocr, self.handwriting_ocr):
+            if recognizer is not None:
+                try:
+                    recognizer.diagnostic = diagnostic
+                except Exception:
+                    pass
         text, count, empty_pages = searchable_content(path, saved_annotations, printed_ocr=self.printed_ocr,
-                                                    handwriting_ocr=self.handwriting_ocr)
+                                                    handwriting_ocr=self.handwriting_ocr, diagnostic=diagnostic)
         native_text = self.native_annotation_text(key)
         if native_text:
             text += "\n" + "\n".join(str(row.get(field) or "") for row in native_text for field in ("text", "comment"))
@@ -477,6 +534,7 @@ class LocalZotero:
         self.index_diagnostics.append({"attachment": key, "incomplete": not self.index_complete,
             "printed_ocr": list(self.printed_ocr.warnings) if self.printed_ocr else [],
             "handwriting": list(self.handwriting_ocr.warnings) if self.handwriting_ocr else []})
+        diagnostic('index_finished', pages=count, empty_pages=len(empty_pages))
         return empty_pages
 
     @property
@@ -499,7 +557,7 @@ def checksum_profile(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
 
-def searchable_content(path, saved_annotations=(), *, printed_ocr=None, handwriting_ocr=None):
+def searchable_content(path, saved_annotations=(), *, printed_ocr=None, handwriting_ocr=None, diagnostic=None):
     """Library retrieval includes printed text, quotes, comments and saved OCR.
 
     New machine transcripts require the explicitly selected local recognizer.
@@ -509,10 +567,15 @@ def searchable_content(path, saved_annotations=(), *, printed_ocr=None, handwrit
     import pymupdf
     from .extraction import MARKUP, highlighted_words
     texts, empty = [], []
+    if printed_ocr:
+        trace_event(diagnostic, 'printed_ocr_started')
     recognized = printed_ocr.content(path) if printed_ocr else None
+    if printed_ocr:
+        trace_event(diagnostic, 'printed_ocr_finished', pages=len(recognized))
     with pymupdf.open(path) as document:
         count = len(document)
         for index, page in enumerate(document):
+            trace_event(diagnostic, 'pdf_page_started', page=index + 1, total=count)
             text = recognized[index] if recognized is not None else page.get_text()
             texts.append(text)
             if not text.strip():
@@ -527,10 +590,13 @@ def searchable_content(path, saved_annotations=(), *, printed_ocr=None, handwrit
                         quotation = " ".join(word[4] for word in highlighted_words(page, annotation))
                     if quotation:
                         texts.append(quotation)
+            trace_event(diagnostic, 'pdf_page_finished', page=index + 1, total=count)
     for annotation in saved_annotations:
         texts.extend(str(annotation.get(field) or "") for field in ("quote", "comment", "ocr"))
     if handwriting_ocr:
+        trace_event(diagnostic, 'handwriting_ocr_started')
         texts.extend(handwriting_ocr.content(path))
+        trace_event(diagnostic, 'handwriting_ocr_finished')
     return "\n".join(texts), count, empty
 
 

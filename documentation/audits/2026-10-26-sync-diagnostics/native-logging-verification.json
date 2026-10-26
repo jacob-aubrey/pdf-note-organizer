@@ -1,0 +1,16 @@
+{
+  "first_candidate_xpi_sha256": "0fb14c8caf9a3ac37a27252c0db0afd7c9c4278a29e4df3b381a33342694dc5f",
+  "native_checks": 53,
+  "ui_checks": 30,
+  "rotation_happened": true,
+  "current_log_bytes": 374,
+  "current_records_valid": true,
+  "has_correlated_rpc": true,
+  "has_zotero_request_span": true,
+  "effective_timeouts_sample": {
+    "connect": 30,
+    "read": 30,
+    "write": 30,
+    "pool": 30
+  }
+}

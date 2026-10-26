@@ -112,7 +112,7 @@ class BridgeRecoveryTests(unittest.TestCase):
         self.tablet()
         self.cloud.stop = threading.Event()
 
-        def render(item, bundle, cancelled):
+        def render(item, bundle, cancelled, *, diagnostic=None):
             self.cloud.stop.set()
             self.assertTrue(cancelled())
             raise InterruptedError("cancel inside rendering")

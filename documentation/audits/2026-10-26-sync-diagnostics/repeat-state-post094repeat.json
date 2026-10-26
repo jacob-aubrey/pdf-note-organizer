@@ -1,0 +1,43 @@
+{
+  "observed_at_utc": "2026-10-26T07:48:10.864743+00:00",
+  "read_only": true,
+  "label": "post094repeat",
+  "mapping_count": 456,
+  "publication_count": 454,
+  "selected_state_sha256": "fd0c87f134e9b79d67539c602e23f996c47045e04fbab90fb7150e8a197ab264",
+  "comparison": {
+    "baseline": "post094first",
+    "documents": {
+      "added": 0,
+      "removed": 0,
+      "changed_rows": 0,
+      "changed_fields": {
+        "source_key": 0,
+        "view_key": 0,
+        "baseline": 0,
+        "rendered": 0,
+        "revision": 0,
+        "page_map_digest": 0,
+        "uploaded": 0,
+        "tag_state": 0,
+        "tag_pending": 0
+      }
+    },
+    "publications": {
+      "added": 0,
+      "removed": 0,
+      "changed_rows": 0,
+      "changed_fields": {
+        "source": 0,
+        "parent": 0,
+        "attachment": 0,
+        "md5": 0,
+        "pending_md5": 0,
+        "indexed_sha": 0,
+        "published": 0
+      }
+    },
+    "review_unchanged": true,
+    "config_unchanged": true
+  }
+}

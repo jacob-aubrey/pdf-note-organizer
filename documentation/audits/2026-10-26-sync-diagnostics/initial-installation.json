@@ -1,0 +1,135 @@
+{
+  "observed_at_utc": "2026-10-26T04:01:43.032216+00:00",
+  "head": "2f06ac2bed28a569bed56a64f8ceccb47f2e886e",
+  "branch": "main",
+  "version": "0.9.0",
+  "active": true,
+  "xpi_sha256": "8f4723f31621df8497ba3e622fae3b4d344c8c58048912ba5f284b1f17f6f837",
+  "runtime_manifest": {
+    "files": [
+      {
+        "md5": "2f765f965add6a0b1e9b4a2e708325b4",
+        "path": "notable-worker.exe"
+      }
+    ],
+    "id": "f7de24d65a0bb251a7bad42e"
+  },
+  "cached_helper": "C:\\Users\\jdaub\\AppData\\Roaming\\Zotero\\Zotero\\Profiles\\9v5afvrs.default\\notable\\runtime\\f7de24d65a0bb251a7bad42e\\notable-worker.exe",
+  "cached_helper_exists": true,
+  "packaged_helper_sha256": "5107166d225f51b81bce9dd6670674790102b105ab315360ded130bceaad4b76",
+  "cached_helper_sha256": "5107166d225f51b81bce9dd6670674790102b105ab315360ded130bceaad4b76",
+  "frontend_equal_current_source": true,
+  "snapshot_location": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\sync-diagnostics-20261026\\initial",
+  "preserved_files": [
+    {
+      "path": "extensions/notable-companion@local.invalid.xpi",
+      "bytes": 76444785,
+      "sha256": "8f4723f31621df8497ba3e622fae3b4d344c8c58048912ba5f284b1f17f6f837"
+    },
+    {
+      "path": "extensions.json",
+      "bytes": 2043,
+      "sha256": "75aea3f13cd3d22f96c084c8f2b4d5eaea3086256732caeb2c598e60c89cdf87"
+    },
+    {
+      "path": "prefs.js",
+      "bytes": 7609,
+      "sha256": "9c57958650d93e71d2adf371a97a5a6451838207c551a225547d9200572fc144"
+    },
+    {
+      "path": "notable\\config.json",
+      "bytes": 684,
+      "sha256": "496bb63a3018111466e2b6017293fc33edf7bba98d5c959dea37192b464b0f68"
+    },
+    {
+      "path": "notable\\filing-queue.json",
+      "bytes": 25,
+      "sha256": "a03b0c4895e01cbc43d6be58d399149d1db843cd4e9167cd2a610b2a2d87fd91"
+    },
+    {
+      "path": "notable\\sync-trace.jsonl",
+      "bytes": 276629,
+      "sha256": "29aa056bc9cccd4e376618edf6c1b4f54f9550e41ff34d5e6e787666b1f0b8d2"
+    },
+    {
+      "path": "notable\\sync-transport.jsonl",
+      "bytes": 1024,
+      "sha256": "7216b519391031e16320cd0420df57301d1c3b839ece72c75ca666bbc70b16cb"
+    },
+    {
+      "path": "notable\\tablet-token.dpapi",
+      "bytes": 614,
+      "sha256": "2ca214cb1074214565966e232ddb420471f8c60d4d150f53a5d2361c18119e41"
+    },
+    {
+      "path": "notable\\test-worker-stack.log",
+      "bytes": 203680,
+      "sha256": "1b71866ede78f7da13cc023ef7d25bbdb7806da919523af476d6b86e90687af1"
+    },
+    {
+      "path": "notable\\zotero-grant.dpapi",
+      "bytes": 294,
+      "sha256": "2a7e049f4677393a92accd56cd0259a343875ac048d2829dc3871a82df6127f4"
+    },
+    {
+      "path": "notable\\bridge\\pilot.sqlite3",
+      "bytes": 1044480,
+      "sha256": "76808cc6714fe8e47ea5942465d48d2ec382716640cf32cb05bd3890a93dfcc1"
+    },
+    {
+      "path": "notable\\bridge\\run-lock.sqlite3",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "notable\\bridge\\run-lock.sqlite3-journal",
+      "bytes": 512,
+      "sha256": "eac1c091df096274cd881a354744c95798fb08a5047d0c02af3acc4e27a85910"
+    },
+    {
+      "path": "notable\\edition-recovery\\pilot.sqlite3",
+      "bytes": 49152,
+      "sha256": "e5b99c6be7f99923475ac5e6256d97f5bf80cdbcbcc848561af0b94f933b046c"
+    },
+    {
+      "path": "notable\\edition-recovery\\run-lock.sqlite3",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "notable\\review\\pilot.sqlite3",
+      "bytes": 2924544,
+      "sha256": "e09e6ef6b7c4ede7e56468da7e609650d94e9396a70a04c0a19375d8ef989d16"
+    },
+    {
+      "path": "notable\\recovery\\wrong-folder-2026-10-22\\bridge\\pilot.sqlite3",
+      "bytes": 49152,
+      "sha256": "a8761e02ddfb7a41577a01bbce92474fd668440a6ecb1474e495d57963c56a46"
+    },
+    {
+      "path": "notable\\recovery\\wrong-folder-2026-10-22\\bridge\\run-lock.sqlite3",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "notable\\recovery\\wrong-folder-2026-10-22\\review\\pilot.sqlite3",
+      "bytes": 131072,
+      "sha256": "5e966a9657cb2ef2b34476516ffabd5eb0c4e77616292900aae0ac0ec4d346af"
+    },
+    {
+      "path": "notable\\recovery\\wrong-folder-2026-10-22\\bridge\\publisher\\pilot.sqlite3",
+      "bytes": 40960,
+      "sha256": "dca039bbeeb789c0469e2bffeabc8092e1db5e392ff85066b7716b3de12dffda"
+    },
+    {
+      "path": "notable\\bridge\\publisher\\pilot.sqlite3",
+      "bytes": 237568,
+      "sha256": "e7d56ea0651845cf25f188e805a6b7b77400ccd2903c415f5ddb91670942715e"
+    },
+    {
+      "path": "notable\\bridge\\publisher\\run-lock.sqlite3",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

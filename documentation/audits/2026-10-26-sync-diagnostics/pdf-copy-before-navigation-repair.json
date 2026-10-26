@@ -1,0 +1,22 @@
+{
+  "mode": "current",
+  "duration_s": 7.509,
+  "source_pages": 541,
+  "output_pages": 541,
+  "source_bytes": 22342650,
+  "source_sha256": "9c0ea2e831e662a687d267dd9bb2d50ea743e58271e90b96a4fac4d585288e04",
+  "output_bytes": 23937471,
+  "all_pages_compared": 541,
+  "comparison_dpi": 36,
+  "identity_page_map": true,
+  "navigation_toc_equal": false,
+  "mismatch_counts": {
+    "pixels": 0,
+    "text": 0,
+    "geometry": 0,
+    "links": 485
+  },
+  "output_annotation_types": {},
+  "source_archive_sha256": "bed07b32a73b211ec856e71a5b59c01e4e7d57bcdb59f3e756debae255702da9",
+  "source_unmodified": true
+}

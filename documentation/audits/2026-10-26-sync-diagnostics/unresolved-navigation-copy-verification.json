@@ -1,0 +1,240 @@
+{
+  "scope": "Offline immutable copies; no cloud/library writes, target guesses or text export",
+  "tested_documents": 26,
+  "results": [
+    {
+      "tablet_key": "04bfa418-8d11-556d-9101-ed6e6657ef77",
+      "pages": 6,
+      "printed_text_equal": true,
+      "unresolved_links": 4,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "099f34a4d54606adf6a7997309f212079095185ef3d00cac639e54334fb78cfb"
+    },
+    {
+      "tablet_key": "05924440-0615-517f-82ef-e38720d19d4e",
+      "pages": 11,
+      "printed_text_equal": true,
+      "unresolved_links": 4,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "f2acb92a1d9436e015ce7938ad41a0959ff17e6732f2326aea1e981ecc5d9af3"
+    },
+    {
+      "tablet_key": "0e6c6120-c93c-5a6c-b33d-ab183ce013d2",
+      "pages": 17,
+      "printed_text_equal": true,
+      "unresolved_links": 2,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "a11b0d797e0bc2a1a64a9c956f1f21728dd488ee162a1a5cc6f0d0648b1b24e9"
+    },
+    {
+      "tablet_key": "0f267a92-70e1-5966-a3f1-63bb5d1a4e6b",
+      "pages": 9,
+      "printed_text_equal": true,
+      "unresolved_links": 106,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "d7ab5a8e304ee2a16c9f7b706f849ab1f7b19284354674845edbceac988df6ca"
+    },
+    {
+      "tablet_key": "11a174ef-65a8-5b83-83e4-ec9b1f029d8a",
+      "pages": 12,
+      "printed_text_equal": true,
+      "unresolved_links": 18,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "56d3669722c6969c1ff9811c067d25bff6f5d40534befe13d293e0a00af08377"
+    },
+    {
+      "tablet_key": "13ba5b77-910a-524f-9ce4-71c4973a5fc3",
+      "pages": 36,
+      "printed_text_equal": true,
+      "unresolved_links": 1,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "9f4877996cc0df39fbea40892a349b7942456bf25dede83b29325492d6528d70"
+    },
+    {
+      "tablet_key": "156cdeb8-b513-5813-bc88-9da0ba80abbd",
+      "pages": 11,
+      "printed_text_equal": true,
+      "unresolved_links": 4,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "78aca7fccc16bcabad46207151766997b2d91cfd767fbf78dc8e42bc37e1e018"
+    },
+    {
+      "tablet_key": "160f0718-2e3f-5474-8781-6b9bb307fef1",
+      "pages": 8,
+      "printed_text_equal": true,
+      "unresolved_links": 7,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "8d3c85ece806857b494d7b81f164c7b92a117a96db736e4b0a45e16c2996dcd4"
+    },
+    {
+      "tablet_key": "1f409efd-dfb5-5f1f-b668-0362865404dd",
+      "pages": 5,
+      "printed_text_equal": true,
+      "unresolved_links": 32,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "10b72d13a3570381315e8b25620045bfb513325df48105391b45ca6dbd5097d0"
+    },
+    {
+      "tablet_key": "1f462534-1947-5704-a8ee-e50ca39b6781",
+      "pages": 11,
+      "printed_text_equal": true,
+      "unresolved_links": 13,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "1860012b8fc5a5f13e9c3ae8c7eb99640ea745961f41835cff7fff7a423923ba"
+    },
+    {
+      "tablet_key": "22204f98-0a47-5199-8aae-3adf5a26dd93",
+      "pages": 16,
+      "printed_text_equal": true,
+      "unresolved_links": 3,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "89dd8e9df6cd76f05636fce53dfe9838c2f3688e20a8610c9c7f333740ed645e"
+    },
+    {
+      "tablet_key": "223eeff2-388c-5a19-bfc9-62d7cc77a649",
+      "pages": 35,
+      "printed_text_equal": true,
+      "unresolved_links": 171,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "d522d63564cab7665708fd2d6c967d966cf73c58ad673767b6dd4298070b7703"
+    },
+    {
+      "tablet_key": "2adfeffc-0928-4359-8592-d3b6eeef50ec",
+      "pages": 17,
+      "printed_text_equal": true,
+      "unresolved_links": 4,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "7420b38432f4ff348713723ac3b8eef64d4ce4d9babac5d48ee444c6b3e868cb"
+    },
+    {
+      "tablet_key": "2d9b37ea-195e-5d64-9767-a2a88de18d20",
+      "pages": 14,
+      "printed_text_equal": true,
+      "unresolved_links": 1,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "0b81eabf7a6ccc7fc2739732c067bfc064fbdba92f0e8b8338debcd41fb72589"
+    },
+    {
+      "tablet_key": "30b8c41e-e255-59dd-89ef-8e07a3039a09",
+      "pages": 11,
+      "printed_text_equal": true,
+      "unresolved_links": 99,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "78d307bc4e86d0b05e6dd2834d7b2b2445656805fcc7d2a4f138f34eb7ff1997"
+    },
+    {
+      "tablet_key": "31fb7624-4783-54cf-a080-e568e00b1eb3",
+      "pages": 11,
+      "printed_text_equal": true,
+      "unresolved_links": 1,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "f2a2ff87b03f3df883ca76c197fe769ccbb8ca0c6ca7609ab031df7a495f6676"
+    },
+    {
+      "tablet_key": "32726421-5ac2-41f9-91aa-8fb440b83ec1",
+      "pages": 4,
+      "printed_text_equal": true,
+      "unresolved_links": 21,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "ad97e58a2d39dd55311bf07c522ab4717f1992a11d7534649703a71d9c7c18d4"
+    },
+    {
+      "tablet_key": "35163f44-a98d-5c19-8f64-8b65a91a112a",
+      "pages": 26,
+      "printed_text_equal": true,
+      "unresolved_links": 1,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "d1495f4ac8102ef896bc277f95f90d18b687cc87a7eabe8080e62f4146a10c77"
+    },
+    {
+      "tablet_key": "370d00e2-0cd6-56df-822b-f0c2a28d33cf",
+      "pages": 14,
+      "printed_text_equal": true,
+      "unresolved_links": 31,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "dbc1aef0edc6b91df6d516f632d29112de1e96ab648be6aee87389a3c96bca56"
+    },
+    {
+      "tablet_key": "39358fbe-5acc-5504-98c2-a8a90e90cff8",
+      "pages": 14,
+      "printed_text_equal": true,
+      "unresolved_links": 7,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "29c7185ea70acdbbd3eaab30c3740a6bc543bd33f6246125d4c789d5c68a6ae5"
+    },
+    {
+      "tablet_key": "3e4d4823-75ad-5941-aabb-8337464162ea",
+      "pages": 16,
+      "printed_text_equal": true,
+      "unresolved_links": 23,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "9494a803b086ee84f0e3bdabe2f7a26a97ff994709d6eb190c9593996872788d"
+    },
+    {
+      "tablet_key": "453551b9-4d53-566a-853f-3a4ba6ab43a9",
+      "pages": 10,
+      "printed_text_equal": true,
+      "unresolved_links": 4,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "a5a7839dfca1970149e9a5e595696f980e1313f735cf7a4df954ce2cdd9bf743"
+    },
+    {
+      "tablet_key": "47f7804f-dc99-4150-b66c-213342096674",
+      "pages": 9,
+      "printed_text_equal": true,
+      "unresolved_links": 20,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "f8d51402139b87ec9a7203f9fef709e5ae79d154734e9132696d8f9ec03743b6"
+    },
+    {
+      "tablet_key": "49be5365-3cfe-5d74-9d30-f676c6753805",
+      "pages": 9,
+      "printed_text_equal": true,
+      "unresolved_links": 14,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "649627e747c57fca72d55562a777a130f052ebb22aa9883cd216c148b2a9d1fc"
+    },
+    {
+      "tablet_key": "4f35bcb2-4221-4599-ab95-6999d3b24817",
+      "pages": 6,
+      "printed_text_equal": true,
+      "unresolved_links": 3,
+      "unresolved_targets_unchanged": true,
+      "warnings": 1,
+      "source_sha256": "3bc88588333849a2cb4c4afef408f4a4bfc51793e650aa340185ad0af8327ff7"
+    },
+    {
+      "tablet_key": "548d4e73-eedf-54ee-863b-0b0298788dc4",
+      "pages": 22,
+      "printed_text_equal": true,
+      "unresolved_links": 0,
+      "unresolved_targets_unchanged": true,
+      "warnings": 0,
+      "source_sha256": "0089e17041990335c7a7c231cccafdb1db0d72a51f98cbcda55bc46a757dd2cf"
+    }
+  ]
+}

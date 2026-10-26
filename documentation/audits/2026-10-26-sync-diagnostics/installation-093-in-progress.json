@@ -1,0 +1,18 @@
+{
+  "time_utc": "2026-10-26T05:53:35.296446+00:00",
+  "version": "0.9.1",
+  "active": true,
+  "xpi_sha256": "aa6276345414382872d65cf32e6c2dfdfcac31acc39c34cc7d7e9a46804b319c",
+  "manifest": {
+    "files": [
+      {
+        "md5": "659920dce1bbcfc8b45e91456c4cb016",
+        "path": "notable-worker.exe"
+      }
+    ],
+    "id": "83ef00169f6583ac7e4fc101"
+  },
+  "cached_exists": true,
+  "cached_helper_sha256": "db434260437f2584f87ca35275d21f073c272b66ab571fe2e3c1f085eab22ede",
+  "frontend_equal": true
+}

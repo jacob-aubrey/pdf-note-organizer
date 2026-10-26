@@ -1,0 +1,5 @@
+Observed 2026-10-26 03:33 EDT / 07:33 UTC in production workspace.
+Sync finished — some links need attention
+57 need review · 3 approved, waiting for sync · 456 linked
+The exact PDF already has a connected tablet copy. Reconcile its Zotero references before sending another copy.
+No review or reconciliation decision made.

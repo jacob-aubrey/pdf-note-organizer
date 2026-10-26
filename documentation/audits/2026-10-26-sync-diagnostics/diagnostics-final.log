@@ -1,0 +1,5 @@
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+----------------------------------------------------------------------
+Ran 13 tests in 6.752s
+
+OK

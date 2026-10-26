@@ -1,0 +1,41 @@
+{
+  "xpi_sha256": "76adc815a221894767a469ad2af1db9af41744ee3cf7a0d304bc38a13555476f",
+  "helper_sha256": "3d2547dc6c9d3e0c2f443098b6e43897283f1d7e84969c94a1dbfae911136a7d",
+  "all_equal": true,
+  "modules": 36,
+  "frontend_files": 31,
+  "health": {
+    "required": {
+      "pyzotero": {
+        "available": true
+      },
+      "httpx2": {
+        "available": true
+      },
+      "httpcore2": {
+        "available": true
+      },
+      "pymupdf": {
+        "available": true
+      },
+      "rmscene": {
+        "available": true
+      },
+      "pypdf": {
+        "available": true
+      }
+    },
+    "optional_ocr": {
+      "rapidocr": {
+        "available": true
+      },
+      "onnxruntime": {
+        "available": true
+      },
+      "numpy": {
+        "available": true
+      }
+    },
+    "sync_ready": true
+  }
+}

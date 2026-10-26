@@ -1,0 +1,28 @@
+[
+  {
+    "ProcessId": 19908,
+    "ParentProcessId": 34708,
+    "KernelModeTime": 24218750,
+    "UserModeTime": 14843750,
+    "ThreadCount": 1,
+    "ReadOperationCount": 21182,
+    "WriteOperationCount": 84835,
+    "ReadTransferCount": 167884112,
+    "WriteTransferCount": 345682244,
+    "CreationDate": "2026-10-26T01:06:48.93596-04:00",
+    "ExecutablePath": "C:\\Users\\jdaub\\AppData\\Roaming\\Zotero\\Zotero\\Profiles\\9v5afvrs.default\\notable\\runtime\\83ef00169f6583ac7e4fc101\\notable-worker.exe"
+  },
+  {
+    "ProcessId": 32656,
+    "ParentProcessId": 19908,
+    "KernelModeTime": 1455000000,
+    "UserModeTime": 2393125000,
+    "ThreadCount": 22,
+    "ReadOperationCount": 1529981,
+    "WriteOperationCount": 1943855,
+    "ReadTransferCount": 18867502603,
+    "WriteTransferCount": 3880289470,
+    "CreationDate": "2026-10-26T01:06:52.694844-04:00",
+    "ExecutablePath": "C:\\Users\\jdaub\\AppData\\Roaming\\Zotero\\Zotero\\Profiles\\9v5afvrs.default\\notable\\runtime\\83ef00169f6583ac7e4fc101\\notable-worker.exe"
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "observed_at_utc": "2026-10-26T07:48:11.479896+00:00",
+  "read_only": true,
+  "label": "post094repeat",
+  "item_count": 3941,
+  "keys_sha256": "6d2ace0c05c3d12db6759ff6ff6022f92c5502380611aefc8a62ea956fb830c5",
+  "versions_sha256": "5d1bf16f0027a9572c6c60fd95ccf8a00bb683021d33ac45756250e886dbebb1",
+  "comparison": {
+    "baseline": "post094first",
+    "added_keys": 0,
+    "removed_keys": 0,
+    "changed_versions": 0
+  }
+}

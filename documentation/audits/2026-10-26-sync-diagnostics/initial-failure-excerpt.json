@@ -1,0 +1,34 @@
+[
+  {
+    "time": "2026-10-26T03:42:28Z",
+    "event": "operation_finished",
+    "state": "error",
+    "operation": "bc16b1ce995740f9847d9c0c04046d6a"
+  },
+  {
+    "time": "2026-10-26T03:57:28Z",
+    "event": "request_received",
+    "method": "sync",
+    "operation": "8190182092954d7d96d2afa53a895318"
+  },
+  {
+    "time": "2026-10-26T03:57:28Z",
+    "event": "stage",
+    "name": "opening_connections",
+    "operation": "8190182092954d7d96d2afa53a895318"
+  },
+  {
+    "time": "2026-10-26T03:57:28Z",
+    "event": "error",
+    "type": "PilotError",
+    "message": "Install requirements-zotero-pilot.txt in a separate environment.",
+    "traceback": "Traceback (most recent call last):\n  File \"note_organizer\\zotero_worker.py\", line 1706, in _serve\n  File \"note_organizer\\zotero_worker.py\", line 1561, in dispatch\n  File \"note_organizer\\zotero_worker.py\", line 922, in sync\n  File \"note_organizer\\zotero_worker.py\", line 170, in zotero\n  File \"note_organizer\\zotero_pilot.py\", line 212, in __init__\nnote_organizer.zotero_pilot.PilotError: Install requirements-zotero-pilot.txt in a separate environment.\n",
+    "operation": "8190182092954d7d96d2afa53a895318"
+  },
+  {
+    "time": "2026-10-26T03:57:28Z",
+    "event": "operation_finished",
+    "state": "error",
+    "operation": "8190182092954d7d96d2afa53a895318"
+  }
+]

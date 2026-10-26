@@ -9,9 +9,10 @@ import math
 import re
 
 import pymupdf as fitz
+from .remarkable_cloud import trace_event
 
 
-RENDER_REVISION = 5
+RENDER_REVISION = 6
 
 
 class UnsupportedAnnotations(ValueError):
@@ -267,9 +268,10 @@ def apply_scene(document, page, page_id, tree, *, expand_margins=True):
         annot.update()
 
 
-def restore_navigation(original, output, pages, cancelled=lambda: False):
+def restore_navigation(original, output, pages, cancelled=lambda: False, *, diagnostic=None):
     """Rebuild destinations after page order, deletions, and added note pages."""
     destinations = {}
+    unresolved_links = unresolved_bookmarks = 0
     for index, (_, source_index) in enumerate(pages):
         if source_index >= 0:
             destinations.setdefault(source_index, index)
@@ -290,6 +292,18 @@ def restore_navigation(original, output, pages, cancelled=lambda: False):
     def inserted_position(value, source_index, index):
         return value * native_matrix(original[source_index]) * output[index].transformation_matrix
 
+    def named_target(source_xref, fallback):
+        # Link dictionaries expose URI-escaped names; read the decoded native
+        # PDF primitive to preserve Unicode and literal backslashes exactly.
+        kind, value = original.xref_get_key(source_xref, 'A/D') if source_xref else ('null', 'null')
+        if kind == 'null' and source_xref:
+            kind, value = original.xref_get_key(source_xref, 'Dest')
+        if kind == 'string':
+            return fitz.get_pdf_str(value)
+        if kind == 'name':
+            return value
+        return fitz.get_pdf_str(fallback)
+
     for index, (_, source_index) in enumerate(pages):
         if cancelled():
             raise InterruptedError("reMarkable PDF conversion stopped")
@@ -297,6 +311,19 @@ def restore_navigation(original, output, pages, cancelled=lambda: False):
             continue
         for source_link in original[source_index].get_links():
             link = {key: value for key, value in source_link.items() if key not in {"xref", "id"}}
+            unresolved_target = None
+            if link.get('kind') == fitz.LINK_NAMED and 'nameddest' in link:
+                if link.get('page', -1) < 0:
+                    # Keep a source's already unresolved target verbatim. It
+                    # supplies no destination to guess and must not block ink.
+                    unresolved_links += 1
+                    unresolved_target = link['nameddest']
+                else:
+                    # Page copying does not copy the document-level Names tree.
+                    # Named targets use native PDF coordinates, unlike GOTO.
+                    link.pop('nameddest', None)
+                    link['kind'] = fitz.LINK_GOTO
+                    link['to'] = fitz.Point(link.get('to', (0, 0))) * ~native_matrix(original[link['page']])
             link["from"] = inserted_position(fitz.Rect(link["from"]), source_index, index)
             if link.get("kind") == fitz.LINK_GOTO:
                 target = link.get("page", -1)
@@ -304,14 +331,44 @@ def restore_navigation(original, output, pages, cancelled=lambda: False):
                     continue  # A deleted destination must not point at another paper page.
                 link["page"] = destinations[target]
                 link["to"] = inserted_position(fitz.Point(link.get("to", (0, 0))), target, link["page"])
-            output[index].insert_link(link)
+            page = output[index]
+            if unresolved_target is None:
+                page.insert_link(link)
+            else:
+                # insert_link's named-target template interpolates a literal
+                # PDF string without escaping. Set the original target with
+                # the library's PDF-string encoder, including Unicode/parens.
+                before = {row[0] for row in page.annot_xrefs() if row[1] == fitz.PDF_ANNOT_LINK}
+                page.insert_link({**link, 'nameddest': 'notable-unresolved-target'})
+                added = {row[0] for row in page.annot_xrefs() if row[1] == fitz.PDF_ANNOT_LINK} - before
+                if len(added) != 1:
+                    raise UnsupportedAnnotations('A named source link could not be retained safely.')
+                source_xref = source_link.get('xref')
+                action = original.xref_get_key(source_xref, 'A/S') if source_xref else ('null', 'null')
+                if action == ('name', '/Named'):
+                    kind, name = original.xref_get_key(source_xref, 'A/N')
+                    if kind != 'name':
+                        raise UnsupportedAnnotations('A named source action could not be retained safely.')
+                    value = f'<</S/Named/N{name}>>'
+                else:
+                    value = f'<</S/GoTo/D{named_target(source_xref, unresolved_target)}>>'
+                output.xref_set_key(added.pop(), 'A', value)
     toc, native_destinations = [], []
     for level, title, page, destination in original.get_toc(simple=False):
         if cancelled():
             raise InterruptedError("reMarkable PDF conversion stopped")
         destination = dict(destination)
+        unresolved_name = None
+        if destination.get('kind') == fitz.LINK_NAMED and 'nameddest' in destination:
+            if page < 1:
+                unresolved_bookmarks += 1
+                unresolved_name = destination['nameddest']
+            else:
+                destination.pop('nameddest', None)
+                destination['kind'] = fitz.LINK_GOTO
+                destination['to'] = fitz.Point(destination.get('to', (0, 0))) * ~native_matrix(original[page - 1])
         source_xref = destination.pop("xref", None)
-        native_destination = None
+        native_destination = (source_xref, None, unresolved_name, None) if unresolved_name is not None else None
         if destination.get("kind") == fitz.LINK_GOTO:
             source_index = page - 1
             if source_index not in destinations:
@@ -334,6 +391,12 @@ def restore_navigation(original, output, pages, cancelled=lambda: False):
             if destination is None:
                 continue
             source_xref, page, point, zoom = destination
+            if page is None:
+                # set_toc cannot resolve a name absent from the source tree.
+                # Retain the original named target without inventing a page.
+                output.xref_set_key(outline_xrefs[index], 'A', 'null')
+                output.xref_set_key(outline_xrefs[index], 'Dest', named_target(source_xref, point))
+                continue
             kind, value = original.xref_get_key(source_xref, "A/D") if source_xref else ("null", "null")
             if kind == "null" and source_xref:
                 kind, value = original.xref_get_key(source_xref, "Dest")
@@ -341,6 +404,9 @@ def restore_navigation(original, output, pages, cancelled=lambda: False):
             target = array[1].strip() if array else f"/XYZ {point.x:.8f} {point.y:.8f} {zoom}"
             output.xref_set_key(outline_xrefs[index], "A",
                                f"<</S/GoTo/D[{output.page_xref(page)} 0 R {target}]>>")
+    if unresolved_links or unresolved_bookmarks:
+        trace_event(diagnostic, 'navigation_preserved_unresolved', links=unresolved_links,
+                    bookmarks=unresolved_bookmarks)
 
 
 def _repair_copy_source(data, cancelled):
@@ -377,9 +443,9 @@ def _repair_copy_source(data, cancelled):
     return repaired
 
 
-def annotated_pdf(item, bundle, cancelled=lambda: False, *, expand_margins=True):
+def annotated_pdf(item, bundle, cancelled=lambda: False, *, expand_margins=True, diagnostic=None):
     try:
-        return _annotated_pdf(item, bundle, cancelled, expand_margins=expand_margins)
+        return _annotated_pdf(item, bundle, cancelled, expand_margins=expand_margins, diagnostic=diagnostic)
     except RuntimeError as error:
         if 'source object number out of range' not in str(error):
             raise
@@ -389,14 +455,14 @@ def annotated_pdf(item, bundle, cancelled=lambda: False, *, expand_margins=True)
         try:
             repaired = _repair_copy_source(bundle[item.id + '.pdf'], cancelled)
             return _annotated_pdf(item, {**bundle, item.id + '.pdf': repaired}, cancelled,
-                                  expand_margins=expand_margins)
+                                  expand_margins=expand_margins, diagnostic=diagnostic)
         except InterruptedError:
             raise
         except (ValueError, RuntimeError, KeyError) as repair_error:
             raise UnsupportedAnnotations('The source PDF could not be copied safely. Its original and tablet notes were retained for repair.') from repair_error
 
 
-def _annotated_pdf(item, bundle, cancelled=lambda: False, *, expand_margins=True):
+def _annotated_pdf(item, bundle, cancelled=lambda: False, *, expand_margins=True, diagnostic=None):
     content = json.loads(bundle[item.id + ".content"])
     if content.get("fileType") != "pdf":
         raise UnsupportedAnnotations("Only imported PDFs are supported")
@@ -404,6 +470,8 @@ def _annotated_pdf(item, bundle, cancelled=lambda: False, *, expand_margins=True
         if original.needs_pass:
             raise UnsupportedAnnotations("The source PDF is password protected")
         pages = page_map(content, len(original))
+        trace_event(diagnostic, 'render_pdf_started', tablet_key=item.id, pages=len(pages))
+        last_copy = max((index for index, (_, source) in enumerate(pages) if source >= 0), default=-1)
         # Tombstoned page sources remain in cloud bundles for history. They
         # are known sources, but must never be rendered as live pages.
         records = content.get("cPages", {}).get("pages", []) if isinstance(content.get("cPages"), dict) else []
@@ -421,9 +489,14 @@ def _annotated_pdf(item, bundle, cancelled=lambda: False, *, expand_margins=True
             if cancelled():
                 raise InterruptedError("reMarkable PDF conversion stopped")
             data = bundle.get(item.id + "/" + pid + ".rm")
+            trace_event(diagnostic, 'render_page_started', tablet_key=item.id, page=index + 1, total=len(pages))
             tree = scene(data) if data else None
             if source_index >= 0:
-                output.insert_pdf(original, from_page=source_index, to_page=source_index, links=False)
+                # Retain MuPDF's graft map between copies from this source.
+                # Re-copying shared resources makes later global deduplication
+                # expensive and can hold the GIL long enough to lose heartbeats.
+                output.insert_pdf(original, from_page=source_index, to_page=source_index, links=False,
+                                  final=int(index == last_copy))
                 label = original[source_index].get_label() or str(source_index + 1)
             else:
                 size = getattr(tree.scene_info, "paper_size", None) if tree else None
@@ -438,13 +511,25 @@ def _annotated_pdf(item, bundle, cancelled=lambda: False, *, expand_margins=True
             legacy = bundle.get(item.id + ".highlights/" + pid + ".json")
             if legacy:
                 raise UnsupportedAnnotations("Legacy JSON highlights need an additional annotation adapter")
+            trace_event(diagnostic, 'render_page_finished', tablet_key=item.id, page=index + 1, total=len(pages))
         if cancelled():
             raise InterruptedError("reMarkable PDF conversion stopped")
-        restore_navigation(original, output, pages, cancelled)
+        trace_event(diagnostic, 'render_navigation_started', tablet_key=item.id)
+        restore_navigation(original, output, pages, cancelled,
+                           diagnostic=lambda event, **fields: trace_event(diagnostic, event, tablet_key=item.id, **fields))
+        trace_event(diagnostic, 'render_navigation_finished', tablet_key=item.id)
         output.set_page_labels(labels)
         metadata = dict(original.metadata)
         metadata["keywords"] = (metadata.get("keywords", "") + "; reMarkable imported PDF").strip("; ")
         output.set_metadata(metadata)
         if cancelled():
             raise InterruptedError("reMarkable PDF conversion stopped")
-        return output.tobytes(garbage=4, deflate=True)
+        # Compact unused objects without the quadratic object/stream duplicate
+        # comparisons at levels 3/4. Shared source resources already use one
+        # graft map. Page content stays intact. Rendering revision 6 also
+        # invalidates old views whose named navigation targets were lost.
+        trace_event(diagnostic, 'render_save_started', tablet_key=item.id, pages=len(pages), xrefs=output.xref_length())
+        result = output.tobytes(garbage=2, deflate=True)
+        trace_event(diagnostic, 'render_save_finished', tablet_key=item.id, bytes=len(result))
+        trace_event(diagnostic, 'render_pdf_finished', tablet_key=item.id, pages=len(pages))
+        return result

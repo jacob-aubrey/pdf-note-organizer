@@ -1,0 +1,32 @@
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+WARNING:pypdf._reader:Object 999999 0 not defined.
+MuPDF error: format error: cannot find object in xref (6 0 R)
+
+WARNING:pypdf._reader:Object 999999 0 not defined.
+======================================================================
+ERROR: test_long_pdf_renderer_receives_active_cancellation (tests.test_zotero_bridge_recovery.BridgeRecoveryTests.test_long_pdf_renderer_receives_active_cancellation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\jdaub\OneDrive\Desktop\Documents\PhD\Bonitatibus Research\Python Code\PDF Note Organizer\tests\test_zotero_bridge_recovery.py", line 122, in test_long_pdf_renderer_receives_active_cancellation
+    self.engine.run(apply=True)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\jdaub\OneDrive\Desktop\Documents\PhD\Bonitatibus Research\Python Code\PDF Note Organizer\note_organizer\zotero_bridge.py", line 97, in run
+    return self._run(apply)
+           ~~~~~~~~~^^^^^^^
+  File "C:\Users\jdaub\OneDrive\Desktop\Documents\PhD\Bonitatibus Research\Python Code\PDF Note Organizer\note_organizer\zotero_bridge.py", line 506, in _run
+    rendered = annotated_pdf(item, retained_bundle, self._cancelled,
+                             diagnostic=getattr(self.state, 'trace', None))
+  File "C:\Users\jdaub\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py", line 1167, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\jdaub\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py", line 1171, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\jdaub\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py", line 1232, in _execute_mock_call
+    result = effect(*args, **kwargs)
+TypeError: BridgeRecoveryTests.test_long_pdf_renderer_receives_active_cancellation.<locals>.render() got an unexpected keyword argument 'diagnostic'
+
+----------------------------------------------------------------------
+Ran 286 tests in 227.051s
+
+FAILED (errors=1)

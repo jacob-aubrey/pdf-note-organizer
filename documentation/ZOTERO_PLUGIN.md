@@ -6,9 +6,27 @@ operate a terminal, or keep the original Notable application open.
 
 This build targets **Zotero 10.0**, validated against 10.0.6 on Windows. The
 installed application was verified as **Zotero 10.0.6** on October 20, 2026;
-no application upgrade is needed. Development tests used disposable profiles
-and did not install the plugin into the production library. This local preview
+no application upgrade is needed. Automated tests use disposable profiles;
+production installation and configured sync checks are recorded in the
+October 26 diagnostics report. This local preview
 has no published automatic-update feed.
+
+Version **0.9.4** avoids expensive global PDF deduplication that can block
+the helper's heartbeat while saving large documents. Source resources are
+shared during page copying, and rendering/page/save boundaries are traced.
+Named internal links and bookmarks retain their resolved destinations; targets
+already unresolved in the source stay unchanged and are counted in diagnostics. The
+derived view cache rebuilds once for this navigation repair; originals stay intact.
+
+This release also restores the complete bundled Zotero runtime and checks its
+required and optional imports before release packaging. Ordinary Sync does
+not initialize handwriting OCR; **Rebuild search index** requests it explicitly.
+Sync diagnostics record correlated operations, requests, retries, heartbeat
+activity, safe exception frames and process termination reasons. Local
+`sync-trace.jsonl` and `sync-transport.jsonl` logs each retain at most three
+2 MiB files (current plus `.1` and `.2`). Request bodies, document text and
+credentials are excluded; stderr is retained as sanitized diagnostic structure.
+Copy all these files after a failure before installing another version.
 
 Version **0.9.0** adds bounded Zotero requests and identifies the active
 tablet paper and publication step in the durable sync trace. It packages the
@@ -49,6 +67,12 @@ session. Updating does not delete old empty references or restore earlier folder
 moves automatically. Confirm each recovered PDF and its notes before cleanup.
 
 ## Setup
+
+If an update reports that the plugin could not be installed, check Zotero's
+Error Console. `NS_ERROR_FILE_IS_LOCKED` means the old package could not be
+replaced: disable the plugin in Tools → Plugins, quit and reopen Zotero,
+install the tested XPI while it is disabled, then enable it again. Keep a
+backup first. This workflow preserves the saved connection and library.
 
 1. In Zotero 10, open **Tools → Plugins**, choose **Install Plugin From File**
    from its gear menu, and select the complete reMarkable Sync XPI.

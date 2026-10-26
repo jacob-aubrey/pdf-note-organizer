@@ -1,0 +1,22 @@
+[
+  {
+    "ProcessId": 19908,
+    "KernelModeTime": 24218750,
+    "UserModeTime": 14843750,
+    "ThreadCount": 1,
+    "ReadOperationCount": 21182,
+    "WriteOperationCount": 84835,
+    "ReadTransferCount": 167884112,
+    "WriteTransferCount": 345682244
+  },
+  {
+    "ProcessId": 32656,
+    "KernelModeTime": 1458281250,
+    "UserModeTime": 2817500000,
+    "ThreadCount": 22,
+    "ReadOperationCount": 1529981,
+    "WriteOperationCount": 1943855,
+    "ReadTransferCount": 18867502603,
+    "WriteTransferCount": 3880289470
+  }
+]

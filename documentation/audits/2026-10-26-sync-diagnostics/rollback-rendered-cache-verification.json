@@ -1,0 +1,7 @@
+{
+  "scope": "Read-only pre-0.9.3 derived-view cache referenced by the rollback state snapshot",
+  "checked_rendered_receipts": 310,
+  "missing_cached_files": 0,
+  "sha256_mismatches": 0,
+  "location": "Production notable/bridge/rendered content-addressed files; namespace follows saved connection"
+}

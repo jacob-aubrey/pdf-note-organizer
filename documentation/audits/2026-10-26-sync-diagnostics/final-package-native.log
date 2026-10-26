@@ -1,0 +1,62 @@
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+{
+  "scope": "Disposable Zotero profile; no real library or cloud account",
+  "checks": [
+    {
+      "name": "Zotero_opens_graphical_setup_and_manages_private_worker",
+      "status": "PASS"
+    },
+    {
+      "name": "graphical_connect_persists_permission_without_terminal",
+      "status": "PASS"
+    },
+    {
+      "name": "native_catalog_uses_actual_local_paths_and_preserves_thesis_metadata",
+      "status": "PASS"
+    },
+    {
+      "name": "connector_or_manual_import_waits_for_naming_and_destination_review",
+      "status": "PASS"
+    },
+    {
+      "name": "reviewed_native_rename_and_single_tablet_home_with_multiple_collections",
+      "status": "PASS"
+    },
+    {
+      "name": "repeated_sync_does_not_duplicate_documents_or_reviews",
+      "status": "PASS"
+    },
+    {
+      "name": "PDF_rename_and_move_follow_both_directions_without_losing_research_collections",
+      "status": "PASS"
+    },
+    {
+      "name": "confirmed_tablet_trash_waits_and_explicit_restore_resumes_same_link",
+      "status": "PASS"
+    },
+    {
+      "name": "changed_notes_block_stale_deletion_without_trashing_a_PDF",
+      "status": "PASS"
+    },
+    {
+      "name": "delete_PDF_only_trashes_only_matching_source_and_view_keeps_notes_SI_reference_and_never_resurrects",
+      "status": "PASS"
+    },
+    {
+      "name": "delete_everything_uses_native_Trash_for_the_reference_notes_and_SI",
+      "status": "PASS"
+    },
+    {
+      "name": "PDF_Word_and_PowerPoint_intake_waits_for_completion_and_review_then_verifies_managed_copy_before_cleanup",
+      "status": "PASS"
+    },
+    {
+      "name": "native_reparent_is_verified_idempotent_and_keeps_attachment_key_and_bytes",
+      "status": "PASS"
+    },
+    {
+      "name": "actual_review_window_renders_all_three_deletion_choices_and_new_documents",
+      "status": "PASS"
+    }
+  ]
+}

@@ -61,15 +61,35 @@ var NotableUI = {
     });
   },
   recordTransport(event, details = {}) {
-    if (!this.statePath) return;
-    const path = PathUtils.join(this.statePath, 'sync-transport.jsonl');
-    const record = JSON.stringify({time: new Date().toISOString(), event, ...details}) + '\n';
-    this.transportLog = (this.transportLog || Promise.resolve()).catch(() => {}).then(async () => {
-      let existing = '';
-      try { existing = await IOUtils.readUTF8(path); } catch (_) {}
-      const combined = (existing + record).slice(-4 * 1024 * 1024);
-      await IOUtils.writeUTF8(path, combined);
-    });
+    try {
+      if (!this.statePath) return;
+      const path = PathUtils.join(this.statePath, 'sync-transport.jsonl');
+      const clean = value => {
+        if (typeof value === 'string') return value.replace(/https?:\/\/\S+/g, '<url>')
+          .replace(/(?:bearer\s+\S+|(?:token|password|api[_-]?key|secret)\s*[=:]\s*\S+)/gi, '<redacted>')
+          .replace(/[A-Za-z]:[\\/][^\s"\n]+/g, '<path>').slice(0, 400);
+        if (Array.isArray(value)) return value.slice(0, 12).map(clean);
+        if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).slice(0, 24)
+          .map(([key, item]) => [key, /^(token|headers|authorization|body|payload|text|content|params)$/i.test(key) ? '<redacted>' : clean(item)]));
+        return value;
+      };
+      const record = JSON.stringify({time: new Date().toISOString(), event, ...clean(details)}) + '\n';
+      const recordBytes = typeof TextEncoder === 'function' ? new TextEncoder().encode(record).length : record.length * 3;
+      this.transportLog = (this.transportLog || Promise.resolve()).catch(() => {}).then(async () => {
+        let size = this.transportBytes || 0;
+        try { if (IOUtils.stat) size = (await IOUtils.stat(path)).size; } catch (_) {}
+        if (size + recordBytes > (this.transportMaxBytes || 2 * 1024 * 1024)) {
+          try { await IOUtils.move(path + '.1', path + '.2'); } catch (error) { if (error.name !== 'NotFoundError') throw error; }
+          await IOUtils.move(path, path + '.1'); size = 0;
+        }
+        await IOUtils.writeUTF8(path, record, {mode: 'appendOrCreate', flush: true});
+        this.transportBytes = size + recordBytes;
+      }).catch(() => {}); // A failed diagnostic write must not reject an RPC.
+      return this.transportLog;
+    } catch (_) {}
+  },
+  processTrace(process) {
+    return this.processTraces?.get(process) || {};
   },
   attach(window) {
     if (this.stopped) return;
@@ -100,13 +120,18 @@ var NotableUI = {
     // A launch which is already awaiting Subprocess.call must observe stopped
     // and finish its child before replacement can create another writer.
     if (this.launching) { try { await this.launching; } catch (_) {} }
-    if (this.process) await this.closeProcess(this.process);
+    if (this.process) await this.closeProcess(this.process, true, 'plugin_shutdown');
     for (const value of this.pending.values()) { clearTimeout(value.timer); value.reject(new Error(this.shortName + ' stopped')); }
     this.pending.clear();
     if (Zotero.Notable === this) delete Zotero.Notable;
   },
-  async closeProcess(process, graceful = true) {
+  async closeProcess(process, graceful = true, reason = 'parent_requested') {
     let timeout;
+    const info = this.processTrace(process);
+    if (!info.exited) {
+      info.terminationRequested = true; info.reason ||= reason;
+      this.recordTransport('parent_termination_requested', {helper_id: info.id, reason: info.reason, graceful});
+    }
     try {
       if (graceful) {
         await Promise.race([(async () => {
@@ -116,7 +141,10 @@ var NotableUI = {
       }
       // Mozilla's existing Subprocess API waits for process exit; on Windows
       // kill() terminates immediately. Never release a writer before exit.
-      await process.kill();
+      if (!info.exited) {
+        this.recordTransport('parent_kill', {helper_id: info.id, reason});
+        await process.kill();
+      }
       if (this.process === process) { this.process = null; this.processError = ''; }
     } catch (error) {
       if (this.process === process) this.processError = 'The previous helper could not be stopped. Restart Zotero before retrying.';
@@ -132,7 +160,7 @@ var NotableUI = {
     Zotero.Prefs.set('httpServer.localAPI.enabled', true);
     await Zotero.Server.init();
     const {Subprocess} = ChromeUtils.importESModule('resource://gre/modules/Subprocess.sys.mjs');
-    let command, args;
+    let command, args, runtimeIdentity = {};
     // A test harness can override the private transport in its disposable
     // profile. This is deliberately absent from all user setup controls.
     const development = Zotero.Prefs.get('notable.developmentWorker', true);
@@ -146,6 +174,7 @@ var NotableUI = {
       const marker = PathUtils.join(directory, 'ready.json');
       const executable = PathUtils.join(directory, 'notable-worker.exe');
       const executableManifest = manifest.files.find(file => file.path === 'notable-worker.exe');
+      runtimeIdentity = {runtime_id: manifest.id, executable_md5: executableManifest?.md5};
       for (const file of manifest.files) {
         if (file.path.includes('..') || file.path.startsWith('/') || file.path.includes('\\')) throw new Error('Invalid packaged runtime path');
       }
@@ -174,58 +203,83 @@ var NotableUI = {
       command = PathUtils.join(directory, 'notable-worker.exe'); args = [];
     }
     this.message('Starting the background helper…');
-    this.recordTransport('helper_starting');
+    this.recordTransport('helper_starting', runtimeIdentity);
     if (this.stopped) throw new Error(this.shortName + ' is closed.');
     const diagnostics = Zotero.Prefs.get('notable.testDiagnostics', true) ? ['--debug-stacks'] : [];
     // PyMuPDF caches its message stream at import, before per-request redirects.
     const process = await Subprocess.call({command, arguments: [...args, '--state', this.statePath, '--port', String(Zotero.Server.port), ...diagnostics],
       stderr: 'pipe', environmentAppend: true, environment: {PYTHONUNBUFFERED: '1', PYTHONDONTWRITEBYTECODE: '1', PYMUPDF_MESSAGE: 'fd:2'}});
     this.process = process;
-    this.recordTransport('helper_started', {command: command.split(/[\\/]/).pop()});
+    const info = {id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2), started: Date.now(), ...runtimeIdentity};
+    (this.processTraces ||= new WeakMap()).set(process, info);
+    this.recordTransport('helper_started', {helper_id: info.id, command: command.split(/[\\/]/).pop(), pid: process.pid ?? null, ...runtimeIdentity});
+    if (typeof process.wait === 'function') info.exitPromise = process.wait().then(result => {
+      info.exited = true;
+      this.recordTransport('helper_exit', {helper_id: info.id, exit_code: result?.exitCode ?? null,
+        duration_ms: Date.now() - info.started, parent_initiated: !!info.terminationRequested, reason: info.reason || 'unexpected_exit'});
+      return result;
+    }).catch(error => { this.recordTransport('helper_wait_failed', {helper_id: info.id, type: error.name}); });
     if (this.stopped) { await this.closeProcess(process); throw new Error(this.shortName + ' is closed.'); }
     // Drain diagnostics without logging paper contents or credentials.
     (async () => {
-      let diagnostics = '';
       try {
         while (true) {
           const chunk = await process.stderr.readString();
           if (!chunk) break;
-          diagnostics += chunk;
+          // Raw stderr can contain PDF text or signed URLs. Retain bounded,
+          // allowlisted diagnostic structure immediately, not document text.
+          const sample = chunk.slice(0, 8192);
+          const knownModules = new Set(['pyzotero','httpx2','httpcore2','rapidocr','onnxruntime','numpy','pymupdf','rmscene','pypdf','PIL','cv2','anyio','sniffio','certifi','h11']);
+          const knownErrors = new Set(['ImportError','ModuleNotFoundError','ValueError','RuntimeError','TimeoutError','OSError','PermissionError','BrokenPipeError','ConnectionError','ReadTimeout','WriteTimeout','ConnectTimeout']);
+          const modules = [...sample.matchAll(/No module named ['"]([A-Za-z0-9_.]+)['"]/g)].map(match => match[1]).filter(name => knownModules.has(name));
+          const types = [...sample.matchAll(/\b([A-Za-z_]*(?:Error|Exception))\b/g)].map(match => match[1]).filter(name => knownErrors.has(name));
+          this.recordTransport('helper_stderr', {helper_id: info.id, characters: chunk.length,
+            missing_modules: modules, error_types: [...new Set(types)], mupdf_error: chunk.includes('MuPDF error:'),
+            fatal_python_error: chunk.includes('Fatal Python error:'), windows_fatal_exception: chunk.includes('Windows fatal exception:'),
+            access_violation: chunk.includes('access violation'), content_redacted: true});
         }
       } catch (error) {
-        this.recordTransport('stderr_read_failed', {type: error.name, message: error.message});
-      } finally {
-        if (diagnostics) this.recordTransport('helper_stderr', {text: diagnostics.slice(-50000)});
+        this.recordTransport('stderr_read_failed', {helper_id: info.id, type: error.name});
       }
     })();
     (async () => {
-      let buffer = '', failure = 'The background helper stopped. Retry your action to restart it.';
+      let buffer = '', eof = false, failure = 'The background helper stopped. Retry your action to restart it.';
       try {
         while (true) {
-          const chunk = await process.stdout.readString(); if (!chunk) break;
+          const chunk = await process.stdout.readString(); if (!chunk) { eof = true; this.recordTransport('stdout_eof', {helper_id: info.id, trailing_characters: buffer.length}); break; }
           buffer += chunk;
           let boundary;
           while ((boundary = buffer.indexOf('\n')) !== -1) {
             const line = buffer.slice(0, boundary); buffer = buffer.slice(boundary + 1);
             const response = JSON.parse(line);
-            if (response.event === 'progress') { this.touchRequests(); this.receiveProgress(response); continue; }
+            if (response.event === 'progress') {
+              info.lastHeartbeat = Date.now();
+              this.recordTransport(response.message === 'Still working...' ? 'heartbeat_received' : 'progress_received', {helper_id: info.id});
+              this.touchRequests(); this.receiveProgress(response); continue;
+            }
             const pending = this.pending.get(response.id);
             if (!pending) continue;
             this.pending.delete(response.id);
             clearTimeout(pending.timer);
+            this.recordTransport(response.error ? 'rpc_failed' : 'rpc_finished', {helper_id: info.id, trace_id: pending.traceId,
+              id: response.id, method: pending.method, duration_ms: Date.now() - pending.started,
+              error_type: response.error?.type || null,
+              user_message: response.error && !['ValueError','FileNotFoundError'].includes(response.error.type) ? response.error.message : null});
             if (response.error) pending.reject(new Error(response.error.message)); else pending.resolve(response.result);
           }
         }
       } catch (error) {
         if (error instanceof SyntaxError) {
           failure = 'The background helper sent an invalid response. Retry your action to restart it.';
-          this.recordTransport('invalid_response', {type: error.name, message: error.message, trailing: buffer.slice(-2000)});
+          this.recordTransport('invalid_response', {helper_id: info.id, type: error.name, trailing_characters: buffer.length});
         } else {
-          this.recordTransport('stdout_read_failed', {type: error.name, message: error.message});
+          this.recordTransport('stdout_read_failed', {helper_id: info.id, type: error.name});
         }
       }
-      this.recordTransport('helper_stopped', {reason: failure});
-      try { await this.closeProcess(process, false); } catch (_) {}
+      if (info.userFailure) failure = info.userFailure;
+      if (eof && !info.exited && info.exitPromise) await Promise.race([info.exitPromise, new Promise(resolve => setTimeout(resolve, 50))]);
+      this.recordTransport('helper_stopped', {helper_id: info.id, reason: failure});
+      try { await this.closeProcess(process, false, info.reason || (failure.includes('invalid response') ? 'invalid_protocol' : 'stdout_closed')); } catch (_) {}
       this.rejectProcessRequests(process, this.processError || failure);
     })();
   },
@@ -238,9 +292,11 @@ var NotableUI = {
     }
     if (this.stopped || !this.process) throw new Error(this.shortName + ' is closed.');
     const id = ++this.serial;
-    const answer = new Promise((resolve, reject) => this.pending.set(id, {resolve, reject, process: this.process}));
+    const info = this.processTrace(this.process), traceId = (info.id || 'helper') + '-' + id;
+    const answer = new Promise((resolve, reject) => this.pending.set(id, {resolve, reject, process: this.process, method, traceId, started: Date.now()}));
+    this.recordTransport('rpc_started', {helper_id: info.id, trace_id: traceId, id, method});
     this.touchRequests();
-    try { await this.process.stdin.write(JSON.stringify({id, method, params}) + '\n'); }
+    try { await this.process.stdin.write(JSON.stringify({id, method, params, trace_id: traceId}) + '\n'); }
     catch (error) { clearTimeout(this.pending.get(id)?.timer); this.pending.delete(id); throw error; }
     return answer;
   },
@@ -249,7 +305,11 @@ var NotableUI = {
       clearTimeout(request.timer);
       request.timer = setTimeout(async () => {
         const process = request.process;
-        if (process) { try { await this.closeProcess(process, false); } catch (_) {} }
+        const info = this.processTrace(process);
+        info.userFailure = 'The helper stopped responding and was stopped safely. Retry your action to restart it.';
+        this.recordTransport('rpc_timeout', {helper_id: info.id, trace_id: request.traceId, method: request.method,
+          duration_ms: Date.now() - request.started, last_heartbeat_time: info.lastHeartbeat || null});
+        if (process) { try { await this.closeProcess(process, false, 'inactivity_timeout'); } catch (_) {} }
         this.rejectProcessRequests(process, this.processError || 'The helper stopped responding and was stopped safely. Retry your action to restart it.');
       }, this.requestTimeout || 600000);
     }
@@ -257,6 +317,7 @@ var NotableUI = {
   rejectProcessRequests(process, message) {
     for (const [id, pending] of this.pending) if (pending.process === process) {
       clearTimeout(pending.timer); this.pending.delete(id); pending.reject(new Error(message));
+      this.recordTransport('rpc_rejected', {helper_id: this.processTrace(process).id, trace_id: pending.traceId, method: pending.method, user_message: message});
     }
   },
   async refresh() {
@@ -365,6 +426,7 @@ var NotableUI = {
     this.message('Finishing the background check so you can use the workspace…');
     // A transient cancellation keeps the user's automatic-sync preference.
     // The existing worker transport acknowledges it through the running job.
+    this.recordTransport('cancel_requested', {helper_id: this.processTrace(this.process).id, reason: 'workspace_opened'});
     try { await this.process?.stdin.write(JSON.stringify({method: 'cancel'}) + '\n'); }
     catch (error) { this.message(error.message, true); }
   },
@@ -377,6 +439,7 @@ var NotableUI = {
     // not change automatic-sync settings or start another sync afterwards.
     operation.stopping = true; operation.yielding = true;
     this.message('Finishing the current paper so your filing can run…');
+    this.recordTransport('cancel_requested', {helper_id: this.processTrace(this.process).id, reason: 'filing_priority'});
     try { await this.process.stdin.write(JSON.stringify({method: 'cancel'}) + '\n'); }
     catch (error) { this.message(error.message, true); }
   },
@@ -596,6 +659,7 @@ var NotableUI = {
     this.updateActivity();
   },
   message(value, error = false) {
+    if (error) this.recordTransport('ui_error', {characters: String(value).length, details_in_rpc_error_when_safe: true});
     if (this.operation) { this.operation.detail = value; this.operation.updated = Date.now(); }
     if (!this.view || this.view.closed) return;
     const node = this.view.document.getElementById('message');

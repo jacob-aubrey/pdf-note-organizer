@@ -21,6 +21,15 @@ from urllib.parse import urlsplit
 import uuid
 
 
+def trace_event(callback, event, **fields):
+    """Optional diagnostics may never alter a data operation."""
+    try:
+        if callback:
+            callback(event, **fields)
+    except Exception:
+        pass
+
+
 PAIR_URL = "https://my.remarkable.com/device/desktop/connect"
 AUTH = "https://webapp-prod.cloud.remarkable.engineering/token/json/2"
 SYNC = "https://internal.cloud.remarkable.com/sync"
@@ -343,13 +352,14 @@ def crc32c_header(data):
 
 class CloudClient:
     """Pair once, renew sessions, and fetch immutable cloud blobs with checks."""
-    def __init__(self, token="", cache_dir=None, stop=None, cache_limit_bytes=64 * 1024 * 1024, progress=None):
+    def __init__(self, token="", cache_dir=None, stop=None, cache_limit_bytes=64 * 1024 * 1024, progress=None, trace=None):
         self.device_token = token
         self.user_token = ""
         self.cache_dir = Path(cache_dir) if cache_dir else None
         self.cache_limit_bytes = cache_limit_bytes
         self.baseline_dir = None
         self.progress = progress
+        self.trace = trace
         self._cache_size = None
         self.stop = stop or threading.Event()
         self.opener = urllib.request.build_opener(_SafeRedirect())
@@ -363,6 +373,13 @@ class CloudClient:
         if self.stop.is_set():
             raise InterruptedError("reMarkable sync stopped")
 
+    def _trace(self, event, **fields):
+        try:
+            if self.trace:
+                self.trace(event, **fields)
+        except Exception:
+            pass
+
     def _http(self, url, token="", body=None, filename=None, method=None, extra_headers=None):
         headers = {"User-Agent": "PDF-Note-Organizer", "Content-Type": "application/json"}
         if token:
@@ -375,6 +392,8 @@ class CloudClient:
         for attempt in range(3):
             self.check_stop()
             request = urllib.request.Request(url, data=body, headers=headers, method=method)
+            request_id, started = uuid.uuid4().hex, time.monotonic()
+            self._trace('cloud_request_started', request_id=request_id, verb=request.get_method(), attempt=attempt + 1)
             try:
                 with self.opener.open(request, timeout=20) as response:
                     chunks = []
@@ -384,9 +403,13 @@ class CloudClient:
                         if not chunk:
                             break
                         chunks.append(chunk)
-                    return b"".join(chunks)
+                    value = b"".join(chunks)
+                    self._trace('cloud_request_finished', request_id=request_id, bytes=len(value),
+                                duration_ms=round((time.monotonic() - started) * 1000))
+                    return value
             except urllib.error.HTTPError as exc:
                 status = exc.code
+                self._trace('cloud_request_failed', request_id=request_id, status=status, error_type=type(exc).__name__)
                 retry = exc.headers.get("Retry-After", "")
                 exc.close()
                 if status in {401, 403}:
@@ -396,10 +419,13 @@ class CloudClient:
                 if status not in {429, 500, 502, 503, 504} or attempt == 2:
                     raise CloudError(f"reMarkable request failed (HTTP {status}); saved files are retained.") from None
                 delay = min(30, max(2 ** (attempt + 1), float(retry) if retry.isdigit() else 0))
-            except (urllib.error.URLError, TimeoutError, OSError):
+            except (urllib.error.URLError, TimeoutError, OSError) as error:
+                self._trace('cloud_request_failed', request_id=request_id, error_type=type(error).__name__,
+                            duration_ms=round((time.monotonic() - started) * 1000))
                 if attempt == 2:
                     raise CloudError("reMarkable cloud is unreachable. Automatic sync will retry; saved files are retained.") from None
                 delay = 2 ** (attempt + 1)
+            self._trace('cloud_retry', request_id=request_id, attempt=attempt + 1, delay_s=delay)
             if self.stop.wait(delay):
                 self.check_stop()
             self._progress(f'Waiting for reMarkable; retrying the current request ({attempt + 2} of 3)…')

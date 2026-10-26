@@ -1,0 +1,125 @@
+394 INFO: PyInstaller: 6.22.3, contrib hooks: 2026.9
+395 INFO: Python: 3.13.1
+424 INFO: Platform: Windows-11-10.0.26100-SP0
+424 INFO: Python environment: C:\Users\jdaub\OneDrive\Desktop\Documents\PhD\Bonitatibus Research\Python Code\PDF Note Organizer\.test-tmp\handwriting-rapidocr\venv
+9895 INFO: Module search paths (PYTHONPATH):
+['C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus '
+ 'Research\\Python Code\\PDF Note Organizer',
+ 'C:\\Program '
+ 'Files\\RevvitySignalsSoftware\\ChemDrawApplications\\ChemScript\\Lib',
+ 'C:\\Users\\jdaub\\AppData\\Local\\Programs\\Python\\Python313\\python313.zip',
+ 'C:\\Users\\jdaub\\AppData\\Local\\Programs\\Python\\Python313\\DLLs',
+ 'C:\\Users\\jdaub\\AppData\\Local\\Programs\\Python\\Python313\\Lib',
+ 'C:\\Users\\jdaub\\AppData\\Local\\Programs\\Python\\Python313',
+ 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus '
+ 'Research\\Python Code\\PDF Note '
+ 'Organizer\\.test-tmp\\handwriting-rapidocr\\venv',
+ 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus '
+ 'Research\\Python Code\\PDF Note '
+ 'Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages',
+ 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus '
+ 'Research\\Python Code\\PDF Note Organizer\\tools',
+ 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus '
+ 'Research\\Python Code\\PDF Note Organizer']
+10961 INFO: Appending 'datas' from .spec
+11203 INFO: checking Analysis
+11269 INFO: Building because excludes changed
+11269 INFO: Looking for Python shared library...
+11269 INFO: Using Python shared library: C:\Users\jdaub\AppData\Local\Programs\Python\Python313\python313.dll
+11269 INFO: Running Analysis Analysis-00.toc
+11269 INFO: Target bytecode optimization level: 0
+11269 INFO: Initializing module dependency graph...
+11271 INFO: Initializing module graph hook caches...
+11296 INFO: Analyzing modules for base_library.zip ...
+14092 INFO: Processing standard module hook 'hook-encodings.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+15299 INFO: Processing standard module hook 'hook-math.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+16752 INFO: Processing standard module hook 'hook-pickle.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+17907 INFO: Processing standard module hook 'hook-heapq.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+18523 INFO: Caching module dependency graph...
+18577 INFO: Analyzing C:\Users\jdaub\OneDrive\Desktop\Documents\PhD\Bonitatibus Research\Python Code\PDF Note Organizer\tools\notable_worker.py
+18828 INFO: Processing standard module hook 'hook-platform.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+18857 INFO: Processing standard module hook 'hook-_ctypes.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+19307 INFO: Processing standard module hook 'hook-sqlite3.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+20333 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+20337 INFO: SetuptoolsInfo: initializing cached setuptools info...
+22584 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+22690 INFO: Processing standard module hook 'hook-xml.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+23520 INFO: Processing standard module hook 'hook-urllib3.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+23669 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+23670 INFO: Setuptools: 'backports' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.backports'!
+23679 INFO: Processing standard module hook 'hook-setuptools.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+23699 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+23789 INFO: Processing standard module hook 'hook-sysconfig.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+23798 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+23799 INFO: Setuptools: 'jaraco' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco'!
+23817 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+23819 INFO: Setuptools: 'more_itertools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.more_itertools'!
+23989 INFO: Processing standard module hook 'hook-_osx_support.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+24021 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+24270 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+24274 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+24946 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+24947 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!
+25671 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+25672 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+26283 INFO: Processing standard module hook 'hook-certifi.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+26404 INFO: Processing standard module hook 'hook-charset_normalizer.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+26686 INFO: Processing standard module hook 'hook-anyio.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+29209 INFO: Processing standard module hook 'hook-difflib.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+29345 INFO: Processing standard module hook 'hook-webbrowser.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+29911 INFO: Processing standard module hook 'hook-zoneinfo.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+36011 INFO: Processing standard module hook 'hook-lxml.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+36898 INFO: Processing standard module hook 'hook-lxml.etree.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+36902 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+39220 INFO: Processing standard module hook 'hook-PIL.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+39361 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+40402 INFO: Processing standard module hook 'hook-numpy.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+44920 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+48598 INFO: Processing standard module hook 'hook-xml.dom.domreg.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+50462 INFO: Processing standard module hook 'hook-docx.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+57873 INFO: Processing standard module hook 'hook-regex.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+58353 INFO: Processing standard module hook 'hook-onnxruntime.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+58562 INFO: Processing pre-safe-import-module hook 'hook-tensorflow.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\pre_safe_import_module'
+58622 INFO: Processing standard module hook 'hook-cv2.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+C:\Users\jdaub\OneDrive\Desktop\Documents\PhD\Bonitatibus Research\Python Code\PDF Note Organizer\.test-tmp\handwriting-rapidocr\venv\Lib\site-packages\rapidocr\inference_engine\pytorch\networks\heads\multiheadAttention.py:9: SyntaxWarning: invalid escape sequence '\d'
+  """Allows the model to jointly attend to information
+63816 INFO: Processing standard module hook 'hook-shapely.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+64422 INFO: Processing module hooks (post-graph stage)...
+65077 INFO: Processing standard module hook 'hook-lxml.isoschematron.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+65487 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks'
+65916 INFO: Processing standard module hook 'hook-lxml.objectify.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+65919 INFO: Processing standard module hook 'hook-tzdata.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+68498 INFO: Performing binary vs. data reclassification (1177 entries)
+69048 INFO: Looking for ctypes DLLs
+69176 INFO: Analyzing run-time hooks ...
+69185 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+69189 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+69194 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+69197 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+69253 INFO: Creating base_library.zip...
+69283 INFO: Looking for dynamic libraries
+Could not find an up-to-date installation of `packaging`. License expressions might not be validated. To enforce validation, please install `packaging>=24.2`.
+75166 INFO: Extra DLL search directories (AddDllDirectory): ['C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\numpy.libs', 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\cv2\\../../x64/vc17/bin', 'C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\shapely.libs']
+75166 INFO: Extra DLL search directories (PATH): ['C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\handwriting-rapidocr\\venv\\Lib\\site-packages\\cv2\\../../x64/vc17/bin']
+77061 INFO: Warnings written to C:\Users\jdaub\OneDrive\Desktop\Documents\PhD\Bonitatibus Research\Python Code\PDF Note Organizer\.test-tmp\zotero-plugin-093-build\Notable Zotero Worker\warn-Notable Zotero Worker.txt
+77226 INFO: Graph cross-reference written to C:\Users\jdaub\OneDrive\Desktop\Documents\PhD\Bonitatibus Research\Python Code\PDF Note Organizer\.test-tmp\zotero-plugin-093-build\Notable Zotero Worker\xref-Notable Zotero Worker.html
+77334 INFO: checking PYZ
+77593 INFO: Building because C:\Users\jdaub\OneDrive\Desktop\Documents\PhD\Bonitatibus Research\Python Code\PDF Note Organizer\note_organizer\remarkable_pdf.py changed
+77593 INFO: Building PYZ (ZlibArchive) C:\Users\jdaub\OneDrive\Desktop\Documents\PhD\Bonitatibus Research\Python Code\PDF Note Organizer\.test-tmp\zotero-plugin-093-build\Notable Zotero Worker\PYZ-00.pyz
+79366 INFO: Building PYZ (ZlibArchive) C:\Users\jdaub\OneDrive\Desktop\Documents\PhD\Bonitatibus Research\Python Code\PDF Note Organizer\.test-tmp\zotero-plugin-093-build\Notable Zotero Worker\PYZ-00.pyz completed successfully.
+79489 INFO: checking PKG
+79531 INFO: Building because toc changed
+79531 INFO: Building PKG (CArchive) notable-worker.pkg
+129272 INFO: Building PKG (CArchive) notable-worker.pkg completed successfully.
+129314 INFO: Bootloader C:\Users\jdaub\OneDrive\Desktop\Documents\PhD\Bonitatibus Research\Python Code\PDF Note Organizer\.test-tmp\handwriting-rapidocr\venv\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\run.exe
+129314 INFO: checking EXE
+129372 INFO: Building because toc changed
+129372 INFO: Building EXE from EXE-00.toc
+129392 INFO: Copying bootloader EXE to C:\Users\jdaub\OneDrive\Desktop\Documents\PhD\Bonitatibus Research\Python Code\PDF Note Organizer\.test-tmp\zotero-plugin-093-dist\notable-worker.exe
+129476 INFO: Copying icon to EXE
+129554 INFO: Copying 0 resources to EXE
+129554 INFO: Embedding manifest in EXE
+129636 INFO: Appending PKG archive to EXE
+129874 INFO: Fixing EXE headers
+131362 INFO: Building EXE from EXE-00.toc completed successfully.
+131421 INFO: Build complete! The results are available in: C:\Users\jdaub\OneDrive\Desktop\Documents\PhD\Bonitatibus Research\Python Code\PDF Note Organizer\.test-tmp\zotero-plugin-093-dist

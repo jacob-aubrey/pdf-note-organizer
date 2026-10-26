@@ -1,0 +1,54 @@
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+test_build_preflight_rejects_missing_required_module (tests.test_zotero_sync_diagnostics.DiagnosticsTests.test_build_preflight_rejects_missing_required_module) ... ok
+test_diagnostic_disk_error_cannot_change_operation_outcome (tests.test_zotero_sync_diagnostics.DiagnosticsTests.test_diagnostic_disk_error_cannot_change_operation_outcome) ... ok
+test_exception_trace_and_eof_are_preserved_without_private_error_text (tests.test_zotero_sync_diagnostics.DiagnosticsTests.test_exception_trace_and_eof_are_preserved_without_private_error_text) ... ok
+test_explicit_ocr_still_requests_ocr_and_reports_unavailable_environment (tests.test_zotero_sync_diagnostics.DiagnosticsTests.test_explicit_ocr_still_requests_ocr_and_reports_unavailable_environment) ... ok
+test_frozen_release_gate_rejects_a_status_only_or_incomplete_helper (tests.test_zotero_sync_diagnostics.DiagnosticsTests.test_frozen_release_gate_rejects_a_status_only_or_incomplete_helper) ... ok
+test_normal_sync_does_not_load_optional_handwriting_environment (tests.test_zotero_sync_diagnostics.DiagnosticsTests.test_normal_sync_does_not_load_optional_handwriting_environment) ... ok
+test_required_request_timeout_has_started_failed_pair_without_payload (tests.test_zotero_sync_diagnostics.DiagnosticsTests.test_required_request_timeout_has_started_failed_pair_without_payload) ... ok
+test_rotation_keeps_complete_records_and_redacts_sensitive_fields (tests.test_zotero_sync_diagnostics.DiagnosticsTests.test_rotation_keeps_complete_records_and_redacts_sensitive_fields) ... ok
+test_runtime_health_separates_required_and_optional_dependencies (tests.test_zotero_sync_diagnostics.DiagnosticsTests.test_runtime_health_separates_required_and_optional_dependencies) ... FAIL
+test_success_request_and_broken_diagnostic_sink_preserve_response (tests.test_zotero_sync_diagnostics.DiagnosticsTests.test_success_request_and_broken_diagnostic_sink_preserve_response) ... ok
+test_conflicts_and_non_idempotent_actions_are_never_replayed (tests.test_zotero_transport.TransportTests.test_conflicts_and_non_idempotent_actions_are_never_replayed) ... ok
+test_live_availability_snapshot_explicitly_clears_a_previous_missing_state (tests.test_zotero_transport.TransportTests.test_live_availability_snapshot_explicitly_clears_a_previous_missing_state) ... ok
+test_live_link_snapshot_includes_receipt_state_without_paths_or_credentials (tests.test_zotero_transport.TransportTests.test_live_link_snapshot_includes_receipt_state_without_paths_or_credentials) ... ok
+test_long_request_emits_transport_heartbeat (tests.test_zotero_transport.TransportTests.test_long_request_emits_transport_heartbeat) ... ok
+test_persistent_transport_failure_pauses_after_three_attempts (tests.test_zotero_transport.TransportTests.test_persistent_transport_failure_pauses_after_three_attempts) ... ok
+test_poll_recovers_with_fresh_bounded_connections_after_reset_or_empty_response (tests.test_zotero_transport.TransportTests.test_poll_recovers_with_fresh_bounded_connections_after_reset_or_empty_response) ... ok
+test_unicode_review_queue_survives_a_windows_cp1252_pipe (tests.test_zotero_transport.TransportTests.test_unicode_review_queue_survives_a_windows_cp1252_pipe) ... ok
+test_worker_reads_utf8_requests_and_returns_unicode_under_a_legacy_locale (tests.test_zotero_transport.TransportTests.test_worker_reads_utf8_requests_and_returns_unicode_under_a_legacy_locale) ... ok
+test_interrupted_choice_cannot_change_sides_or_overwrite_a_later_tablet_edit (tests.test_zotero_audit_repairs.ConflictRecoveryTests.test_interrupted_choice_cannot_change_sides_or_overwrite_a_later_tablet_edit) ... ok
+test_lost_cloud_conflict_response_recovers_after_restart_without_rewriting (tests.test_zotero_audit_repairs.ConflictRecoveryTests.test_lost_cloud_conflict_response_recovers_after_restart_without_rewriting) ... ok
+test_lost_native_conflict_response_recovers_without_a_second_native_update (tests.test_zotero_audit_repairs.ConflictRecoveryTests.test_lost_native_conflict_response_recovers_without_a_second_native_update) ... ok
+test_partial_paper_rename_resumes_only_the_remaining_attachment (tests.test_zotero_audit_repairs.ConflictRecoveryTests.test_partial_paper_rename_resumes_only_the_remaining_attachment) ... ok
+test_invalid_windows_name_retains_all_collection_membership (tests.test_zotero_audit_repairs.DesktopValidationTests.test_invalid_windows_name_retains_all_collection_membership) ... ok
+test_unavailable_second_attachment_retains_membership_and_first_filename (tests.test_zotero_audit_repairs.DesktopValidationTests.test_unavailable_second_attachment_retains_membership_and_first_filename) ... ok
+test_debug_diagnostics_leave_json_transport_clean_and_stop_at_eof (tests.test_zotero_audit_repairs.DiagnosticSafetyTests.test_debug_diagnostics_leave_json_transport_clean_and_stop_at_eof) ... ok
+test_diagnostic_context_closes_when_worker_startup_fails (tests.test_zotero_audit_repairs.DiagnosticSafetyTests.test_diagnostic_context_closes_when_worker_startup_fails) ... ok
+test_operation_trace_persists_safe_stage_and_error_records (tests.test_zotero_audit_repairs.DiagnosticSafetyTests.test_operation_trace_persists_safe_stage_and_error_records) ... ok
+test_periodic_diagnostics_emit_python_stacks_and_stop_without_a_native_watchdog (tests.test_zotero_audit_repairs.DiagnosticSafetyTests.test_periodic_diagnostics_emit_python_stacks_and_stop_without_a_native_watchdog) ... ok
+test_lost_filing_move_response_recovers_without_another_cloud_mutation (tests.test_zotero_audit_repairs.FilingRecoveryTests.test_lost_filing_move_response_recovers_without_another_cloud_mutation) ... ok
+test_lost_response_with_new_tags_does_not_claim_the_old_move_is_complete (tests.test_zotero_audit_repairs.FilingRecoveryTests.test_lost_response_with_new_tags_does_not_claim_the_old_move_is_complete) ... ok
+test_registered_matched_filing_finishes_bookkeeping_without_replaying_old_name (tests.test_zotero_audit_repairs.FilingRecoveryTests.test_registered_matched_filing_finishes_bookkeeping_without_replaying_old_name) ... ok
+test_resume_keeps_the_original_filing_choices (tests.test_zotero_audit_repairs.FilingRecoveryTests.test_resume_keeps_the_original_filing_choices) ... ok
+test_resume_preserves_newer_tablet_name_before_any_more_native_writes (tests.test_zotero_audit_repairs.FilingRecoveryTests.test_resume_preserves_newer_tablet_name_before_any_more_native_writes) ... ok
+test_sync_reopens_changed_unlinked_filing_with_fresh_consent_and_no_duplicate_reference (tests.test_zotero_audit_repairs.FilingRecoveryTests.test_sync_reopens_changed_unlinked_filing_with_fresh_consent_and_no_duplicate_reference) ... ok
+test_real_pdf_diagnostics_and_cached_development_log_stay_out_of_json_stdout (tests.test_zotero_audit_repairs.PdfDiagnosticTransportTests.test_real_pdf_diagnostics_and_cached_development_log_stay_out_of_json_stdout) ... ok
+test_linked_and_paused_pdfs_do_not_return_to_waiting_while_global_pause_retains_untransferred_pdfs (tests.test_zotero_audit_repairs.WaitingTransferStatusTests.test_linked_and_paused_pdfs_do_not_return_to_waiting_while_global_pause_retains_untransferred_pdfs) ... ok
+test_staged_count_excludes_individually_paused_deleted_unavailable_and_non_upload_rows (tests.test_zotero_audit_repairs.WaitingTransferStatusTests.test_staged_count_excludes_individually_paused_deleted_unavailable_and_non_upload_rows) ... ok
+test_staged_uploads_count_once_per_source_and_leave_waiting_after_upload (tests.test_zotero_audit_repairs.WaitingTransferStatusTests.test_staged_uploads_count_once_per_source_and_leave_waiting_after_upload) ... ok
+test_waiting_count_includes_only_pdf_eligible_approvals_and_deduplicates_sources (tests.test_zotero_audit_repairs.WaitingTransferStatusTests.test_waiting_count_includes_only_pdf_eligible_approvals_and_deduplicates_sources) ... ok
+
+======================================================================
+FAIL: test_runtime_health_separates_required_and_optional_dependencies (tests.test_zotero_sync_diagnostics.DiagnosticsTests.test_runtime_health_separates_required_and_optional_dependencies)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\jdaub\OneDrive\Desktop\Documents\PhD\Bonitatibus Research\Python Code\PDF Note Organizer\tests\test_zotero_sync_diagnostics.py", line 103, in test_runtime_health_separates_required_and_optional_dependencies
+    self.assertTrue(health['sync_ready'])
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true
+
+----------------------------------------------------------------------
+Ran 39 tests in 31.163s
+
+FAILED (failures=1)

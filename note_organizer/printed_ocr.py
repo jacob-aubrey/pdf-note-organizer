@@ -10,7 +10,7 @@ import re
 
 import pymupdf
 
-from .remarkable_cloud import atomic_write
+from .remarkable_cloud import atomic_write, trace_event
 
 
 class PrintedOCR:
@@ -45,6 +45,7 @@ class PrintedOCR:
                         and all(isinstance(t, str) for t in cached["pages"])):
                     self.warnings = cached["warnings"]
                     self.complete = True
+                    trace_event(getattr(self, 'diagnostic', None), 'printed_ocr_cache_hit', pages=count)
                     return cached["pages"]
             except (ValueError, KeyError, TypeError):
                 pass  # A corrupt rebuildable cache must not prevent source retrieval.
@@ -53,6 +54,7 @@ class PrintedOCR:
             if document.needs_pass:
                 raise ValueError("Unlock the PDF before indexing.")
             for index, page in enumerate(document):
+                trace_event(getattr(self, 'diagnostic', None), 'printed_ocr_page_started', page=index + 1, total=len(document))
                 if self.cancelled():
                     raise InterruptedError("Printed OCR stopped.")
                 text = page.get_text()
@@ -87,6 +89,7 @@ class PrintedOCR:
                 if not text.strip():
                     warnings.append({"page": index + 1, "reason": "No printed text recognized."})
                 texts.append(text)
+                trace_event(getattr(self, 'diagnostic', None), 'printed_ocr_page_finished', page=index + 1, needs_ocr=needs_ocr)
         self.warnings = warnings
         self.complete = complete
         if complete:

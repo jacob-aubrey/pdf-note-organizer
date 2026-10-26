@@ -14,7 +14,7 @@ from pathlib import Path
 import pymupdf
 
 from .extraction import EXTRACTION_REVISION, annotation_key, ink_only
-from .remarkable_cloud import atomic_write
+from .remarkable_cloud import atomic_write, trace_event
 
 
 # RapidOCR 3.10.0 default_models.yaml and MODEL_LICENSES.md. Apache-2.0;
@@ -90,11 +90,13 @@ class HandwritingOCR:
                             and len(records) == len(document)
                             and all(isinstance(row["text"], str) for row in records)):
                         self.warnings = [r["warning"] for r in records if r.get("warning")]
+                        trace_event(getattr(self, 'diagnostic', None), 'handwriting_ocr_cache_hit', pages=len(records))
                         return [row["text"] for row in records]
                 except (ValueError, KeyError, TypeError):
                     pass  # Corrupt rebuildable text never overrides retained ink.
             records = []
             for number, page in enumerate(document, 1):
+                trace_event(getattr(self, 'diagnostic', None), 'handwriting_ocr_page_started', page=number, total=len(document))
                 if self.cancelled():
                     raise InterruptedError("Handwriting transcription stopped.")
                 members = [a for a in page.annots() or () if a.type[1] == "Ink"]
@@ -122,6 +124,7 @@ class HandwritingOCR:
                         record["warning"] = {"page": number, "reason": "No handwriting text recognized; ink retained."}
                         self.warnings.append(record["warning"])
                 records.append(record)
+                trace_event(getattr(self, 'diagnostic', None), 'handwriting_ocr_page_finished', page=number, ink_annotations=len(members))
         atomic_write(target, json.dumps({"schema": 1, "pdf_sha256": digest, "profile": self.profile,
             "records_sha256": checksum(records), "records": records}, ensure_ascii=False).encode("utf-8"))
         return [row["text"] for row in records]

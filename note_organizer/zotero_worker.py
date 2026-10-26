@@ -66,26 +66,70 @@ def write_packet(transport, packet):
 class OperationTrace:
     """Durable, content-free diagnostics for one or more helper operations."""
 
-    def __init__(self, path):
+    def __init__(self, path, *, max_bytes=2 * 1024 * 1024):
         self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.lock = threading.Lock()
         self.operation = None
+        self.max_bytes = max_bytes
+        self.started = time.monotonic()
+        self.active = None
+        self.completed = None
+        self.active_since = self.started
+
+    @staticmethod
+    def clean(value, key='', depth=0):
+        if key.lower() in {'token', 'authorization', 'headers', 'body', 'payload', 'text', 'content', 'params'}:
+            return '<redacted>'
+        if depth > 4:
+            return '<bounded>'
+        if isinstance(value, dict):
+            return {str(k)[:64]: OperationTrace.clean(v, str(k), depth + 1) for k, v in list(value.items())[:24]}
+        if isinstance(value, (list, tuple)):
+            return [OperationTrace.clean(v, depth=depth + 1) for v in value[:16]]
+        if isinstance(value, str):
+            value = re.sub(r'https?://\S+', '<url>', value)
+            value = re.sub(r'(?i)(?:bearer\s+\S+|(?:token|password|api[_-]?key|secret)\s*[=:]\s*\S+)', '<redacted>', value)
+            value = re.sub(r'[A-Za-z]:[\\/][^\s\"\n]+', '<path>', value)
+            return value[:400]
+        return value if isinstance(value, (int, float, bool, type(None))) else type(value).__name__
 
     def event(self, kind, **fields):
-        record = {"time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                  "event": kind, **fields}
-        if self.operation:
-            record["operation"] = self.operation
-        line = (json.dumps(record, ensure_ascii=True) + "\n").encode("utf-8")
-        with self.lock:
-            with self.path.open("ab") as stream:
-                stream.write(line)
-                stream.flush()
-                os.fsync(stream.fileno())
+        # Diagnostics are best effort: disk/serialization/rotation errors must
+        # never change a sync outcome. Never record request/annotation bodies.
+        try:
+            record = {"time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                      "elapsed_ms": round((time.monotonic() - self.started) * 1000),
+                      "event": kind, **self.clean(fields)}
+            if self.operation:
+                record["operation"] = self.operation
+            if kind.endswith('_started') or kind == 'stage':
+                self.active = {"event": kind, **self.clean(fields)}
+                self.active_since = time.monotonic()
+            if kind.endswith('_finished'):
+                self.completed = {"event": kind, **self.clean(fields)}
+                if self.active and fields.get('request_id') == self.active.get('request_id'):
+                    self.active = None
+            line = (json.dumps(record, ensure_ascii=True) + "\n").encode("utf-8")
+            with self.lock:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                if self.path.exists() and self.path.stat().st_size + len(line) > self.max_bytes:
+                    previous = self.path.with_name(self.path.name + '.1')
+                    older = self.path.with_name(self.path.name + '.2')
+                    if previous.exists():
+                        previous.replace(older)
+                    self.path.replace(previous)
+                with self.path.open("ab") as stream:
+                    stream.write(line)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            return True
+        except Exception:
+            return False
 
-    def start(self, method):
-        self.operation = uuid.uuid4().hex
+    def start(self, method, correlation=None):
+        self.operation = correlation if isinstance(correlation, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,80}', correlation) else uuid.uuid4().hex
+        self.started = time.monotonic()
+        self.active = self.completed = None
         self.event("operation_started", method=method)
 
     def finish(self, state="completed"):
@@ -124,6 +168,7 @@ class Worker:
         self.collections = []
         self.progress = lambda message: None
         self.trace = OperationTrace(self.directory / "sync-trace.jsonl")
+        self.review.trace = self.state.trace = self.trace.event
         self.file_digests = {}
         from .zotero_bulk import BulkLibrary
         self.bulk = BulkLibrary(self)
@@ -132,6 +177,8 @@ class Worker:
         self.connection_dir = connections.state_directory(self.directory, self.config)
         self.review = ReviewStore(self.connection_dir / 'review')
         self.state = BridgeState(self.connection_dir / 'bridge')
+        if hasattr(self, 'trace'):
+            self.review.trace = self.state.trace = self.trace.event
 
     def _connection_snapshot(self):
         return fingerprint({'config': self.config, 'values': connections.values(self.directory, self.config),
@@ -167,7 +214,7 @@ class Worker:
             from .handwriting_ocr import HandwritingOCR
             printed = PrintedOCR(self.resources / "models/printed", self.directory / "printed-cache", cancelled=self.stop.is_set)
             handwriting = HandwritingOCR(self.resources / "models/handwriting", self.directory / "handwriting-cache", cancelled=self.stop.is_set)
-        client = LocalZotero(self.port, printed_ocr=printed, handwriting_ocr=handwriting,
+        client = LocalZotero(self.port, printed_ocr=printed, handwriting_ocr=handwriting, trace=self.trace.event,
                              grant_store=TokenVault(self.directory / "zotero-grant.dpapi"), interactive=interactive)
         if not reconnect and self.config.get("server_id") and client.server_id != self.config["server_id"]:
             client.close()
@@ -180,7 +227,26 @@ class Worker:
         token = TokenVault(self.directory / "tablet-token.dpapi").load()
         if not token:
             raise PilotError("Pair reMarkable from Setup first.")
-        return CloudClient(token, cache_dir=self.directory / "blobs", stop=self.stop, progress=self.progress)
+        return CloudClient(token, cache_dir=self.directory / "blobs", stop=self.stop, progress=self.progress, trace=self.trace.event)
+
+    def runtime_health(self, optional=False):
+        """Read-only packaged-runtime check; never connects or starts OCR."""
+        import importlib
+        required, extras = {}, {}
+        for name in ('pyzotero', 'httpx2', 'httpcore2', 'pymupdf', 'rmscene', 'pypdf'):
+            try:
+                importlib.import_module(name)
+                required[name] = {'available': True}
+            except Exception as error:
+                required[name] = {'available': False, 'missing_module': getattr(error, 'name', None), 'error_type': type(error).__name__}
+        if optional:
+            for name in ('rapidocr', 'onnxruntime', 'numpy'):
+                try:
+                    importlib.import_module(name)
+                    extras[name] = {'available': True}
+                except Exception as error:
+                    extras[name] = {'available': False, 'missing_module': getattr(error, 'name', None), 'error_type': type(error).__name__}
+        return {'required': required, 'optional_ocr': extras, 'sync_ready': all(row['available'] for row in required.values())}
 
     def status(self):
         from .sorting.core_logic import DOCUMENT_TYPE_LABELS
@@ -1553,21 +1619,26 @@ class Worker:
 
     def dispatch(self, method, params):
         allowed = {"status", "connect", "pair", "folders", "configure", "preview_connection", "preview_disconnect", "disconnect_folder", "pause_sync", "sync", "preview", "approve", "delete_decision", "resolve_conflict", "link", "reindex", "local_delete_decision", "move_link", "scan_library", "import_library", "approve_routine", "tag_context", "set_page_tags", "tag_search", "combine_tag_copies", "remove_unavailable_page_tags"}
-        allowed.update({'paper_tag_candidates', 'suggest_paper_tags', 'save_paper_tags', 'retry_bulk', 'dismiss_review'})
+        allowed.update({'paper_tag_candidates', 'suggest_paper_tags', 'save_paper_tags', 'retry_bulk', 'dismiss_review', 'runtime_health'})
         if method not in allowed:
             raise PilotError("Unsupported plugin request.")
-        if method not in {'status', 'pause_sync', 'preview_disconnect'}:
+        if method not in {'status', 'pause_sync', 'preview_disconnect', 'runtime_health'}:
             self._begin_operation()
         return getattr(self, method)(**params)
 
 
 @contextmanager
-def _periodic_stack_diagnostics(path, *, interval=20):
+def _periodic_stack_diagnostics(path, *, interval=20, max_bytes=2 * 1024 * 1024):
     """Optional stack snapshots on an ordinary Python thread holding the GIL."""
     import traceback
-    stream = Path(path).open('w', encoding='utf-8')
+    try:
+        stream = Path(path).open('w', encoding='utf-8')
+    except OSError:
+        yield None
+        return
     stopped = threading.Event()
     def emit():
+        nonlocal stream
         try:
             while not stopped.wait(interval):
                 # CPython gh-140815 / gh-140985: the native faulthandler
@@ -1576,6 +1647,14 @@ def _periodic_stack_diagnostics(path, *, interval=20):
                 # unsynchronized native stack walk; never inspect locals.
                 frames = sys._current_frames()
                 try:
+                    if stream.tell() >= max_bytes:
+                        stream.close()
+                        current = Path(path)
+                        previous = current.with_name(current.name + '.1')
+                        if previous.exists():
+                            previous.replace(current.with_name(current.name + '.2'))
+                        current.replace(previous)
+                        stream = current.open('w', encoding='utf-8')
                     stream.write(f'Periodic stack snapshot ({interval:g} seconds)\n')
                     for identity, frame in sorted(frames.items()):
                         stream.write(f'\nThread 0x{identity:x}:\n')
@@ -1622,6 +1701,17 @@ def main(argv=None, *, worker_factory=Worker):
         return _serve(args, worker_factory)
 
 
+@contextmanager
+def _transport_logging():
+    previous = logging.root.manager.disable
+    logging.disable(logging.CRITICAL)
+    try:
+        yield
+    finally:
+        logging.disable(previous)
+
+
+@_transport_logging()
 def _serve(args, worker_factory):
     import pymupdf
     # PyMuPDF caches its message/log streams at import, so redirect_stdout
@@ -1629,9 +1719,22 @@ def _serve(args, worker_factory):
     pymupdf.set_messages(stream=sys.stderr)
     pymupdf.set_log(stream=sys.stderr)
     resources = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
-    worker = worker_factory(args.state, args.port, resources=resources)
-    if not hasattr(worker, "trace"):
-        worker.trace = OperationTrace(Path(args.state) / "sync-trace.jsonl")
+    trace = OperationTrace(Path(args.state) / "sync-trace.jsonl")
+    try:
+        executable_sha = file_sha(sys.executable)
+    except OSError:
+        executable_sha = None
+    trace.event('helper_started', pid=os.getpid(), executable=Path(sys.executable).name,
+                executable_sha256=executable_sha)
+    try:
+        worker = worker_factory(args.state, args.port, resources=resources)
+    except Exception as error:
+        trace.event('helper_start_failed', error_type=type(error).__name__)
+        raise
+    worker.trace = trace
+    for ledger in (getattr(worker, 'state', None), getattr(worker, 'review', None)):
+        if ledger is not None:
+            ledger.trace = trace.event
     # NumPy/OpenBLAS's Windows DLL initialization inspects piped stdin. A
     # concurrent blocking stdin reader can deadlock that native import. Load
     # NumPy on the main thread before starting the transport reader, including
@@ -1643,13 +1746,18 @@ def _serve(args, worker_factory):
         except ModuleNotFoundError:
             pass
     pending = queue.Queue()
+    shutdown_requested = threading.Event()
     def read():
         for line in sys.stdin:
             try:
                 request = json.loads(line)
+                if not isinstance(request, dict):
+                    raise ValueError('Request must be an object')
                 if request.get("method") in {"cancel", "shutdown", "pause_sync"}:
+                    worker.trace.event('control_requested', method=request['method'], request_id=request.get('id'))
                     worker.stop.set()
                     if request["method"] == "shutdown":
+                        shutdown_requested.set()
                         break
                     if request['method'] == 'pause_sync':
                         try:
@@ -1660,12 +1768,12 @@ def _serve(args, worker_factory):
                         pending.put(request)
                 else:
                     pending.put(request)
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as error:
+                worker.trace.event('invalid_request', error_type=type(error).__name__, characters=len(line))
+        worker.trace.event('stdin_closed', shutdown_requested=shutdown_requested.is_set())
         worker.stop.set()
         pending.put(None)
     threading.Thread(target=read, daemon=True).start()
-    logging.disable(logging.CRITICAL)
     transport = sys.stdout
     packet_lock = threading.Lock()
     def send(packet):
@@ -1673,7 +1781,11 @@ def _serve(args, worker_factory):
             write_packet(transport, packet)
     last_links = None
     def progress(message):
-        worker.trace.event("progress", message=str(message))
+        # Existing messages can contain paper titles. Log the ordinal/stage
+        # and safe tablet identity instead of document metadata or text.
+        tablet = re.search(r'tablet item ([a-fA-F0-9-]{36})', str(message))
+        worker.trace.event("progress", message=str(message).split(':', 1)[0],
+                           tablet_key=tablet.group(1) if tablet else None)
         nonlocal last_links
         packet = {'event': 'progress', 'message': message}
         links = progress_links(worker)
@@ -1690,13 +1802,16 @@ def _serve(args, worker_factory):
             break
         response = {"id": request.get("id")}
         method = str(request.get("method", ""))
-        worker.trace.start(method)
-        worker.trace.event("request_received", method=method)
+        worker.trace.start(method, request.get('trace_id'))
+        worker.trace.event("request_received", method=method, request_id=request.get('id'))
         heartbeat_stop = threading.Event()
         heartbeat = None
         if request.get("method") not in {"status", "shutdown"}:
             def keep_alive():
                 while not heartbeat_stop.wait(15):
+                    worker.trace.event('heartbeat_sent', request_id=request.get('id'), active=worker.trace.active,
+                                       active_ms=round((time.monotonic() - worker.trace.active_since) * 1000) if worker.trace.active else 0,
+                                       last_completed=worker.trace.completed)
                     send({'event': 'progress', 'message': 'Still working...'})
             heartbeat = threading.Thread(target=keep_alive, name='Notable transport heartbeat', daemon=True)
             heartbeat.start()
@@ -1705,9 +1820,12 @@ def _serve(args, worker_factory):
             with redirect_stdout(sys.stderr):
                 response["result"] = worker.dispatch(request.get("method"), request.get("params", {}))
         except Exception as error:
-            worker.trace.event("error", type=type(error).__name__, message=str(error),
-                               traceback="".join(traceback.format_exception(error))[-8000:])
+            worker.trace.event("error", type=type(error).__name__,
+                               missing_module=getattr(error.__cause__ or error.__context__, 'name', None),
+                               frames=[{'file': Path(frame.filename).name, 'line': frame.lineno, 'function': frame.name}
+                                       for frame in traceback.extract_tb(error.__traceback__)[-16:]])
             if isinstance(error, InterruptedError):
+                worker.trace.event('operation_cancelled', request_id=request.get('id'), pause=worker.pause_pending.is_set())
                 worker.last = {"state": "paused", "message": "Sync stopped. Your files and pending reviews were retained."}
                 response["result"] = worker.status()
                 send(response)
@@ -1720,6 +1838,11 @@ def _serve(args, worker_factory):
             else:
                 safe = str(error) if isinstance(error, (PilotError, CloudError, ValueError, FileNotFoundError)) else "The operation could not finish. Your files were retained; retry from Notable."
             worker.last = {"state": "needs_attention", "message": safe, "error": type(error).__name__}
+            # Validation/file errors may embed document text or a private title.
+            # Keep the UI response intact, but only retain their structural context.
+            worker.trace.event('user_error', error_type=type(error).__name__,
+                               message=None if isinstance(error, (ValueError, FileNotFoundError)) else safe,
+                               message_characters=len(safe))
             response["error"] = {"message": safe, "type": type(error).__name__}
         finally:
             heartbeat_stop.set()
@@ -1727,6 +1850,7 @@ def _serve(args, worker_factory):
                 heartbeat.join(timeout=2)
             worker.trace.finish("error" if "error" in response else "completed")
         send(response)
+    worker.trace.event('helper_exiting', reason='shutdown_requested' if shutdown_requested.is_set() else 'stdin_eof')
 
 
 if __name__ == "__main__":

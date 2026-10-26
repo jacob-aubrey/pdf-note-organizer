@@ -1,0 +1,200 @@
+[
+  {
+    "log": "sync-trace.jsonl",
+    "time": "2026-10-26T05:06:53Z",
+    "elapsed_ms": 0,
+    "event": "operation_started",
+    "method": "status",
+    "operation": "mvoso73r-666ogn19t2y-1"
+  },
+  {
+    "log": "sync-trace.jsonl",
+    "time": "2026-10-26T05:06:53Z",
+    "elapsed_ms": 4,
+    "event": "request_received",
+    "method": "status",
+    "request_id": 1,
+    "operation": "mvoso73r-666ogn19t2y-1"
+  },
+  {
+    "log": "sync-trace.jsonl",
+    "time": "2026-10-26T05:06:57Z",
+    "elapsed_ms": 4320,
+    "event": "operation_finished",
+    "state": "completed",
+    "operation": "mvoso73r-666ogn19t2y-1"
+  },
+  {
+    "log": "sync-trace.jsonl",
+    "time": "2026-10-26T05:07:14Z",
+    "elapsed_ms": 0,
+    "event": "operation_started",
+    "method": "status",
+    "operation": "mvoso73r-666ogn19t2y-2"
+  },
+  {
+    "log": "sync-trace.jsonl",
+    "time": "2026-10-26T05:07:14Z",
+    "elapsed_ms": 5,
+    "event": "request_received",
+    "method": "status",
+    "request_id": 2,
+    "operation": "mvoso73r-666ogn19t2y-2"
+  },
+  {
+    "log": "sync-trace.jsonl",
+    "time": "2026-10-26T05:07:18Z",
+    "elapsed_ms": 4185,
+    "event": "operation_finished",
+    "state": "completed",
+    "operation": "mvoso73r-666ogn19t2y-2"
+  },
+  {
+    "log": "sync-trace.jsonl",
+    "time": "2026-10-26T05:07:41Z",
+    "elapsed_ms": 0,
+    "event": "operation_started",
+    "method": "sync",
+    "operation": "mvoso73r-666ogn19t2y-3"
+  },
+  {
+    "log": "sync-trace.jsonl",
+    "time": "2026-10-26T05:07:41Z",
+    "elapsed_ms": 6,
+    "event": "request_received",
+    "method": "sync",
+    "request_id": 3,
+    "operation": "mvoso73r-666ogn19t2y-3"
+  },
+  {
+    "log": "sync-trace.jsonl",
+    "time": "2026-10-26T05:07:41Z",
+    "elapsed_ms": 10,
+    "event": "stage",
+    "name": "opening_connections",
+    "operation": "mvoso73r-666ogn19t2y-3"
+  },
+  {
+    "log": "sync-trace.jsonl",
+    "time": "2026-10-26T05:07:41Z",
+    "elapsed_ms": 349,
+    "event": "stage",
+    "name": "cleaning_intake",
+    "operation": "mvoso73r-666ogn19t2y-3"
+  },
+  {
+    "log": "sync-trace.jsonl",
+    "time": "2026-10-26T05:07:41Z",
+    "elapsed_ms": 364,
+    "event": "stage",
+    "name": "cataloging_sources",
+    "operation": "mvoso73r-666ogn19t2y-3"
+  },
+  {
+    "log": "sync-trace.jsonl",
+    "time": "2026-10-26T05:09:44Z",
+    "elapsed_ms": 123112,
+    "event": "stage",
+    "name": "refreshing_review_policy",
+    "operation": "mvoso73r-666ogn19t2y-3"
+  },
+  {
+    "log": "sync-trace.jsonl",
+    "time": "2026-10-26T05:09:50Z",
+    "elapsed_ms": 128508,
+    "event": "stage",
+    "name": "syncing_bridge",
+    "operation": "mvoso73r-666ogn19t2y-3"
+  },
+  {
+    "log": "sync-transport.jsonl",
+    "time": "2026-10-26T05:06:47.292Z",
+    "event": "helper_stopped",
+    "reason": "The background helper stopped. Retry your action to restart it."
+  },
+  {
+    "log": "sync-transport.jsonl",
+    "time": "2026-10-26T05:06:48.951Z",
+    "event": "rpc_started",
+    "helper_id": "mvoso73r-666ogn19t2y",
+    "trace_id": "mvoso73r-666ogn19t2y-1",
+    "id": 1,
+    "method": "status"
+  },
+  {
+    "log": "sync-transport.jsonl",
+    "time": "2026-10-26T05:07:14.450Z",
+    "event": "rpc_started",
+    "helper_id": "mvoso73r-666ogn19t2y",
+    "trace_id": "mvoso73r-666ogn19t2y-2",
+    "id": 2,
+    "method": "status"
+  },
+  {
+    "log": "sync-transport.jsonl",
+    "time": "2026-10-26T05:07:41.538Z",
+    "event": "rpc_started",
+    "helper_id": "mvoso73r-666ogn19t2y",
+    "trace_id": "mvoso73r-666ogn19t2y-3",
+    "id": 3,
+    "method": "sync"
+  },
+  {
+    "log": "sync-transport.jsonl",
+    "time": "2026-10-26T05:33:57.915Z",
+    "event": "rpc_timeout",
+    "helper_id": "mvoso73r-666ogn19t2y",
+    "trace_id": "mvoso73r-666ogn19t2y-3",
+    "method": "sync",
+    "duration_ms": 1576377,
+    "last_heartbeat_time": 1792992237910
+  },
+  {
+    "log": "sync-transport.jsonl",
+    "time": "2026-10-26T05:33:57.915Z",
+    "event": "parent_termination_requested",
+    "helper_id": "mvoso73r-666ogn19t2y",
+    "reason": "inactivity_timeout",
+    "graceful": false
+  },
+  {
+    "log": "sync-transport.jsonl",
+    "time": "2026-10-26T05:33:57.915Z",
+    "event": "parent_kill",
+    "helper_id": "mvoso73r-666ogn19t2y",
+    "reason": "inactivity_timeout"
+  },
+  {
+    "log": "sync-transport.jsonl",
+    "time": "2026-10-26T05:33:57.922Z",
+    "event": "stdout_eof",
+    "helper_id": "mvoso73r-666ogn19t2y",
+    "trailing_characters": 0
+  },
+  {
+    "log": "sync-transport.jsonl",
+    "time": "2026-10-26T05:33:58.104Z",
+    "event": "helper_exit",
+    "helper_id": "mvoso73r-666ogn19t2y",
+    "exit_code": -9,
+    "duration_ms": 1629153,
+    "parent_initiated": true,
+    "reason": "inactivity_timeout"
+  },
+  {
+    "log": "sync-transport.jsonl",
+    "time": "2026-10-26T05:33:58.104Z",
+    "event": "rpc_rejected",
+    "helper_id": "mvoso73r-666ogn19t2y",
+    "trace_id": "mvoso73r-666ogn19t2y-3",
+    "method": "sync",
+    "user_message": "The helper stopped responding and was stopped safely. Retry your action to restart it."
+  },
+  {
+    "log": "sync-transport.jsonl",
+    "time": "2026-10-26T05:33:58.104Z",
+    "event": "helper_stopped",
+    "helper_id": "mvoso73r-666ogn19t2y",
+    "reason": "The helper stopped responding and was stopped safely. Retry your action to restart it."
+  }
+]

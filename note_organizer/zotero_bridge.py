@@ -81,6 +81,7 @@ class Bridge:
         self.exclusions = exclusions or {'zotero': set(), 'tablet': set(), 'documents': set(), 'sources': set()}
         self.namespace = "notable-bridge-" + _sha(json.dumps([zotero.server_id, zotero_root, self.croot]).encode())[:24]
         self.publisher = Ledger(state.directory / "publisher")
+        self.publisher.trace = getattr(state, 'trace', None)
         self.sources = SimpleNamespace(path=state.directory / "sources" / "library.sqlite3")
         # Reuse the cloud adapter's existing content-addressed baseline support.
         if hasattr(self.cloud, "baseline_dir"):
@@ -502,7 +503,8 @@ class Bridge:
                         raise PilotError("A retained annotated PDF changed. It was preserved for review.")
                 else:
                     try:
-                        rendered = annotated_pdf(item, retained_bundle, self._cancelled)
+                        rendered = annotated_pdf(item, retained_bundle, self._cancelled,
+                                                 diagnostic=getattr(self.state, 'trace', None))
                     except UnsupportedAnnotations as error:
                         reviews.append({"cloud": ck, "reason": str(error)})
                         continue

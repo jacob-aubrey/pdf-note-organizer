@@ -1,0 +1,14 @@
+[
+  {
+    "ProcessId": 41052,
+    "ParentProcessId": 20664,
+    "CreationDate": "2026-10-26T03:09:47.252651-04:00",
+    "ExecutablePath": "C:\\Users\\jdaub\\AppData\\Roaming\\Zotero\\Zotero\\Profiles\\9v5afvrs.default\\notable\\runtime\\69877b7770a966915ba52021\\notable-worker.exe"
+  },
+  {
+    "ProcessId": 6808,
+    "ParentProcessId": 41052,
+    "CreationDate": "2026-10-26T03:09:52.369036-04:00",
+    "ExecutablePath": "C:\\Users\\jdaub\\AppData\\Roaming\\Zotero\\Zotero\\Profiles\\9v5afvrs.default\\notable\\runtime\\69877b7770a966915ba52021\\notable-worker.exe"
+  }
+]

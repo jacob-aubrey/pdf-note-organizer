@@ -2,6 +2,9 @@
 from pathlib import Path
 from importlib import metadata
 from PyInstaller.utils.hooks import collect_data_files, copy_metadata
+from tools.build_zotero_support import validate_build_environment
+
+validate_build_environment()
 
 root = Path(SPECPATH)
 model_root = root / '.test-tmp/handwriting-rapidocr/models'

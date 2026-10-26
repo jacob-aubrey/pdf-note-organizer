@@ -1,0 +1,11 @@
+{
+  "observed_at_utc": "2026-10-26T07:42:54.017162+00:00",
+  "read_only": true,
+  "keyword_check_status_counts": {
+    "no_stated_keywords": 157,
+    "not_checked": 3,
+    "found": 292,
+    "needs_text_recognition": 4
+  },
+  "note": "These metadata/keyword outcomes are distinct from sync runtime failure and ordinary Sync does not invoke optional handwriting OCR."
+}

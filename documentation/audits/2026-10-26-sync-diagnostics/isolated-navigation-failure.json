@@ -1,0 +1,30 @@
+{
+  "scope": "Read-only source bundle, offline rendering copy only",
+  "tablet_key": "04bfa418-8d11-556d-9101-ed6e6657ef77",
+  "success": false,
+  "error_type": "UnsupportedAnnotations",
+  "message": "The source PDF has an unresolved named link; retain it for navigation repair.",
+  "frames": [
+    {
+      "file": "<string>",
+      "line": 3,
+      "function": "<module>"
+    },
+    {
+      "file": "remarkable_pdf.py",
+      "line": 399,
+      "function": "annotated_pdf"
+    },
+    {
+      "file": "remarkable_pdf.py",
+      "line": 469,
+      "function": "_annotated_pdf"
+    },
+    {
+      "file": "remarkable_pdf.py",
+      "line": 303,
+      "function": "restore_navigation"
+    }
+  ],
+  "duration_s": 0.021
+}
