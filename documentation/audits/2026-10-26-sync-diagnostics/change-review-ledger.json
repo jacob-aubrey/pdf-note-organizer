@@ -2,7 +2,7 @@
   "scope": "Diagnostics and demonstrated repairs only; not a repeated full-tree audit",
   "starting_revision": "2f06ac2bed28a569bed56a64f8ceccb47f2e886e",
   "branch": "main",
-  "revision_at_ledger_write": "2f06ac2bed28a569bed56a64f8ceccb47f2e886e",
+  "revision_at_ledger_write": "16354cec48d647e7c0af3e0d633c70e21d8d42fd",
   "files": [
     {
       "file": "Notable Zotero Worker.spec",
@@ -55,6 +55,18 @@
       ],
       "replaced_or_removed_old_ranges": [],
       "scope": "Changed ranges reviewed; unchanged code reuses October 25 audits"
+    },
+    {
+      "file": "documentation/audits/2026-10-26-sync-diagnostics/CHANGESET.md",
+      "sha256": "579e84b84182d79598e233812b8669a84dc9d7012dbac5458ac1d18017e111ea",
+      "lines": 13,
+      "reviewed_ranges": [
+        [
+          1,
+          13
+        ]
+      ],
+      "scope": "New authored file reviewed in full"
     },
     {
       "file": "documentation/audits/2026-10-26-sync-diagnostics/COMMANDS.md",
