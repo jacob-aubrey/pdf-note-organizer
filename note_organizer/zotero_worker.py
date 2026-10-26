@@ -8,12 +8,15 @@ import hashlib
 import json
 import logging
 import mimetypes
+import os
 from pathlib import Path
 import queue
 import re
 import sys
 import threading
 import time
+import traceback
+import uuid
 
 from .remarkable_cloud import CloudClient, CloudError, TokenVault, atomic_write
 from .zotero_bridge import Bridge, BridgeState, descendants
@@ -60,6 +63,36 @@ def write_packet(transport, packet):
     transport.flush()
 
 
+class OperationTrace:
+    """Durable, content-free diagnostics for one or more helper operations."""
+
+    def __init__(self, path):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.lock = threading.Lock()
+        self.operation = None
+
+    def event(self, kind, **fields):
+        record = {"time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                  "event": kind, **fields}
+        if self.operation:
+            record["operation"] = self.operation
+        line = (json.dumps(record, ensure_ascii=True) + "\n").encode("utf-8")
+        with self.lock:
+            with self.path.open("ab") as stream:
+                stream.write(line)
+                stream.flush()
+                os.fsync(stream.fileno())
+
+    def start(self, method):
+        self.operation = uuid.uuid4().hex
+        self.event("operation_started", method=method)
+
+    def finish(self, state="completed"):
+        self.event("operation_finished", state=state)
+        self.operation = None
+
+
 def progress_links(worker):
     """Small live connection updates without polling the serialized API."""
     state = getattr(worker, 'state', None)
@@ -90,6 +123,7 @@ class Worker:
                      'message': 'Sync paused. Click Sync now when ready.' if self.config.get('sync_paused') else ''}
         self.collections = []
         self.progress = lambda message: None
+        self.trace = OperationTrace(self.directory / "sync-trace.jsonl")
         self.file_digests = {}
         from .zotero_bulk import BulkLibrary
         self.bulk = BulkLibrary(self)
@@ -877,14 +911,23 @@ class Worker:
             self.config['sync_paused'] = False
             self.save()
         self._begin_operation()
-        client = self.zotero(ocr=True)
+        started_trace = self.trace.operation is None
+        if started_trace:
+            self.trace.start("sync")
+        self.trace.event("stage", name="opening_connections")
+        client = None
         try:
+            client = self.zotero(ocr=True)
             cloud = self.cloud()
+            self.trace.event("stage", name="cleaning_intake")
             self.cleanup_intake(client)
+            self.trace.event("stage", name="cataloging_sources")
             self.progress('Checking new papers and existing links…')
             self._catalog(client, cloud)
+            self.trace.event("stage", name="refreshing_review_policy")
             self.progress('Checking Zotero matches and saved review decisions…')
             self.refresh_review_policy(client)
+            self.trace.event("stage", name="syncing_bridge")
             excluded = connections.exclusions(self.directory, self.config)
             excluded['documents'].update(issue['cloud'] for issue in self.catalog_issues if issue.get('cloud'))
             result = Bridge(client, cloud, self.state, self.config["zotero_root"], self.config["tablet_root"], review_policy=self.review, follow_changes=True,
@@ -917,9 +960,14 @@ class Worker:
             self.collections = client.collections()
             self.last = {"state": "needs_review" if self.review.rows() or self.review.deletions() or self.review.local_deletions() or result["review"] else "ready",
                          "message": "Sync finished — some links need attention" if result["review"] else "Sync finished", "updated": time.time(), "result": result}
+            self.trace.event("sync_result", actions=len(result.get("actions", [])),
+                             reviews=len(result.get("review", [])), partial_indexes=partial_indexes)
             return self.status()
         finally:
-            client.close()
+            if client is not None:
+                client.close()
+            if started_trace and self.trace.operation:
+                self.trace.finish("completed" if self.last.get("state") in {"ready", "needs_review"} else "stopped")
 
     def preview(self, identity, document_type, title, template=None):
         from .sorting.core_logic import build_proposed_filename, validate_filename_template
@@ -1580,6 +1628,8 @@ def _serve(args, worker_factory):
     pymupdf.set_log(stream=sys.stderr)
     resources = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
     worker = worker_factory(args.state, args.port, resources=resources)
+    if not hasattr(worker, "trace"):
+        worker.trace = OperationTrace(Path(args.state) / "sync-trace.jsonl")
     # NumPy/OpenBLAS's Windows DLL initialization inspects piped stdin. A
     # concurrent blocking stdin reader can deadlock that native import. Load
     # NumPy on the main thread before starting the transport reader, including
@@ -1621,6 +1671,7 @@ def _serve(args, worker_factory):
             write_packet(transport, packet)
     last_links = None
     def progress(message):
+        worker.trace.event("progress", message=str(message))
         nonlocal last_links
         packet = {'event': 'progress', 'message': message}
         links = progress_links(worker)
@@ -1636,6 +1687,9 @@ def _serve(args, worker_factory):
         if request is None:
             break
         response = {"id": request.get("id")}
+        method = str(request.get("method", ""))
+        worker.trace.start(method)
+        worker.trace.event("request_received", method=method)
         heartbeat_stop = threading.Event()
         heartbeat = None
         if request.get("method") not in {"status", "shutdown"}:
@@ -1649,6 +1703,8 @@ def _serve(args, worker_factory):
             with redirect_stdout(sys.stderr):
                 response["result"] = worker.dispatch(request.get("method"), request.get("params", {}))
         except Exception as error:
+            worker.trace.event("error", type=type(error).__name__, message=str(error),
+                               traceback="".join(traceback.format_exception(error))[-8000:])
             if isinstance(error, InterruptedError):
                 worker.last = {"state": "paused", "message": "Sync stopped. Your files and pending reviews were retained."}
                 response["result"] = worker.status()
@@ -1661,6 +1717,7 @@ def _serve(args, worker_factory):
             heartbeat_stop.set()
             if heartbeat:
                 heartbeat.join(timeout=2)
+            worker.trace.finish("error" if "error" in response else "completed")
         send(response)
 
 

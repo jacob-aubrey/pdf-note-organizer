@@ -60,6 +60,17 @@ var NotableUI = {
       }
     });
   },
+  recordTransport(event, details = {}) {
+    if (!this.statePath) return;
+    const path = PathUtils.join(this.statePath, 'sync-transport.jsonl');
+    const record = JSON.stringify({time: new Date().toISOString(), event, ...details}) + '\n';
+    this.transportLog = (this.transportLog || Promise.resolve()).catch(() => {}).then(async () => {
+      let existing = '';
+      try { existing = await IOUtils.readUTF8(path); } catch (_) {}
+      const combined = (existing + record).slice(-4 * 1024 * 1024);
+      await IOUtils.writeUTF8(path, combined);
+    });
+  },
   attach(window) {
     if (this.stopped) return;
     if (this.windows.has(window)) return;
@@ -163,15 +174,30 @@ var NotableUI = {
       command = PathUtils.join(directory, 'notable-worker.exe'); args = [];
     }
     this.message('Starting the background helper…');
+    this.recordTransport('helper_starting');
     if (this.stopped) throw new Error(this.shortName + ' is closed.');
     const diagnostics = Zotero.Prefs.get('notable.testDiagnostics', true) ? ['--debug-stacks'] : [];
     // PyMuPDF caches its message stream at import, before per-request redirects.
     const process = await Subprocess.call({command, arguments: [...args, '--state', this.statePath, '--port', String(Zotero.Server.port), ...diagnostics],
       stderr: 'pipe', environmentAppend: true, environment: {PYTHONUNBUFFERED: '1', PYTHONDONTWRITEBYTECODE: '1', PYMUPDF_MESSAGE: 'fd:2'}});
     this.process = process;
+    this.recordTransport('helper_started', {command: command.split(/[\\/]/).pop()});
     if (this.stopped) { await this.closeProcess(process); throw new Error(this.shortName + ' is closed.'); }
     // Drain diagnostics without logging paper contents or credentials.
-    (async () => { try { while (await process.stderr.readString()) {} } catch (_) {} })();
+    (async () => {
+      let diagnostics = '';
+      try {
+        while (true) {
+          const chunk = await process.stderr.readString();
+          if (!chunk) break;
+          diagnostics += chunk;
+        }
+      } catch (error) {
+        this.recordTransport('stderr_read_failed', {type: error.name, message: error.message});
+      } finally {
+        if (diagnostics) this.recordTransport('helper_stderr', {text: diagnostics.slice(-50000)});
+      }
+    })();
     (async () => {
       let buffer = '', failure = 'The background helper stopped. Retry your action to restart it.';
       try {
@@ -191,8 +217,14 @@ var NotableUI = {
           }
         }
       } catch (error) {
-        if (error instanceof SyntaxError) failure = 'The background helper sent an invalid response. Retry your action to restart it.';
+        if (error instanceof SyntaxError) {
+          failure = 'The background helper sent an invalid response. Retry your action to restart it.';
+          this.recordTransport('invalid_response', {type: error.name, message: error.message, trailing: buffer.slice(-2000)});
+        } else {
+          this.recordTransport('stdout_read_failed', {type: error.name, message: error.message});
+        }
       }
+      this.recordTransport('helper_stopped', {reason: failure});
       try { await this.closeProcess(process, false); } catch (_) {}
       this.rejectProcessRequests(process, this.processError || failure);
     })();
@@ -1354,4 +1386,3 @@ var NotableUI = {
   },
   async loadFolders() { this.folderCatalog = await this.action('folders', {}, false); this.refreshCollectionNames(); this.render(); }
 };
-

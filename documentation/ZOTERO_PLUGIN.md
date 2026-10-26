@@ -10,6 +10,14 @@ no application upgrade is needed. Development tests used disposable profiles
 and did not install the plugin into the production library. This local preview
 has no published automatic-update feed.
 
+Version **0.8.9** packages the current worker's durable sync trace, while
+retaining the 0.8.8 keep-alive and serialized
+transport fixes, so long sync and OCR operations keep their connection alive.
+PDF diagnostics stay separate from the helper's responses. The audit verifies
+the bundled worker against the source, rather than relying on the version label.
+After a stop, copy `sync-trace.jsonl` and `sync-transport.jsonl` from the
+Zotero profile's `notable` directory before restarting.
+
 Version **0.8.7** also counts staged PDFs that have not finished uploading in
 the approved waiting-for-sync total. Office documents filed locally do not
 inflate the tablet-transfer count.

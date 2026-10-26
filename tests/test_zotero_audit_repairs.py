@@ -15,7 +15,7 @@ from unittest.mock import patch
 import uuid
 
 from note_organizer.zotero_pilot import PilotError
-from note_organizer.zotero_worker import Worker, _periodic_stack_diagnostics, main
+from note_organizer.zotero_worker import OperationTrace, Worker, _periodic_stack_diagnostics, main
 from note_organizer.zotero_review import fingerprint
 from tests import test_zotero_worker as worker_fixtures
 from tests import test_zotero_bridge as bridge_fixtures
@@ -348,6 +348,19 @@ class DiagnosticSafetyTests(unittest.TestCase):
             main(['--state', str(self.root), '--debug-stacks'], worker_factory=EchoWorker)
         self.assertEqual(json.loads(output.getvalue()), {'id': 7, 'result': {'title': 'Disposable'}})
         self.assertFalse(any(t.name == 'Notable stack diagnostics' for t in threading.enumerate()))
+
+    def test_operation_trace_persists_safe_stage_and_error_records(self):
+        trace = OperationTrace(self.root / 'sync-trace.jsonl')
+        trace.start('sync')
+        trace.event('stage', name='syncing_bridge')
+        trace.event('error', type='ValueError', message='The source changed.')
+        trace.finish('error')
+        records = [json.loads(line) for line in (self.root / 'sync-trace.jsonl').read_text(encoding='utf-8').splitlines()]
+        self.assertEqual([record['event'] for record in records],
+                         ['operation_started', 'stage', 'error', 'operation_finished'])
+        self.assertEqual(records[1]['name'], 'syncing_bridge')
+        self.assertEqual(records[2]['message'], 'The source changed.')
+        self.assertNotIn('token', json.dumps(records))
 
 
 class PdfDiagnosticTransportTests(unittest.TestCase):

@@ -552,6 +552,23 @@ Let the download complete, then refresh again after it stops changing. The file 
 
 Read the full error in **View sync details**. Restore a missing source or close an application that is holding it, then use **Library → Sync PDFs**. A failed scan does not replace the last successful saved notes.
 
+### A reMarkable sync stops unexpectedly
+
+The companion records a content-free diagnostic trail in the Zotero profile's
+`notable` directory:
+
+- `sync-trace.jsonl` records each helper operation, sync stage, progress message,
+  result counts, exception type/message, and the last operation observed before
+  an unexpected process exit.
+- `sync-transport.jsonl` records helper start/stop events, invalid JSON
+  responses, and the tail of helper diagnostics written to stderr.
+
+These files do not contain PDF text, request payloads, access tokens, or cloud
+credentials. If a sync stops, do not delete or restart Zotero before copying
+both files. Their final records identify whether the stop occurred while
+cataloging Zotero, checking tablet papers, filing approved papers, transferring
+files, indexing, or in the helper transport itself.
+
 Inspect **PDF view** to see the combined annotations. Flattened marks are ordinary page content and cannot reliably be separated from the printed page; different flattened versions need review. A highlight without extractable text keeps a source link and a review warning. For split/merged handwriting, adjust Folder settings and sync, then check a small sample before applying the approach broadly.
 
 ### The generated notebook did not update
