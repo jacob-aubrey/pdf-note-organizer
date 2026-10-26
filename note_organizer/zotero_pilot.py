@@ -341,7 +341,7 @@ class LocalZotero:
             try:
                 # Keep long import polling separate from the SDK connection.
                 # A stale pooled socket must not poison every remaining paper.
-                with httpx2.Client(trust_env=False, timeout=30, follow_redirects=False,
+                with httpx2.Client(trust_env=False, timeout=ZOTERO_REQUEST_TIMEOUT, follow_redirects=False,
                                    event_hooks={'request': [self.guard]}) as connection:
                     response = connection.post(self.endpoint + '/notable/action', json={**(payload or {}), 'action': action},
                         headers={'Zotero-Server-ID': self.server_id, 'Zotero-API-Key': self.zot.local_api_key,

@@ -1710,7 +1710,13 @@ def _serve(args, worker_factory):
                 response["result"] = worker.status()
                 send(response)
                 continue
-            safe = str(error) if isinstance(error, (PilotError, CloudError, ValueError, FileNotFoundError)) else "The operation could not finish. Your files were retained; retry from Notable."
+            error_type = type(error).__name__.lower()
+            if "timeout" in error_type:
+                safe = "Zotero did not answer within 30 seconds. Your files were retained; retry from Notable."
+            elif "transport" in error_type or "connect" in error_type:
+                safe = "The connection to Zotero was interrupted. Your files were retained; retry from Notable."
+            else:
+                safe = str(error) if isinstance(error, (PilotError, CloudError, ValueError, FileNotFoundError)) else "The operation could not finish. Your files were retained; retry from Notable."
             worker.last = {"state": "needs_attention", "message": safe, "error": type(error).__name__}
             response["error"] = {"message": safe, "type": type(error).__name__}
         finally:
