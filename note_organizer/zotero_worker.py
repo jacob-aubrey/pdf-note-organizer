@@ -917,7 +917,9 @@ class Worker:
         self.trace.event("stage", name="opening_connections")
         client = None
         try:
-            client = self.zotero(ocr=True)
+            # Handwriting recognition is optional and must not prevent the
+            # normal sync from starting when its separate environment is absent.
+            client = self.zotero()
             cloud = self.cloud()
             self.trace.event("stage", name="cleaning_intake")
             self.cleanup_intake(client)
