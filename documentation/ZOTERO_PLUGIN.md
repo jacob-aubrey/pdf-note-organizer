@@ -10,7 +10,9 @@ no application upgrade is needed. Development tests used disposable profiles
 and did not install the plugin into the production library. This local preview
 has no published automatic-update feed.
 
-Version **0.8.9** packages the current worker's durable sync trace, while
+Version **0.9.0** adds bounded Zotero requests and identifies the active
+tablet paper and publication step in the durable sync trace. It packages the
+current worker's durable sync trace, while
 retaining the 0.8.8 keep-alive and serialized
 transport fixes, so long sync and OCR operations keep their connection alive.
 PDF diagnostics stay separate from the helper's responses. The audit verifies

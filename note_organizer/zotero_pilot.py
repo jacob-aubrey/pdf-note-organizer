@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 from urllib.request import url2pathname
 
 INDEX_REVISION = 2
+ZOTERO_REQUEST_TIMEOUT = 30
 
 class PilotError(RuntimeError):
     pass
@@ -212,12 +213,12 @@ class LocalZotero:
         if not isinstance(port, int) or not 1 <= port <= 65535:
             raise PilotError("Invalid local Zotero port.")
         self.endpoint = f"http://127.0.0.1:{port}/api"
-        self.http = httpx2.Client(trust_env=False, timeout=20, follow_redirects=False, headers={'Connection': 'close'},
+        self.http = httpx2.Client(trust_env=False, timeout=ZOTERO_REQUEST_TIMEOUT, follow_redirects=False, headers={'Connection': 'close'},
                                  event_hooks={"request": [self.guard]})
         self.zot = Zotero("0", "user", local=True, client=self.http, upload_timeout=60)
         self.zot.endpoint = self.endpoint
         try:
-            response = self.http.get(self.endpoint + "/")
+            response = self.http.get(self.endpoint + "/", timeout=ZOTERO_REQUEST_TIMEOUT)
             response.raise_for_status()
             self.server_id = response.headers.get("Zotero-Server-ID", "")
             if not self.server_id:
@@ -282,7 +283,8 @@ class LocalZotero:
     @property
     def can_refresh_reader(self):
         if not hasattr(self, "_reader_support"):
-            response = self.http.get(self.endpoint + "/notable/status", headers={"Zotero-Server-ID": self.server_id})
+            response = self.http.get(self.endpoint + "/notable/status",
+                                     headers={"Zotero-Server-ID": self.server_id}, timeout=ZOTERO_REQUEST_TIMEOUT)
             if response.status_code == 404:
                 self._reader_support = False
             else:
@@ -293,7 +295,7 @@ class LocalZotero:
     def native_annotation_count(self, key):
         if self.can_refresh_reader:
             response = self.http.get(f"{self.endpoint}/notable/annotations/{key}",
-                                     headers={"Zotero-Server-ID": self.server_id})
+                                     headers={"Zotero-Server-ID": self.server_id}, timeout=ZOTERO_REQUEST_TIMEOUT)
             response.raise_for_status()
             return response.json()["native"]
         if self.reader_annotations(key):
@@ -303,13 +305,15 @@ class LocalZotero:
     def native_annotation_text(self, key):
         if not self.can_refresh_reader:
             return []
-        response = self.http.get(f"{self.endpoint}/notable/annotations/{key}", headers={"Zotero-Server-ID": self.server_id})
+        response = self.http.get(f"{self.endpoint}/notable/annotations/{key}",
+                                 headers={"Zotero-Server-ID": self.server_id}, timeout=ZOTERO_REQUEST_TIMEOUT)
         response.raise_for_status()
         return response.json().get("nativeText", [])
 
     def refresh_reader(self, key):
         response = self.http.post(f"{self.endpoint}/notable/annotations/{key}", json={},
-            headers={"Zotero-Server-ID": self.server_id, "Zotero-API-Key": self.zot.local_api_key}, timeout=120)
+            headers={"Zotero-Server-ID": self.server_id, "Zotero-API-Key": self.zot.local_api_key},
+            timeout=ZOTERO_REQUEST_TIMEOUT)
         if response.status_code in {401, 403}:
             raise AuthorizationRequired("Zotero write permission is unavailable. Run Connect again.")
         if response.status_code == 409:
@@ -358,7 +362,7 @@ class LocalZotero:
 
     def file_path(self, key):
         response = self.http.get(f"{self.endpoint}/users/0/items/{key}/file/view/url",
-                                 headers={"Zotero-Server-ID": self.server_id})
+                                 headers={"Zotero-Server-ID": self.server_id}, timeout=ZOTERO_REQUEST_TIMEOUT)
         response.raise_for_status()
         uri = urlsplit(response.text.strip())
         if uri.scheme != "file" or uri.netloc not in {"", "localhost"}:
@@ -391,7 +395,7 @@ class LocalZotero:
         # Read the current bytes, rather than relying on a cached synced MD5.
         try:
             response = self.http.get(f"{self.endpoint}/users/0/items/{key}/file/view/url",
-                                     headers={"Zotero-Server-ID": self.server_id})
+                                     headers={"Zotero-Server-ID": self.server_id}, timeout=ZOTERO_REQUEST_TIMEOUT)
             if response.status_code == 404:
                 return ""
             response.raise_for_status()

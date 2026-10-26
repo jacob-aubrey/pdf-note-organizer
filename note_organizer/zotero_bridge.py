@@ -452,7 +452,7 @@ class Bridge:
                 continue
             with self._document_errors(reviews, cloud=ck):
                 row = documents.get(ck)
-                self.progress(f'{"Syncing linked" if row else "Checking new tablet"} paper {number} of {len(cloud_pdfs)}…')
+                self.progress(f'{"Syncing linked" if row else "Checking new tablet"} paper {number} of {len(cloud_pdfs)}: {item.name} [tablet item {ck}]…')
                 zk = reverse[item.parent]
                 if row and row["collection"] != zk:
                     reviews.append({"cloud": ck, "reason": "Linked tablet PDF moved; review the primary collection."})
@@ -522,6 +522,7 @@ class Bridge:
                         row.pop("view_key")
                 if self.review_policy and row.get("source_key") and not row.get("view_key"):
                     source = row["source_key"]
+                    self.progress(f'Preparing Zotero publication for {item.name} [tablet item {ck}]…')
                     if self.publisher.get(ck)["published"]:
                         row["view_key"] = stable_key(self.namespace, "attachment", ck)
                     else:
@@ -540,6 +541,7 @@ class Bridge:
                               source_attachment_key=row.get("source_key", "") if row.get("source_key") != row.get("view_key") else "",
                               filename=row["name"] + ".pdf" if self.review_policy else "")
                 parents = {ck: row["parent"]} if row.get("parent") else None
+                self.progress(f'Publishing {item.name} to Zotero [tablet item {ck}]…')
                 result = publish(self.zot, self.publisher, self.namespace, [paper], apply=True,
                                  collection_key=zk, reference_keys=parents,
                                  attachment_keys={ck: row["view_key"]} if row.get("view_key") else None)["papers"][0]
