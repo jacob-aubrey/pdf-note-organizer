@@ -1,0 +1,8 @@
+{
+  "command": "forensic_watchdog_probe.py churn --safe --watchdog --seconds 1 --output <fresh disposable path>",
+  "returncode": 2,
+  "stderr": "usage: forensic_watchdog_probe.py [-h] [--watchdog | --safe]\r\n                                  [--seconds SECONDS] [--interval INTERVAL]\r\n                                  --output OUTPUT\r\n                                  {churn,httpx,dpapi}\r\nforensic_watchdog_probe.py: error: argument --watchdog: not allowed with argument --safe\r\n",
+  "output_file_created": false,
+  "workload_directory_created": false,
+  "sha256": "d278e680d171f933044cfe30df73862fdc7411ee40add86278ab9c12db8a746a"
+}

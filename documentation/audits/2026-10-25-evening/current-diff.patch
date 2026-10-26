@@ -1,0 +1,45 @@
+diff --git a/documentation/ZOTERO_PLUGIN.md b/documentation/ZOTERO_PLUGIN.md
+index b87f680..62462af 100644
+--- a/documentation/ZOTERO_PLUGIN.md
++++ b/documentation/ZOTERO_PLUGIN.md
+@@ -10,6 +10,11 @@ no application upgrade is needed. Development tests used disposable profiles
+ and did not install the plugin into the production library. This local preview
+ has no published automatic-update feed.
+ 
++Version **0.8.8** packages the current worker's keep-alive and serialized
++transport fixes, so long sync and OCR operations keep their connection alive.
++PDF diagnostics stay separate from the helper's responses. The audit verifies
++the bundled worker against the source, rather than relying on the version label.
++
+ Version **0.8.7** also counts staged PDFs that have not finished uploading in
+ the approved waiting-for-sync total. Office documents filed locally do not
+ inflate the tablet-transfer count.
+diff --git a/documentation/audits/2026-10-25/forensic_watchdog_probe.py b/documentation/audits/2026-10-25/forensic_watchdog_probe.py
+index 2822fe9..fad5b56 100644
+--- a/documentation/audits/2026-10-25/forensic_watchdog_probe.py
++++ b/documentation/audits/2026-10-25/forensic_watchdog_probe.py
+@@ -20,8 +20,9 @@ import types
+ def main():
+     parser = argparse.ArgumentParser()
+     parser.add_argument('mode', choices=['churn', 'httpx', 'dpapi'])
+-    parser.add_argument('--watchdog', action='store_true')
+-    parser.add_argument('--safe', action='store_true')
++    diagnostics = parser.add_mutually_exclusive_group()
++    diagnostics.add_argument('--watchdog', action='store_true')
++    diagnostics.add_argument('--safe', action='store_true')
+     parser.add_argument('--seconds', type=float, default=10)
+     parser.add_argument('--interval', type=float, default=.0001)
+     parser.add_argument('--output', type=Path, required=True)
+diff --git a/zotero-support/manifest.json b/zotero-support/manifest.json
+index a97aaf2..af8f729 100644
+--- a/zotero-support/manifest.json
++++ b/zotero-support/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "manifest_version": 2,
+   "name": "reMarkable Sync for Zotero",
+-  "version": "0.8.7",
++  "version": "0.8.8",
+   "description": "Document review, local search and reMarkable synchronization inside Zotero.",
+   "applications": {
+     "zotero": {

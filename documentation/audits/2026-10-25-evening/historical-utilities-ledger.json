@@ -1,0 +1,128 @@
+[
+  {
+    "path": "output/reconciliation/2026-10-09/build_assessment.py",
+    "lines": 273,
+    "bytes": 26431,
+    "sha256": "720c702dc14cf89295235ea7d7be20db4da8b6c4a52c2a509012d01446bc265f",
+    "classification": "first-party-code",
+    "working_tree_origin": "relevant-ignored-first-party",
+    "authored_scope": "historical-ignored-audit-utility",
+    "reviewed_ranges": [
+      [
+        1,
+        273
+      ]
+    ],
+    "status": "reviewed-current-evening",
+    "evidence": [
+      "historical-utilities-ledger.json"
+    ],
+    "review_method": "Every line read this evening; static AST parse passed; not imported or executed against real data.",
+    "owner": "shared_audit"
+  },
+  {
+    "path": "output/reconciliation/2026-10-09/cloud_helpers.py",
+    "lines": 362,
+    "bytes": 18004,
+    "sha256": "61ee2b85416ba3abebb371df065b70219728ee936e8e0ab01330b21ccb04ad9b",
+    "classification": "first-party-code",
+    "working_tree_origin": "relevant-ignored-first-party",
+    "authored_scope": "historical-ignored-audit-utility",
+    "reviewed_ranges": [
+      [
+        1,
+        362
+      ]
+    ],
+    "status": "reviewed-current-evening",
+    "evidence": [
+      "historical-utilities-ledger.json"
+    ],
+    "review_method": "Every line read this evening; static AST parse passed; not imported or executed against real data.",
+    "owner": "shared_audit"
+  },
+  {
+    "path": "output/reconciliation/2026-10-09/folder-critique/build_pc_structure_critique.py",
+    "lines": 368,
+    "bytes": 51107,
+    "sha256": "ab43c1d2bf5f59ea14cd14ecfb6420d443fbd8df300789c32d148438cb128d51",
+    "classification": "first-party-code",
+    "working_tree_origin": "relevant-ignored-first-party",
+    "authored_scope": "historical-ignored-audit-utility",
+    "reviewed_ranges": [
+      [
+        1,
+        368
+      ]
+    ],
+    "status": "reviewed-current-evening",
+    "evidence": [
+      "historical-utilities-ledger.json"
+    ],
+    "review_method": "Every line read this evening; static AST parse passed; not imported or executed against real data.",
+    "owner": "shared_audit"
+  },
+  {
+    "path": "output/reconciliation/2026-10-09/pc/inventory_pc.py",
+    "lines": 277,
+    "bytes": 18008,
+    "sha256": "5a84ba0663b9ef4faff7337b510dc74f63d8d50af24ef16dbbda50633937e40b",
+    "classification": "first-party-code",
+    "working_tree_origin": "relevant-ignored-first-party",
+    "authored_scope": "historical-ignored-audit-utility",
+    "reviewed_ranges": [
+      [
+        1,
+        277
+      ]
+    ],
+    "status": "reviewed-current-evening",
+    "evidence": [
+      "historical-utilities-ledger.json"
+    ],
+    "review_method": "Every line read this evening; static AST parse passed; not imported or executed against real data.",
+    "owner": "shared_audit"
+  },
+  {
+    "path": "output/reconciliation/2026-10-09/pc/verify_and_report.py",
+    "lines": 84,
+    "bytes": 7280,
+    "sha256": "33d0e6eda41e792c9fa81b7ddf93dc76d95b49d7bfe41b08f6fd2818c2738f7e",
+    "classification": "first-party-code",
+    "working_tree_origin": "relevant-ignored-first-party",
+    "authored_scope": "historical-ignored-audit-utility",
+    "reviewed_ranges": [
+      [
+        1,
+        84
+      ]
+    ],
+    "status": "reviewed-current-evening",
+    "evidence": [
+      "historical-utilities-ledger.json"
+    ],
+    "review_method": "Every line read this evening; static AST parse passed; not imported or executed against real data.",
+    "owner": "shared_audit"
+  },
+  {
+    "path": "tests/make_audit_samples.py",
+    "lines": 45,
+    "bytes": 2173,
+    "sha256": "518f9a8d5cfb123e78414955107bccfac0f2e8b2f7f51732abda4d45a28d7208",
+    "classification": "first-party-code",
+    "working_tree_origin": "relevant-ignored-first-party",
+    "authored_scope": "historical-ignored-audit-utility",
+    "reviewed_ranges": [
+      [
+        1,
+        45
+      ]
+    ],
+    "status": "reviewed-current-evening",
+    "evidence": [
+      "historical-utilities-ledger.json"
+    ],
+    "review_method": "Every line read this evening; static AST parse passed; not imported or executed against real data.",
+    "owner": "shared_audit"
+  }
+]

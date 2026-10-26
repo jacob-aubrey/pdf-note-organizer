@@ -1,0 +1,16 @@
+{
+  "version": "0.8.8",
+  "xpi_sha256": "44354eb0bc530e47e5b1b52021b0e0e711c2c238ea80959f93c657f69520e19c",
+  "helper_sha256": "01f687ed553f1a4999e159705fb4abb435bd16921e4485714cfa55e4df4ab22a",
+  "first_sync": {
+    "started_at_utc": "2026-10-25T22:51:08Z",
+    "state": "running",
+    "launched_from": "Production plugin Sync now, existing saved connection and mapped roots",
+    "pre_state": "pre-sync-state.json",
+    "diagnostics_enabled": true
+  },
+  "repeat_sync": {
+    "state": "pending"
+  },
+  "manual_decisions_preserved": true
+}

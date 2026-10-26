@@ -1,0 +1,1334 @@
+{
+  "reviewer": "audit_scope",
+  "date": "2026-10-25",
+  "target": "Evening current working tree for 0.8.8; initial full review retained with explicit metadata delta from 0.8.7 frontend ledger",
+  "entries": [
+    {
+      "path": ".github/workflows/validate.yml",
+      "sha256": "dd643c94de0b6121e5756261777d6ee6fa3c6c6c85d4459befe6e1ea79500046",
+      "lines": 56,
+      "reviewed_ranges": [
+        [
+          1,
+          56
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "Notable Zotero Worker.spec",
+      "sha256": "83414b3b5bdee7ba934d6edd2177ac6925353079c288cacc9d449fff630c332f",
+      "lines": 34,
+      "reviewed_ranges": [
+        [
+          1,
+          34
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "PDF Note Organizer.spec",
+      "sha256": "489692b08e8962585335aa0032191f01957cb16eed370c87b37fc10210220731",
+      "lines": 60,
+      "reviewed_ranges": [
+        [
+          1,
+          60
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "documentation/ZOTERO_PLUGIN.md",
+      "sha256": "e5f898b25ad2db2b64c898350f960025c50106e2f474b699fd70ee818d8b3c21",
+      "lines": 348,
+      "reviewed_ranges": [
+        [
+          1,
+          348
+        ]
+      ],
+      "classification": "workflow documentation fully reviewed",
+      "evidence": "frontend-review.md",
+      "previous_reviewed_hashes": [
+        "1d85e3b14798732c79fa9f648f67215ac0ed76f71053dd9f462689cdd6c2a105",
+        "bafb74a7f80711f78bc753552513571fe7b4f1c0e08874317e9ebbc7db682fbb",
+        "7c8ca646cd610ef2f263b9d1616dcd0617e99843e8a7ad5bdf4bb94b56301699"
+      ],
+      "final_review_note": "Reviewed final 0.8.7 staged-transfer status release note and manifest version after earlier full review; exact package comparison recorded separately.",
+      "evening_review": "Reviewed five new 0.8.8 release-note lines and manifest version; prior full source coverage retained. No controller logic drift."
+    },
+    {
+      "path": "documentation/ZOTERO_PLUGIN_NOTICES.md",
+      "sha256": "6e2fbade99daaf2c00bb415f95e470a42f2d6736201b6269b4ddd7d60cfb9f2e",
+      "lines": 49,
+      "reviewed_ranges": [
+        [
+          1,
+          49
+        ]
+      ],
+      "classification": "component notice fully reviewed; Pillow label corrected to installed license",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/__init__.py",
+      "sha256": "7ad141a92dd3829a00963c493876eddc4e5902acef52c5d06917f7f6a68e159e",
+      "lines": 5,
+      "reviewed_ranges": [
+        [
+          1,
+          5
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/archive_ui.py",
+      "sha256": "5674cf35ecda330d3a3229a1d110783dfa7432313cb65fa522b3320eec1af279",
+      "lines": 89,
+      "reviewed_ranges": [
+        [
+          1,
+          89
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/branding.py",
+      "sha256": "e4b289f1a05d3b47cd74f657432bcfa64f1ab647227f0960cf4959b414b3904c",
+      "lines": 29,
+      "reviewed_ranges": [
+        [
+          1,
+          29
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/clipboard.py",
+      "sha256": "a57f3ba06a46a7d41eae3257e62842b75fbd531099ed7c79b77ccae9c49765fc",
+      "lines": 56,
+      "reviewed_ranges": [
+        [
+          1,
+          56
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/dialogs.py",
+      "sha256": "5ac55234b3e67bd456cad758e9907d3f703ab56d66b3d62e8f2898e7c16e8096",
+      "lines": 263,
+      "reviewed_ranges": [
+        [
+          1,
+          263
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/icons.py",
+      "sha256": "00a4f8784dd4468d31a69b8e1a6887cd33768ec618efac24b0ec7de524ab41c8",
+      "lines": 186,
+      "reviewed_ranges": [
+        [
+          1,
+          186
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/image_viewport.py",
+      "sha256": "99fc1d0d3c92322d5466f55c6e1f12a676f2d132e49b30a4a492c521378dd602",
+      "lines": 243,
+      "reviewed_ranges": [
+        [
+          1,
+          243
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/main.py",
+      "sha256": "b1a5123b8d08ea30bab282f06fece0a4ec98a947b35bfcc0c29b0f3b17414ab4",
+      "lines": 126,
+      "reviewed_ranges": [
+        [
+          1,
+          126
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/maintenance_ui.py",
+      "sha256": "672caf943a35edcdf34cd1d7e2ada6a19ad2a6858ac31180dd9dc6867a5cbb78",
+      "lines": 124,
+      "reviewed_ranges": [
+        [
+          1,
+          124
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/research_ui.py",
+      "sha256": "d8b17adaa998f1a214d3258bc6f9b77a689f04d3d611a437688254ca78a5d455",
+      "lines": 447,
+      "reviewed_ranges": [
+        [
+          1,
+          447
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/screens.py",
+      "sha256": "1d840f40bf23e097b56d2e81a823014cd476f55ee56cca235c41552a56677074",
+      "lines": 74,
+      "reviewed_ranges": [
+        [
+          1,
+          74
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/shutdown.py",
+      "sha256": "dc7c0db89cfefa516104280d3a34f8d7c96437eb232b65f6f03679fb94b74f05",
+      "lines": 106,
+      "reviewed_ranges": [
+        [
+          1,
+          106
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/startup.py",
+      "sha256": "8fff58e480866f68375e785d0480623daf829d5c64c1e742e07f7eb8bde2decb",
+      "lines": 226,
+      "reviewed_ranges": [
+        [
+          1,
+          226
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/storage_ui.py",
+      "sha256": "4a05237dcff71bb285d926b6cfacf18cf3b46b12fbaf346c48a17c9991c70387",
+      "lines": 257,
+      "reviewed_ranges": [
+        [
+          1,
+          257
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/support.py",
+      "sha256": "4eff170d9a6e30aaf5cb063ab51394f0aed803dbf12605ce9868494a48c65ed8",
+      "lines": 213,
+      "reviewed_ranges": [
+        [
+          1,
+          213
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/support_ui.py",
+      "sha256": "7ec41195039a486ed320fa2456d163d0b3d72bacea9590616d68d4498405c087",
+      "lines": 286,
+      "reviewed_ranges": [
+        [
+          1,
+          286
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/theme.py",
+      "sha256": "ebe63907c824dfd8245fcb581dc23b9d4718eb49090c39058e02c1d3f3a6b224",
+      "lines": 130,
+      "reviewed_ranges": [
+        [
+          1,
+          130
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/time_display.py",
+      "sha256": "efd8b0e671aa9acd9744140823a5b43f9e40f357801420089898c7a3fbb84f4d",
+      "lines": 12,
+      "reviewed_ranges": [
+        [
+          1,
+          12
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/ui.py",
+      "sha256": "635d8f5573cc5f2fc0f1f4e284d818afc046e90e5e30743a45ca88d6003529a8",
+      "lines": 3168,
+      "reviewed_ranges": [
+        [
+          1,
+          3168
+        ]
+      ],
+      "classification": "first-party fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/view_state.py",
+      "sha256": "3c8f8407e3da6b61acb5a6ffbd329ce9aebbd59cb6a3e62884c29f6e5aaa1a3a",
+      "lines": 117,
+      "reviewed_ranges": [
+        [
+          1,
+          117
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/viewers.py",
+      "sha256": "b3def1fc56026bc7ef3f31eb35d06861737d4c01209ac10cec2b798aa2bf94ae",
+      "lines": 135,
+      "reviewed_ranges": [
+        [
+          1,
+          135
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/widgets.py",
+      "sha256": "9494f71d56637f67ceb538ae212b6987cf65cc888f89b8c390d4104f3170bec6",
+      "lines": 975,
+      "reviewed_ranges": [
+        [
+          1,
+          975
+        ]
+      ],
+      "classification": "first-party fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/windows_identity.py",
+      "sha256": "a5fd4d7269594b399bd6dde7cd88196bc7678bd2144a8000c68bd2fa51d645b8",
+      "lines": 257,
+      "reviewed_ranges": [
+        [
+          1,
+          257
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/workflow_ui.py",
+      "sha256": "8c2554d8f5b60ed671fc84df1b3ccf3859789693e55bd4283699114e2b251068",
+      "lines": 1385,
+      "reviewed_ranges": [
+        [
+          1,
+          1385
+        ]
+      ],
+      "classification": "first-party fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "note_organizer/workspace_layouts.py",
+      "sha256": "901bbf30b99d96fd1bf880392fedb53b42f94bc1acb299e59273deaf6b8f7f0f",
+      "lines": 330,
+      "reviewed_ranges": [
+        [
+          1,
+          330
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "requirements-handwriting-pilot.txt",
+      "sha256": "12da794ac1955c1571831f9aee0134dfc35652bba9660c05bf8a6a64dac56ff6",
+      "lines": 4,
+      "reviewed_ranges": [
+        [
+          1,
+          4
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "requirements-zotero-pilot.txt",
+      "sha256": "228b1ffa0455f37290ce056d0c8d5b08f4578c4bea50a6f298ae6044667a47d2",
+      "lines": 5,
+      "reviewed_ranges": [
+        [
+          1,
+          5
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "requirements-zotero-plugin.txt",
+      "sha256": "fba9f398f830d5108de428233412f85ab55d87d7071129105657ed9a50b95151",
+      "lines": 14,
+      "reviewed_ranges": [
+        [
+          1,
+          14
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "requirements.lock",
+      "sha256": "91d19582734f9407893b0a231b391741313ed9ab6b48cc04ab23659ca56a9df5",
+      "lines": 43,
+      "reviewed_ranges": [
+        [
+          1,
+          43
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "requirements.txt",
+      "sha256": "807db4c37de5ec135db34126e7eb292f730aff6edf106444e73692f41cabb731",
+      "lines": 14,
+      "reviewed_ranges": [
+        [
+          1,
+          14
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "scripts/build_release.py",
+      "sha256": "c38f481073d2b27eb159db51c5d52c423342260306523fc705f14a331a5978e9",
+      "lines": 51,
+      "reviewed_ranges": [
+        [
+          1,
+          51
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_combined_ui_export.py",
+      "sha256": "ab93a5888252104cb13ccdfe6cc6a2c2bd824da5d767eb694d94e8515c6a9314",
+      "lines": 152,
+      "reviewed_ranges": [
+        [
+          1,
+          152
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_combined_workflow_ui.py",
+      "sha256": "4ea5d60f2296a7af48683afb5be679eab038f2f422ee7ea779f6ed2aea4bf226",
+      "lines": 339,
+      "reviewed_ranges": [
+        [
+          1,
+          339
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_feedback.py",
+      "sha256": "15539cb72078df5b8429470819f2dcb11af629a7e26cc7ec401bc8bb9b3b6349",
+      "lines": 186,
+      "reviewed_ranges": [
+        [
+          1,
+          186
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_feedback_ui.py",
+      "sha256": "e613c0a530599d4ec4ff229fa8850ccb41862d15164e758e6ef7b22a6d269448",
+      "lines": 154,
+      "reviewed_ranges": [
+        [
+          1,
+          154
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_interface_design.py",
+      "sha256": "2e8554b460932ef2f2af66ecf9320ccfedff33da8f3c78b611d16db87e87e20d",
+      "lines": 154,
+      "reviewed_ranges": [
+        [
+          1,
+          154
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_item_progress_ui.py",
+      "sha256": "fde23d05ca4c24bcae674b6a9ac42cddbede917ac4d7e6a4594608714a30a3df",
+      "lines": 125,
+      "reviewed_ranges": [
+        [
+          1,
+          125
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_list_loading_ui.py",
+      "sha256": "76c774e6058b408d5c9591c510eaf3e874f6f24901be70f69efc117f2725b11a",
+      "lines": 63,
+      "reviewed_ranges": [
+        [
+          1,
+          63
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_list_opening_ui.py",
+      "sha256": "51323a0d4f658372de0904924194d1d34cff855d553c27082a2aaf983d760bb8",
+      "lines": 319,
+      "reviewed_ranges": [
+        [
+          1,
+          319
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_path_ui_consistency.py",
+      "sha256": "07b06701953c19b557d4d9c9786870fa075b3ed23bd7c3d9c57caae92ecda942",
+      "lines": 200,
+      "reviewed_ranges": [
+        [
+          1,
+          200
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_preferences_ui.py",
+      "sha256": "8500ade0213327868654d77f10e03f266908004199b1a39a40ffa71d1c99daf0",
+      "lines": 227,
+      "reviewed_ranges": [
+        [
+          1,
+          227
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_pristine_ui.py",
+      "sha256": "3d270c40439ffe0d13b5bc3cca314219fdc8bf6dee0cc60958751ee5e49996a9",
+      "lines": 232,
+      "reviewed_ranges": [
+        [
+          1,
+          232
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_research_features_ui.py",
+      "sha256": "30edd627a7dde68074b6a3451a998d88030f9edfacc7a98339a2b9e13a82b26d",
+      "lines": 244,
+      "reviewed_ranges": [
+        [
+          1,
+          244
+        ]
+      ],
+      "classification": "first-party test fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_responsive_buttons.py",
+      "sha256": "ba6f449225f7f87abbb4d17ce2fa9b3500fc29b49c336b83b8388b4736dc242c",
+      "lines": 218,
+      "reviewed_ranges": [
+        [
+          1,
+          218
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_responsive_preview.py",
+      "sha256": "c30e3255deacc538816fb80622969c2c17a161fe304fc7a63b0d0a1a432a9830",
+      "lines": 108,
+      "reviewed_ranges": [
+        [
+          1,
+          108
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_review_controls.py",
+      "sha256": "4a7da3483c71c3510f6f9cba9b92983bfe65a8aa63fb7a1cc1ae64bc4f382212",
+      "lines": 312,
+      "reviewed_ranges": [
+        [
+          1,
+          312
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_screen_geometry.py",
+      "sha256": "8a76058237fb949b85685df89161836c3832d0a16a6bd49ce64b36e598eeeb8d",
+      "lines": 207,
+      "reviewed_ranges": [
+        [
+          1,
+          207
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_shutdown_ui.py",
+      "sha256": "12a92a19611b8cd4bea15324c9b8743407f94311712da6ba324cd08c46466df2",
+      "lines": 188,
+      "reviewed_ranges": [
+        [
+          1,
+          188
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_sorting_tooltips.py",
+      "sha256": "a490e9bc243d951a5ef15bfb8cbb4d5512a4af931bdb27e28137a0df5cefccd1",
+      "lines": 112,
+      "reviewed_ranges": [
+        [
+          1,
+          112
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_startup_ui.py",
+      "sha256": "4fccf76cf1925560493a18f0022246652e2282688f883ccec483c6528eabbc11",
+      "lines": 400,
+      "reviewed_ranges": [
+        [
+          1,
+          400
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_storage_ui.py",
+      "sha256": "ade5fda9395d3ce52a64b2b8bcfd0e5de06fe2c36185f50763c6b7334e0859ac",
+      "lines": 166,
+      "reviewed_ranges": [
+        [
+          1,
+          166
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_tooltip_audit_refresh.py",
+      "sha256": "794f1d801cb62b335e3c19777fa77e30521427ce9ff3b7b9d1ff3a8eb5124b12",
+      "lines": 230,
+      "reviewed_ranges": [
+        [
+          1,
+          230
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_tooltip_behavior.py",
+      "sha256": "ba3d2d3b7b5b35eb3dfa067f57523521656e553e316539d48c6348d0a7afa65d",
+      "lines": 215,
+      "reviewed_ranges": [
+        [
+          1,
+          215
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_ui_audit.py",
+      "sha256": "8c6c7ca022d3c59f3c40e3c53230a7cc5bf8e25537da98131730c16e32157c63",
+      "lines": 254,
+      "reviewed_ranges": [
+        [
+          1,
+          254
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_ui_performance.py",
+      "sha256": "6361917992bea46bb02f4bf63087e2513051ec93e97dfed627e6f1e5138cca34",
+      "lines": 522,
+      "reviewed_ranges": [
+        [
+          1,
+          522
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_ui_polish.py",
+      "sha256": "f1292d31dc9fdb5ef4b8c54d72776bd3ec604bae5bd1aa90895adc007e2f1360",
+      "lines": 413,
+      "reviewed_ranges": [
+        [
+          1,
+          413
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_user_support.py",
+      "sha256": "9a6dd23c0b37eb127784c1a654e9d36ffbcdf1527f40ed2d4012d6d8e53860f3",
+      "lines": 134,
+      "reviewed_ranges": [
+        [
+          1,
+          134
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_user_support_ui.py",
+      "sha256": "6bf292b88ca15599afae5e24b024105203d8f8fa6a0f3e20e0c7cb0d4a33f522",
+      "lines": 186,
+      "reviewed_ranges": [
+        [
+          1,
+          186
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_view_state.py",
+      "sha256": "c23dccd5aac73dbcf3731bfc8fba8dab95e7cd918a04bfe9d86538009ed5d727",
+      "lines": 169,
+      "reviewed_ranges": [
+        [
+          1,
+          169
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_windows_identity.py",
+      "sha256": "bc3af2d1232e00927b57fa310ccdb5b0fb327009ea713ba40203908234b77f08",
+      "lines": 126,
+      "reviewed_ranges": [
+        [
+          1,
+          126
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_workflow_tooltips.py",
+      "sha256": "d9b7ba9371f0d316ce999847ad3fb0e54033481a99acae7d04f1c6fa578410da",
+      "lines": 98,
+      "reviewed_ranges": [
+        [
+          1,
+          98
+        ]
+      ],
+      "classification": "first-party test fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tests/test_zotero_live_transport.py",
+      "evidence": "frontend-review.md",
+      "sha256": "22cb22feabbc0788de3b8259a30be8fd516d34d990d4358109b08efd7a30eda6",
+      "lines": 56,
+      "reviewed_ranges": [
+        [
+          1,
+          56
+        ]
+      ],
+      "classification": "first-party isolated harness regression fully reviewed"
+    },
+    {
+      "path": "tests/ui_helpers.py",
+      "sha256": "c29a79eaa72daa292287c2ff52f3fbfeb2bf87cc3c721abeac98edc99ed82978",
+      "lines": 14,
+      "reviewed_ranges": [
+        [
+          1,
+          14
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tools/build_zotero_support.py",
+      "sha256": "7b7f5aa4802e7ae86a1eaa78e1325b4f7c39b43df5738d4bfebef49ca4d87872",
+      "lines": 46,
+      "reviewed_ranges": [
+        [
+          1,
+          46
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tools/test_zotero_collection_names.cjs",
+      "sha256": "8c14b912584f7dbcd8da99a791a306f7c8780470bd235310f0e43b61a9e14148",
+      "lines": 53,
+      "reviewed_ranges": [
+        [
+          1,
+          53
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tools/test_zotero_filing_queue.cjs",
+      "sha256": "ba318b60d213ea4e5d7b8fd09e68b5802f5ce62fffe9f5c6c3c045964680b4ea",
+      "lines": 211,
+      "reviewed_ranges": [
+        [
+          1,
+          211
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tools/test_zotero_library_recovery.cjs",
+      "sha256": "78fae438adbffcc7bba7448ee7d07d9ed00c4ff2b6edef92c4e1740356fdcec4",
+      "lines": 200,
+      "reviewed_ranges": [
+        [
+          1,
+          200
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tools/test_zotero_plugin_live.py",
+      "sha256": "dc2e83201d8bc9b6c49ef8cfb257438e39114acbe73f59eab95fa5ad314df075",
+      "lines": 1016,
+      "reviewed_ranges": [
+        [
+          1,
+          1016
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed; transient JSON response regression fixed",
+      "evidence": "frontend-review.md",
+      "pre_harness_repair_sha256": "27d5684df2f37b401b7ab048b93d49d733e0444056b806a0c7dc2ac44c2632e2"
+    },
+    {
+      "path": "tools/test_zotero_plugin_ui.py",
+      "sha256": "0e42cc8ddc3c641d40e963ec1a60a48f49c0362149e35a4ad90015c0d5d2ca9b",
+      "lines": 117,
+      "reviewed_ranges": [
+        [
+          1,
+          117
+        ]
+      ],
+      "classification": "first-party test harness fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tools/test_zotero_scheduler.cjs",
+      "sha256": "e26600d332bb1281405e8417f13efba2b8e371da8180a68afb2168fd0c60f494",
+      "lines": 62,
+      "reviewed_ranges": [
+        [
+          1,
+          62
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "tools/test_zotero_ui_recovery.cjs",
+      "sha256": "6a5ee6dfd2fedbc50099238fe3f594d427bb0abcacef33242fa42a2ae196a2fb",
+      "lines": 230,
+      "reviewed_ranges": [
+        [
+          1,
+          230
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md",
+      "pre_repair_sha256": "53621921a41e497c49dc2426013de4dfd1230044d2963196b5f6df9c3bc4583b",
+      "previous_reviewed_hashes": [
+        "b5d5a80a4e96fc74d8568ee5409198847a6eb902bce83c0646b5a16179cd4792"
+      ],
+      "final_review_note": "Reviewed supported PyMuPDF stderr launch environment and fixed invalid-JSON error label; strict malformed-protocol stop retained; focused controller regression passes."
+    },
+    {
+      "path": "zotero-support/bootstrap.js",
+      "sha256": "11b02c9aca657b8903529ead2ce3b46f44cef59346ecd0199876cf61c40a3e89",
+      "lines": 94,
+      "reviewed_ranges": [
+        [
+          1,
+          94
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/LICENSE.txt",
+      "sha256": "1e7290b35280a048667bbf0ebabac1c7fd52a75300e8b2946ac165715997f2bc",
+      "lines": 15,
+      "reviewed_ranges": [
+        [
+          1,
+          15
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/SOURCE.txt",
+      "sha256": "fb64dfb9aac51f0659240686088859ba41872c5cc8030dbe649a0d946c0ff4db",
+      "lines": 5,
+      "reviewed_ranges": [
+        [
+          1,
+          5
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/book-open.svg",
+      "sha256": "a5eb669f66989fdbc003b1689ebc93769b3b9d680f840573f2a3ac268756f894",
+      "lines": 14,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/check.svg",
+      "sha256": "7f33acc9a77a61659531044525fc008edebe215bf4dcf1c789c8674ad3277db0",
+      "lines": 13,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/external-link.svg",
+      "sha256": "3891241b8c3bfc3a8a930078f26ffc5a7e9763da6d0162ace2050b28d4c1d1fe",
+      "lines": 15,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/file-search.svg",
+      "sha256": "814b5c612baeb7b8b6f1b34a341ff9e6488ef8442d6c0b7aabdd238269bef445",
+      "lines": 16,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/file-text.svg",
+      "sha256": "486fab70d8ad3cdc69b5ff9b6c356a58d41fcc4c885359cbf9d6e088a7c47f70",
+      "lines": 17,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/folder-input.svg",
+      "sha256": "422afd22efd4b7474ee50fcdc42c37cdee1c170a81a2eb339df7ecd0d0dc3578",
+      "lines": 15,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/folder-open.svg",
+      "sha256": "ee57452b40e71df310214091dd9da1941a397c83197b8ff8d7ae66dd4242578b",
+      "lines": 13,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/folder-search.svg",
+      "sha256": "ddcdf0c312320d13a9e327793e73c3a056309e91da1ca630fe1531db81aed247",
+      "lines": 15,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/folder-sync.svg",
+      "sha256": "65cf1b56d7e8b0b43a347a83ea4c8b82c9364dc2cf6f816aa2b22dfcaa66407b",
+      "lines": 17,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/link.svg",
+      "sha256": "4f3237183dcaabfac92f4e94c776a9a9e45c3c5e77a921061a6b34b61eb5413f",
+      "lines": 14,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/list-filter.svg",
+      "sha256": "502573071e3b8118356eb408df781872f0608071b4b09cd99954ba1d8e2b8b37",
+      "lines": 15,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/plug.svg",
+      "sha256": "2797d68c45c73c7b0befc312bb5d9a8b90f16c86c7f8b31b8afe57b39b97718a",
+      "lines": 16,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/refresh-cw.svg",
+      "sha256": "2e10dd403c85a24f163d59fc6151aa21147fe9402e1305dfc8979208caee8944",
+      "lines": 16,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/rotate-ccw.svg",
+      "sha256": "622685386ab4017eabfde01cd74550a20b1924df233b353f73b6b155371f2afd",
+      "lines": 14,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/save.svg",
+      "sha256": "ee9d56a7fec4b20dd6689546d41f68219ea8cbd67f99bd17a1bdaff5be6edb53",
+      "lines": 15,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/search.svg",
+      "sha256": "f329111f7cfd9235b1d840b15cc752b0c7c3f739f359e46da8fdb5573ac484f6",
+      "lines": 14,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/settings.svg",
+      "sha256": "3c7bee2696ce0c2d48d34e813f4fcda31f0ad21ab9309aee3751cde4280ad737",
+      "lines": 14,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/tablet.svg",
+      "sha256": "12062f1cb4a08ab60d08bb5eab260bf7eb96b5c06fc48d776baa5398bc2776c9",
+      "lines": 14,
+      "reviewed_ranges": [
+        [
+          1,
+          14
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/tag.svg",
+      "sha256": "85e11c07b29f5b67410e0f14c84799d9406320cd4575b7c8322f31910e0582cc",
+      "lines": 14,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/trash-2.svg",
+      "sha256": "e63698acf757d3043fcb4a9ea6ffceff9dd84708707eafc879c86b34a6ff2786",
+      "lines": 17,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/unlink.svg",
+      "sha256": "1cdf08c7f396b292a2e8ad037a22a3a5098ab6a6ce38eaec4164f17e023c0884",
+      "lines": 18,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/icons/x.svg",
+      "sha256": "4a9cdab38fbb96162e7dace28e33f4ca0e49d8963a6162abc3d4691b7d675117",
+      "lines": 14,
+      "reviewed_ranges": [],
+      "classification": "third-party Lucide SVG; provenance/license reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/library.js",
+      "sha256": "775f2edaa0b8706355b7222667d85f353367e1af93383327249c51ad53c1c5c6",
+      "lines": 319,
+      "reviewed_ranges": [
+        [
+          1,
+          319
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/manifest.json",
+      "sha256": "94a055b4cf0317e9b1f7db28c95d65460f930664da6418023c06fe8cb7339582",
+      "lines": 14,
+      "reviewed_ranges": [
+        [
+          1,
+          14
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md",
+      "pre_version_bump_sha256": "aa106ab7a17ede6788d19b4f96daec2afd349d2b2d8586c45197754f231df2a3",
+      "previous_reviewed_hashes": [
+        "7593208aa5669a9e91f7c8448eb91cb7d4609024531d2d4eb80150209ac5824a",
+        "ad9fc2fea0f31a5c558366d1c49a1127eb7c3cc18eec87e8a3cab1ad97e908d6",
+        "98d79634cdc9c438d5b7de46d06dc3a0a38a4287da517ca3c80f3b825de13bb5"
+      ],
+      "final_review_note": "Reviewed final 0.8.7 staged-transfer status release note and manifest version after earlier full review; exact package comparison recorded separately.",
+      "evening_review": "Reviewed five new 0.8.8 release-note lines and manifest version; prior full source coverage retained. No controller logic drift."
+    },
+    {
+      "path": "zotero-support/ui.js",
+      "sha256": "7e58f713f7087985448fd2f025ac5c1a31c116c480dd19f02d5e4d714db289c4",
+      "lines": 1357,
+      "reviewed_ranges": [
+        [
+          1,
+          1357
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md",
+      "pre_repair_sha256": "3ff2698ffb26ceea50df36346de0b5a608a48c3763404a99c44d8fa2d62a05a8",
+      "previous_reviewed_hashes": [
+        "03c2c17871908ae79f9f868f3702f2205f9ce26e3b563b2095e47183e91b8750"
+      ],
+      "final_review_note": "Reviewed supported PyMuPDF stderr launch environment and fixed invalid-JSON error label; strict malformed-protocol stop retained; focused controller regression passes."
+    },
+    {
+      "path": "zotero-support/workspace.css",
+      "sha256": "aa92165788b200d6afaae60e9efd62813db2e8647dd12743dc75f343fee70468",
+      "lines": 78,
+      "reviewed_ranges": [
+        [
+          1,
+          78
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/workspace.js",
+      "sha256": "7bff3e9ff425866c62166279c74516f3c3a16400b35224254d1c848d3519ca28",
+      "lines": 1,
+      "reviewed_ranges": [
+        [
+          1,
+          1
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    },
+    {
+      "path": "zotero-support/workspace.xhtml",
+      "sha256": "93e39fd9d1948884d3e74429c9111cb5ea06b911a76856d7f609cbb1120e032d",
+      "lines": 9,
+      "reviewed_ranges": [
+        [
+          1,
+          9
+        ]
+      ],
+      "classification": "first-party or configuration fully reviewed",
+      "evidence": "frontend-review.md"
+    }
+  ],
+  "repair_files": [
+    "zotero-support/ui.js",
+    "tools/test_zotero_ui_recovery.cjs",
+    "documentation/ZOTERO_PLUGIN.md",
+    "documentation/ZOTERO_PLUGIN_NOTICES.md",
+    "tools/test_zotero_plugin_live.py",
+    "tests/test_zotero_live_transport.py"
+  ],
+  "totals": {
+    "files": 107,
+    "reviewed_lines": 20255,
+    "gui_test_files": 31,
+    "source_review_complete": true
+  },
+  "prior_ledger": "documentation\\audits\\2026-10-25\\frontend-ledger.json"
+}

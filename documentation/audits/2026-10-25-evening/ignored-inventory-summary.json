@@ -1,0 +1,43 @@
+{
+  "started_at_utc": "2026-10-25T22:35:57.993233+00:00",
+  "finished_at_utc": "2026-10-25T22:37:13.354522+00:00",
+  "method": "Filesystem name/type/size inventory only; .git internals and this audit output excluded; ignored contents not read or hashed. Concurrent build outputs may change during traversal.",
+  "groups": {
+    "other-ignored-or-metadata-files": {
+      "files": 99,
+      "bytes": 181156489
+    },
+    "ignored-private-application-data-and-exports": {
+      "files": 2615,
+      "bytes": 2303875804
+    },
+    "ignored-private-test-and-scratch-data": {
+      "files": 123898,
+      "bytes": 44922567983
+    },
+    "ignored-environment": {
+      "files": 10760,
+      "bytes": 233142742
+    },
+    "ignored-generated-build-and-package-output": {
+      "files": 135,
+      "bytes": 4100764313
+    },
+    "ignored-python-bytecode": {
+      "files": 452,
+      "bytes": 11046388
+    },
+    "ignored-historical-scratch-output": {
+      "files": 932,
+      "bytes": 112203945
+    }
+  },
+  "metadata_read_errors": 0,
+  "additional_authored_candidates_outside_known_generated_private_directories": [
+    "output/reconciliation/2026-10-09/build_assessment.py",
+    "output/reconciliation/2026-10-09/cloud_helpers.py",
+    "output/reconciliation/2026-10-09/folder-critique/build_pc_structure_critique.py",
+    "output/reconciliation/2026-10-09/pc/inventory_pc.py",
+    "output/reconciliation/2026-10-09/pc/verify_and_report.py"
+  ]
+}

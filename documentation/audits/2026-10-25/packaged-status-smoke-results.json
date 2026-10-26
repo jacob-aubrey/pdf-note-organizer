@@ -1,6 +1,6 @@
 {
-  "helper": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\zotero-plugin-087-dist\\notable-worker.exe",
-  "helper_sha256": "c46095c97d64bf1ea383b26d96d4d48632eb29f828ecf831764c66b7b701c68a",
+  "helper": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\zotero-plugin-089-dist\\notable-worker.exe",
+  "helper_sha256": "1b08811dfcc9a75fae5ec03018512aa281a091eff31087bb146902374d4c315c",
   "returncode": 0,
   "expected": {
     "approved_waiting_sync": 2,

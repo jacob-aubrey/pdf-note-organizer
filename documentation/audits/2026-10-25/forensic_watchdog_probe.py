@@ -20,8 +20,9 @@ import types
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('mode', choices=['churn', 'httpx', 'dpapi'])
-    parser.add_argument('--watchdog', action='store_true')
-    parser.add_argument('--safe', action='store_true')
+    diagnostics = parser.add_mutually_exclusive_group()
+    diagnostics.add_argument('--watchdog', action='store_true')
+    diagnostics.add_argument('--safe', action='store_true')
     parser.add_argument('--seconds', type=float, default=10)
     parser.add_argument('--interval', type=float, default=.0001)
     parser.add_argument('--output', type=Path, required=True)

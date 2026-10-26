@@ -1,0 +1,10 @@
+{
+  "observed_at_utc": "2026-10-25T22:50:50.228760+00:00",
+  "endpoint": {
+    "schema": 1,
+    "version": "0.8.8"
+  },
+  "runtime_path": "C:\\Users\\jdaub\\AppData\\Roaming\\Zotero\\Zotero\\Profiles\\9v5afvrs.default\\notable\\runtime\\acc3cea9da9440fe844cd02b\\notable-worker.exe",
+  "runtime_sha256": "01f687ed553f1a4999e159705fb4abb435bd16921e4485714cfa55e4df4ab22a",
+  "matches_tested_helper": true
+}

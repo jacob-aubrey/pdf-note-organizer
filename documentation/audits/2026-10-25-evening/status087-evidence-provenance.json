@@ -1,0 +1,6 @@
+{
+  "reused_from": "documentation\\audits\\2026-10-25\\packaged-status-smoke-results.json",
+  "source_sha256": "e5021b6f295436c91fe50e69a17d101c6541024f3cb7b8cb999abe6bcdf9200f",
+  "matched_exact_installed087_helper": true,
+  "interpretation": "Existing status smoke passes; it does not exercise the missing heartbeat."
+}
