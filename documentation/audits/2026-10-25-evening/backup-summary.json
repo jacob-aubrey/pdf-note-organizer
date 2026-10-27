@@ -1,9 +1,0 @@
-{
-  "verified_at_utc": "2026-10-25T22:44:05.870260+00:00",
-  "path": "C:\\Users\\jdaub\\OneDrive\\Desktop\\Documents\\PhD\\Bonitatibus Research\\Python Code\\PDF Note Organizer\\.test-tmp\\full-audit-20261025\\pre-088-evening-backup-complete",
-  "files": 16,
-  "databases_integrity_ok": 8,
-  "previous_xpi_sha256": "77166feb45d73ba972d8c35a884bac03c70b3871119d87a682df2779b4184aa1",
-  "method": "Normal Zotero shutdown; copy stopped databases and recovery companions; recover and integrity-check disposable copies only",
-  "excluded": "Sources, blobs, OCR/model/runtime caches retained in place; not duplicated"
-}

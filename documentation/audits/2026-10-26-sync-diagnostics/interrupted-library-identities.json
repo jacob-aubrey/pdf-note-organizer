@@ -1,9 +1,0 @@
-{
-  "scope": "Read-only offline backups around the failed 0.9.1 sync",
-  "before_native_item_keys": 4949,
-  "after_native_item_keys": 4949,
-  "added_item_keys": 0,
-  "removed_item_keys": 0,
-  "keys_equal": true,
-  "keys_sha256": "f1ddcd7327969c3d73785f617164d6ccb8c97de335a879b7605ad49f4805583f"
-}

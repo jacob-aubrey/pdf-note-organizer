@@ -1,8 +1,0 @@
-{
-  "recorded_at_utc": "2026-10-26T07:28:05Z",
-  "observation": "Actual production Zotero sync-error popup, read through the native UI",
-  "message": "You have reached your Zotero File Storage quota. Some files were not uploaded. Other Zotero data will continue to sync to the server.",
-  "scope": "Zotero account attachment upload; distinct from the plugin's local Zotero to reMarkable sync",
-  "action_taken": "Read warning only; no account, subscription, storage, or file changes",
-  "limit": "A second-computer attachment round trip cannot be certified while this account upload failure remains."
-}

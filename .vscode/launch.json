@@ -3,21 +3,15 @@
   "configurations": [
     {
       "name": "Notable - development library",
-      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/PDF Note Organizer.py",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
-      "justMyCode": true,
-      "env": {
-        "PDF_NOTES_DATA_DIR": "${workspaceFolder}/.local-data",
-        "PDF_NOTES_SKIP_LEGACY_IMPORT": "1"
-      }
+      "justMyCode": true
     },
     {
       "name": "Notable - synthetic example",
-      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
       "type": "debugpy",
       "request": "launch",
       "module": "tests.qa_app",
@@ -27,11 +21,9 @@
     },
     {
       "name": "Notable - regression tests",
-      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
       "type": "debugpy",
       "request": "launch",
-      "module": "unittest",
-      "args": ["discover", "-s", "tests", "-v"],
+      "program": "${workspaceFolder}/tools/run_test_batches.py",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "justMyCode": true

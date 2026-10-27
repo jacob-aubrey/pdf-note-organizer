@@ -3,7 +3,7 @@ from PyInstaller.utils.win32.versioninfo import VSVersionInfo, FixedFileInfo, St
 from pathlib import Path
 from runpy import run_path
 
-branding = run_path(str(Path(SPECPATH) / 'note_organizer' / '__init__.py'))
+branding = run_path(str(Path(SPECPATH) / 'note_organizer' / '_version.py'))
 APP_DISPLAY_NAME, __version__ = branding['APP_DISPLAY_NAME'], branding['__version__']
 
 version_parts = tuple(int(part) for part in __version__.split('.')) + (0,)

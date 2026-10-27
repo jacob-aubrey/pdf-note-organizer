@@ -43,6 +43,22 @@ class LibraryPathTests(unittest.TestCase):
     def test_frozen_application_keeps_installed_library(self):
         self.assertEqual(resolve_data_directory(self.project, environ=self.environ, frozen=True), self.installed)
 
+    def test_split_workspace_retains_existing_absolute_library_paths(self):
+        project = self.folder / 'Notable'
+        project.mkdir()
+        (self.folder / 'remarkable-zotero').mkdir()
+        data = self.folder / '.local-data'
+        self.create_library(data)
+        self.assertEqual(resolve_data_directory(project, environ=self.environ, frozen=False), data)
+        self.assertFalse(should_import_legacy(data, project, environ=self.environ))
+        self.assertEqual(library_diagnostics(data, project, environ=self.environ)['active']['name'], 'Project library')
+
+    def test_independent_Notable_checkout_uses_its_own_data(self):
+        project = self.folder / 'Notable'
+        project.mkdir()
+        (self.folder / '.local-data').mkdir()
+        self.assertEqual(resolve_data_directory(project, environ=self.environ, frozen=False), project / '.local-data')
+
     def test_explicit_directory_wins_for_source_and_frozen(self):
         data = self.folder / "my library"
         environ = {**self.environ, "PDF_NOTES_DATA_DIR": str(data)}

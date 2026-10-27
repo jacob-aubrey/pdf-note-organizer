@@ -1,9 +1,0 @@
-warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
-WARNING:pypdf._reader:Object 999999 0 not defined.
-MuPDF error: format error: cannot find object in xref (6 0 R)
-
-WARNING:pypdf._reader:Object 999999 0 not defined.
-----------------------------------------------------------------------
-Ran 113 tests in 88.331s
-
-OK

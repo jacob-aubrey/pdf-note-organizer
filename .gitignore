@@ -3,6 +3,8 @@ __pycache__/
 build/
 !note_organizer/assets/pdfjs/build/
 !note_organizer/assets/pdfjs/build/*.mjs
+!Notable/note_organizer/assets/pdfjs/build/
+!Notable/note_organizer/assets/pdfjs/build/*.mjs
 dist/
 tmp/
 legacy/*.exe
@@ -38,6 +40,7 @@ notes_media/
 *.rm
 *.lock
 !requirements.lock
+!Notable/requirements.lock
 Thumbs.db
 .DS_Store
 
@@ -49,3 +52,11 @@ Thumbs.db
 !/output/pdf/Notable-User-Manual.pdf
 
 .test-tmp/
+
+# Notable generated private files; only public guides are tracked.
+/output/*
+!/output/pdf/
+/output/pdf/*
+!/output/pdf/Notable-README.pdf
+!/output/pdf/Notable-User-Manual.pdf
+/tests/make_audit_samples.py

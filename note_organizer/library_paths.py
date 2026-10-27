@@ -11,6 +11,16 @@ def project_root():
     return Path(__file__).resolve().parent.parent
 
 
+def source_data_directory(source_root=None):
+    root = Path(source_root) if source_root is not None else project_root()
+    # Preserve embedded absolute source paths in the existing workspace library.
+    # Fresh, independent checkouts continue to use their own .local-data.
+    previous = root.parent / '.local-data'
+    if root.name == 'Notable' and (root.parent / 'remarkable-zotero').is_dir() and previous.is_dir():
+        return previous.resolve()
+    return (root / '.local-data').resolve()
+
+
 def installed_data_directory(environ=None):
     environ = os.environ if environ is None else environ
     return (Path(environ.get("LOCALAPPDATA") or Path.home()) / "PDF Note Organizer").resolve()
@@ -24,7 +34,7 @@ def resolve_data_directory(source_root=None, *, environ=None, frozen=None):
     frozen = getattr(sys, "frozen", False) if frozen is None else frozen
     if frozen:
         return installed_data_directory(environ)
-    return ((Path(source_root) if source_root is not None else project_root()) / ".local-data").resolve()
+    return source_data_directory(source_root)
 
 
 def should_import_legacy(data, source_root=None, *, environ=None):
@@ -33,7 +43,7 @@ def should_import_legacy(data, source_root=None, *, environ=None):
     if "PDF_NOTES_SKIP_LEGACY_IMPORT" in environ:
         return environ["PDF_NOTES_SKIP_LEGACY_IMPORT"] != "1"
     source_root = Path(source_root) if source_root is not None else project_root()
-    return Path(data).resolve() != (source_root / ".local-data").resolve()
+    return Path(data).resolve() != source_data_directory(source_root)
 
 
 def inspect_library(data):
@@ -71,7 +81,7 @@ def inspect_library(data):
 def library_diagnostics(active_data, source_root=None, *, environ=None):
     """Identify the active library and any existing project/installed alternatives."""
     source_root = Path(source_root) if source_root is not None else project_root()
-    project_data = (source_root / ".local-data").resolve()
+    project_data = source_data_directory(source_root)
     installed_data = installed_data_directory(environ)
     active_data = Path(active_data).resolve()
     known = {project_data: "Project library", installed_data: "Installed app library"}

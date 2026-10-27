@@ -1,6 +1,0 @@
-PASS: renamed root and descendant paths update live; selections, drafts, queue, and connection stay intact; reopened labels refresh without sync
-PASS: saved choices, no implicit sync, serialized jobs, interrupted batch resume, save failures, connection isolation, and live link snapshots
-PASS: citation identity, storage failure rollback, digest serialization, and account-upload receipts
-PASS: timer races, open-workspace priority, busy/paused guards, background cancellation, preferences, and backoff
-PASS: correlation, normal completion, heartbeat, timeout/parent kill, native stderr privacy, malformed response, EOF/exit code, rotation and logging failure
-PASS: launch/shutdown race, stalled recovery, concurrent save rollback, queue validation, tag drafts, SI override, scan privacy, offline settings, and reader ordering

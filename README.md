@@ -1,9 +1,8 @@
 # Notable
 
-The Zotero-first route now has a graphical plugin and a bundled Windows helper.
-See [reMarkable Sync for Zotero setup and workflow](documentation/ZOTERO_PLUGIN.md).
-The standalone application and its existing documentation below remain available
-while that migration is evaluated.
+This repository contains the standalone Notable application. The separate
+[reMarkable Sync for Zotero](https://github.com/jacob-aubrey/remarkable-sync-for-zotero)
+project contains the Zotero plugin, its worker, tests, and documentation.
 
 Notable helps you organize research documents and collect your PDF annotations into searchable notes and Word notebooks. You can use it entirely on your PC. Document identification through online services and connection to a reMarkable tablet are optional.
 
@@ -33,6 +32,10 @@ When upgrading to a differently named executable or moving it, launch the new co
 The executable is unsigned. Windows may show an unrecognized-app notice; check the download came from the project's release page and compare its SHA-256 hash with `SHA256SUMS.txt` before deciding whether to run it. The release also includes the user manual and PDF README, both accessible inside the app through **Help**.
 
 The packaged app stores its library in `%LOCALAPPDATA%/PDF Note Organizer/`. Existing packaged libraries stay in that location. The source app normally uses the repository's `.local-data/` directory, so it can show a different collection. **Settings → Library & diagnostics** shows the active library. Set `PDF_NOTES_DATA_DIR` before launch only when you intentionally want a different library; keep the executable and its download folder separate from your data.
+
+In the existing split workspace, Notable also recognizes the original parent
+`.local-data/` directory. It remains there to preserve the library's embedded
+absolute source paths. A fresh independent checkout uses its own `.local-data/`.
 
 On launch, a branded splash identifies the startup task and then reveals the settled workspace. A one-file executable can take a few seconds to unpack its runtime before the splash appears. Local PDF checks and cloud sync continue in the background. To update, close Notable safely and replace the executable with a newer release; your separate library data remains in place.
 

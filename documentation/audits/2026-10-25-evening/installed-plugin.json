@@ -1,9 +1,0 @@
-{
-  "observed_at_utc": "2026-10-25T22:49:36.918986+00:00",
-  "version": "0.8.8",
-  "active": true,
-  "userDisabled": false,
-  "appDisabled": false,
-  "xpi_sha256": "44354eb0bc530e47e5b1b52021b0e0e711c2c238ea80959f93c657f69520e19c",
-  "method": "Native Plugins Manager Install Plugin From File"
-}

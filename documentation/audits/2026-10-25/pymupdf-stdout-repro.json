@@ -1,6 +1,0 @@
-{
-  "command": "Pinned PyMuPDF, synthetic content streams, get_text/get_pixmap under redirect_stdout(stderr)",
-  "returncode": 0,
-  "stdout": "{\"case\": \"BT /MissingFont 12 Tf 10 10 Td (Hello) Tj ET\"}\r\n{\"done\": true}\r\n{\"case\": \"q garbage Q\"}\r\nMuPDF error: syntax error: unknown keyword: 'garbage'\r\n\r\nMuPDF error: syntax error: unknown keyword: 'garbage'\r\n\r\n{\"done\": true}\r\n{\"case\": \"BT (Hello) Tj ET\"}\r\n{\"done\": true}\r\n{\"case\": \"/MissingXObject Do\"}\r\nMuPDF error: syntax error: cannot find XObject resource 'MissingXObject'\r\n\r\nMuPDF error: syntax error: cannot find XObject resource 'MissingXObject'\r\n\r\n{\"done\": true}\r\n",
-  "stderr": ""
-}

@@ -428,7 +428,7 @@ class CloudClient:
             self._trace('cloud_retry', request_id=request_id, attempt=attempt + 1, delay_s=delay)
             if self.stop.wait(delay):
                 self.check_stop()
-            self._progress(f'Waiting for reMarkable; retrying the current request ({attempt + 2} of 3)…')
+            self._progress(f'Waiting for reMarkable; retrying the current request ({attempt + 2} of 3)â€¦')
 
     def pair(self, code):
         """Exchange a single-use pairing code for a device token."""
@@ -521,11 +521,11 @@ class CloudClient:
 
     def library(self):
         """List metadata for scope discovery; PDF contents are fetched separately."""
-        self._progress('Reading reMarkable’s file list…')
+        self._progress('Reading reMarkableâ€™s file listâ€¦')
         root = json.loads(self.get(SYNC + "/v4/root"))
         if getattr(self, '_catalog_hash', None) == root['hash']:
             self.check_stop()
-            self._progress('reMarkable’s file list is up to date.')
+            self._progress('reMarkableâ€™s file list is up to date.')
             return copy.deepcopy(self._catalog_items)
         entries = parse_index(self.blob(root["hash"], "root.docSchema"))
         items = []
@@ -534,7 +534,7 @@ class CloudClient:
             self.check_stop()
             now = time.monotonic()
             if number == 1 or number == len(entries) or now - reported >= 1:
-                self._progress(f'Reading reMarkable’s file list: {number} of {len(entries)}')
+                self._progress(f'Reading reMarkableâ€™s file list: {number} of {len(entries)}')
                 reported = now
             uuid.UUID(entry["id"])
             files = parse_index(self.blob(entry["hash"], entry["id"] + ".docSchema"))
@@ -546,7 +546,7 @@ class CloudClient:
                                    metadata.get("parent", ""), metadata["type"],
                                    bool(metadata.get("deleted", False)), files))
         self._catalog_hash, self._catalog_items = root['hash'], copy.deepcopy(items)
-        self._progress(f'Finished reading reMarkable’s file list: {len(items)} files.')
+        self._progress(f'Finished reading reMarkableâ€™s file list: {len(items)} files.')
         return items
 
     def pdf_bundle(self, item):
@@ -726,7 +726,7 @@ class CloudClient:
                     desired["visibleName"] = name.strip()
                 files = [file for file in self._item_files(entry) if file["id"] != item_id + ".metadata"]
                 if tags is not None or page_tags is not None:
-                    from .zotero_tags import names, tablet_tags
+                    from .tablet_tags import names, tablet_tags
                     import pymupdf
                     from .remarkable_pdf import page_map
                     content_file = next((f for f in files if f['id'] == item_id + '.content'), None)
